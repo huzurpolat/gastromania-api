@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { Location, LocationDocument } from './schemas/location.schema';
@@ -12,20 +16,19 @@ export class LocationsService {
     private readonly locationModel: Model<LocationDocument>,
   ) {}
 
-  async create(createLocationDto: CreateLocationDto): Promise<Location> {
-    const createdLocation = new this.locationModel({
-      ...createLocationDto,
-      isActive: createLocationDto.isActive ?? true,
-    });
-
-    return createdLocation.save();
+  async create(
+    createLocationDto: CreateLocationDto,
+  ): Promise<LocationDocument> {
+    return this.locationModel.create(createLocationDto);
   }
 
-  async findAll(): Promise<Location[]> {
+  async findAll(): Promise<LocationDocument[]> {
     return this.locationModel.find().sort({ createdAt: -1 }).exec();
   }
 
-  async findOne(id: string): Promise<Location> {
+  async findOne(id: string): Promise<LocationDocument> {
+    this.validateObjectId(id);
+
     const location = await this.locationModel.findById(id).exec();
 
     if (!location) {
@@ -35,7 +38,12 @@ export class LocationsService {
     return location;
   }
 
-  async update(id: string, updateLocationDto: UpdateLocationDto): Promise<Location> {
+  async update(
+    id: string,
+    updateLocationDto: UpdateLocationDto,
+  ): Promise<LocationDocument> {
+    this.validateObjectId(id);
+
     const updatedLocation = await this.locationModel
       .findByIdAndUpdate(id, updateLocationDto, {
         new: true,
@@ -50,13 +58,23 @@ export class LocationsService {
     return updatedLocation;
   }
 
-  async remove(id: string): Promise<Location> {
-    const deletedLocation = await this.locationModel.findByIdAndDelete(id).exec();
+  async remove(id: string): Promise<LocationDocument> {
+    this.validateObjectId(id);
+
+    const deletedLocation = await this.locationModel
+      .findByIdAndDelete(id)
+      .exec();
 
     if (!deletedLocation) {
       throw new NotFoundException('Standort nicht gefunden');
     }
 
     return deletedLocation;
+  }
+
+  private validateObjectId(id: string): void {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Ungueltige Standort-ID');
+    }
   }
 }

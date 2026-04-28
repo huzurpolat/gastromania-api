@@ -3,9 +3,9 @@ import { HydratedDocument } from 'mongoose';
 
 export type LocationDocument = HydratedDocument<Location>;
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, versionKey: false })
 export class Location {
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, index: true })
   name!: string;
 
   @Prop({ required: true, trim: true })
@@ -14,7 +14,7 @@ export class Location {
   @Prop({ required: true, trim: true })
   zip!: string;
 
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, index: true })
   city!: string;
 
   @Prop({ trim: true })
@@ -31,3 +31,5 @@ export class Location {
 }
 
 export const LocationSchema = SchemaFactory.createForClass(Location);
+
+LocationSchema.index({ city: 1, name: 1 });
