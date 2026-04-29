@@ -37,15 +37,19 @@ export class ReservationsService {
   async findAll(
     filters: ReservationFilters = {},
   ): Promise<ReservationDocument[]> {
+    const query: ReservationFilters = {};
+
     if (filters.locationId) {
       this.validateObjectId(filters.locationId, 'Standort-ID');
+      query.locationId = filters.locationId;
     }
 
     if (filters.tableId) {
       this.validateObjectId(filters.tableId, 'Tisch-ID');
+      query.tableId = filters.tableId;
     }
 
-    return this.reservationModel.find(filters).sort({ startTime: 1 }).exec();
+    return this.reservationModel.find(query).sort({ startTime: 1 }).exec();
   }
 
   async findOne(id: string): Promise<ReservationDocument> {
