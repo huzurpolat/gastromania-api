@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { LocationsModule } from './locations/locations.module';
+import { MenuItemsModule } from './menu-items/menu-items.module';
+import { OrdersModule } from './orders/orders.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { TablesModule } from './tables/tables.module';
 import { UsersModule } from './users/users.module';
@@ -25,6 +27,8 @@ import { UsersModule } from './users/users.module';
     LocationsModule,
     TablesModule,
     ReservationsModule,
+    OrdersModule,
+    MenuItemsModule,
   ],
   controllers: [],
   providers: [],
