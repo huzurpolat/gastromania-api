@@ -22,6 +22,26 @@ export class CreateMenuItemDto {
   @IsNotEmpty()
   category!: string;
 
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  ingredients?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  weight?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
   @Type(() => Number)
   @IsNumber()
   @Min(0)
@@ -30,6 +50,14 @@ export class CreateMenuItemDto {
   @IsOptional()
   @IsBoolean()
   isKitchenItem?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isVegan?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  containsNuts?: boolean;
 
   @IsOptional()
   @IsBoolean()

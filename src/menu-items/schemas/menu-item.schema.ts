@@ -11,11 +11,29 @@ export class MenuItem {
   @Prop({ required: true, trim: true, index: true })
   category!: string;
 
+  @Prop({ trim: true })
+  description?: string;
+
+  @Prop({ trim: true })
+  ingredients?: string;
+
+  @Prop({ trim: true })
+  weight?: string;
+
+  @Prop({ trim: true })
+  imageUrl?: string;
+
   @Prop({ required: true, min: 0 })
   price!: number;
 
   @Prop({ default: true })
   isKitchenItem!: boolean;
+
+  @Prop({ default: false })
+  isVegan!: boolean;
+
+  @Prop({ default: false })
+  containsNuts!: boolean;
 
   @Prop({ default: true })
   isActive!: boolean;
