@@ -16,9 +16,7 @@ const trimString = (value: unknown): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
 const optionalTrimString = (value: unknown): unknown => {
-  const trimmedValue = trimString(value);
-
-  return trimmedValue === '' ? undefined : trimmedValue;
+  return trimString(value);
 };
 
 export class CreateUserDto {
@@ -47,6 +45,31 @@ export class CreateUserDto {
   @IsString()
   lastName?: string;
 
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  mobile?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  taxNumber?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  vatId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  taxOffice?: string;
+
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
@@ -61,4 +84,10 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   locationId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  locationIds?: string[];
 }

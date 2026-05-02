@@ -9,9 +9,15 @@ export interface UserResponse {
   email: string;
   firstName?: string;
   lastName?: string;
+  phone?: string;
+  mobile?: string;
+  taxNumber?: string;
+  vatId?: string;
+  taxOffice?: string;
   roles: Role[];
   isActive: boolean;
   locationId?: string;
+  locationIds?: string[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -42,6 +48,21 @@ export class User {
   @Prop({ trim: true })
   lastName?: string;
 
+  @Prop({ trim: true })
+  phone?: string;
+
+  @Prop({ trim: true })
+  mobile?: string;
+
+  @Prop({ trim: true })
+  taxNumber?: string;
+
+  @Prop({ trim: true })
+  vatId?: string;
+
+  @Prop({ trim: true })
+  taxOffice?: string;
+
   @Prop({
     type: [String],
     enum: Object.values(Role),
@@ -54,6 +75,9 @@ export class User {
 
   @Prop({ trim: true })
   locationId?: string;
+
+  @Prop({ type: [String], default: [] })
+  locationIds?: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
@@ -63,9 +87,15 @@ export const toUserResponse = (user: UserDocument): UserResponse => ({
   email: user.email,
   firstName: user.firstName,
   lastName: user.lastName,
+  phone: user.phone,
+  mobile: user.mobile,
+  taxNumber: user.taxNumber,
+  vatId: user.vatId,
+  taxOffice: user.taxOffice,
   roles: user.roles,
   isActive: user.isActive,
   locationId: user.locationId,
+  locationIds: user.locationIds,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
