@@ -10,6 +10,7 @@ import { ReservationsModule } from './reservations/reservations.module';
 import { TablesModule } from './tables/tables.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { UsersModule } from './users/users.module';
+import { WeeklyMenusModule } from './weekly-menus/weekly-menus.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { UsersModule } from './users/users.module';
     MenuItemsModule,
     DutySchedulesModule,
     TimeTrackingModule,
+    WeeklyMenusModule,
   ],
   controllers: [],
   providers: [],
