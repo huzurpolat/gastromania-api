@@ -135,6 +135,7 @@ export class WeeklyMenusService {
             days: payload.days.map((day) => ({
               ...day,
               date: new Date(day.date),
+              menuType: day.menuType ?? 'Tagesmenü',
               isActive: day.isActive ?? true,
               isVegetarian: day.isVegetarian ?? false,
             })),

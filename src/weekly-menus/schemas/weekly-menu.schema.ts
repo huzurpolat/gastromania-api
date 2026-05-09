@@ -4,9 +4,23 @@ import { HydratedDocument } from 'mongoose';
 export type WeeklyMenuDocument = HydratedDocument<WeeklyMenu>;
 
 @Schema({ _id: false })
+export class DailyMenuItem {
+  @Prop({ required: true, trim: true })
+  menuItemId!: string;
+
+  @Prop({ required: true, min: 0 })
+  price!: number;
+}
+
+export const DailyMenuItemSchema = SchemaFactory.createForClass(DailyMenuItem);
+
+@Schema({ _id: false })
 export class DailyMenu {
   @Prop({ required: true, index: true })
   date!: Date;
+
+  @Prop({ default: 'Tagesmenü', enum: ['Tagesmenü', 'Mittagsmenü'] })
+  menuType!: 'Tagesmenü' | 'Mittagsmenü';
 
   @Prop({ required: true, trim: true })
   title!: string;
@@ -19,6 +33,9 @@ export class DailyMenu {
 
   @Prop({ type: [String], default: [] })
   menuItemIds?: string[];
+
+  @Prop({ type: [DailyMenuItemSchema], default: [] })
+  menuItems?: DailyMenuItem[];
 
   @Prop({ required: true, min: 0 })
   price!: number;
