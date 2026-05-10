@@ -20,6 +20,15 @@ import {
   RestaurantTable,
   RestaurantTableSchema,
 } from '../tables/schemas/table.schema';
+import {
+  StockItem,
+  StockItemSchema,
+} from '../stock/schemas/stock-item.schema';
+import {
+  StockMovement,
+  StockMovementSchema,
+} from '../stock/schemas/stock-movement.schema';
+import { Supplier, SupplierSchema } from '../suppliers/schemas/supplier.schema';
 import { TimeEntry, TimeEntrySchema } from '../time-tracking/schemas/time-entry.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { WeeklyMenu, WeeklyMenuSchema } from '../weekly-menus/schemas/weekly-menu.schema';
@@ -40,6 +49,9 @@ import { DemoDataService } from './demo-data.service';
       { name: TimeEntry.name, schema: TimeEntrySchema },
       { name: WeeklyMenu.name, schema: WeeklyMenuSchema },
       { name: InternalMessage.name, schema: InternalMessageSchema },
+      { name: StockItem.name, schema: StockItemSchema },
+      { name: StockMovement.name, schema: StockMovementSchema },
+      { name: Supplier.name, schema: SupplierSchema },
     ]),
   ],
   controllers: [DemoDataController],

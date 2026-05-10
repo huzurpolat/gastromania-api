@@ -29,6 +29,13 @@ import {
   RestaurantTableDocument,
   TableStatus,
 } from '../tables/schemas/table.schema';
+import { StockItem, StockItemDocument } from '../stock/schemas/stock-item.schema';
+import {
+  StockMovement,
+  StockMovementDocument,
+  StockMovementType,
+} from '../stock/schemas/stock-movement.schema';
+import { Supplier, SupplierDocument } from '../suppliers/schemas/supplier.schema';
 import {
   TimeEntry,
   TimeEntryDocument,
@@ -75,6 +82,12 @@ export class DemoDataService {
     private readonly weeklyMenuModel: Model<WeeklyMenuDocument>,
     @InjectModel(InternalMessage.name)
     private readonly internalMessageModel: Model<InternalMessageDocument>,
+    @InjectModel(StockItem.name)
+    private readonly stockItemModel: Model<StockItemDocument>,
+    @InjectModel(StockMovement.name)
+    private readonly stockMovementModel: Model<StockMovementDocument>,
+    @InjectModel(Supplier.name)
+    private readonly supplierModel: Model<SupplierDocument>,
   ) {}
 
   async seed(actor: AuthenticatedUser): Promise<DemoDataResult> {
@@ -100,6 +113,9 @@ export class DemoDataService {
     const timeEntries = await this.createTimeEntries(locationId, users);
     const weeklyMenus = await this.createWeeklyMenu(locationId, menuItems);
     const internalMessages = await this.createInternalMessages(locationId, actor);
+    const suppliers = await this.createSuppliers(locationId);
+    const stockItems = await this.createStockItems(locationId, suppliers);
+    const stockMovements = await this.createStockMovements(locationId, stockItems, actor);
 
     return {
       locationId,
@@ -114,6 +130,9 @@ export class DemoDataService {
         timeEntries: timeEntries.length,
         weeklyMenus: weeklyMenus.length,
         internalMessages: internalMessages.length,
+        stockItems: stockItems.length,
+        stockMovements: stockMovements.length,
+        suppliers: suppliers.length,
       },
       demoUsers: users.map((user) => ({
         email: user.email,
@@ -138,6 +157,9 @@ export class DemoDataService {
       this.timeEntryModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
       this.weeklyMenuModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
       this.internalMessageModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
+      this.stockItemModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
+      this.stockMovementModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
+      this.supplierModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
       this.locationModel.deleteMany({ _id: { $in: locationIds } }).exec(),
       this.menuItemModel
         .deleteMany({ name: new RegExp(`^\\${this.demoPrefix}`) })
@@ -471,6 +493,121 @@ export class DemoDataService {
         priority: InternalMessagePriority.Normal,
       },
     ]);
+  }
+
+  private createSuppliers(locationId: string): Promise<SupplierDocument[]> {
+    return this.supplierModel.insertMany([
+      {
+        locationId,
+        name: 'Demo Großhandel',
+        contactName: 'Nora Einkauf',
+        phone: '+49 30 444444',
+        email: 'bestellung@demo-grosshandel.test',
+        deliveryDays: 'Mo, Mi, Fr',
+        orderDeadline: 'Vortag 16:00',
+        minimumOrderValue: '150 EUR',
+        customerNumber: 'GM-DEMO-1001',
+        city: 'Berlin',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Frischemarkt Demo',
+        contactName: 'Ali Frische',
+        phone: '+49 30 555555',
+        email: 'frische@example.test',
+        deliveryDays: 'täglich außer Sonntag',
+        orderDeadline: 'bis 10:00 für Folgetag',
+        minimumOrderValue: '80 EUR',
+        customerNumber: 'FR-2042',
+        city: 'Berlin',
+        isActive: true,
+      },
+    ]);
+  }
+
+  private createStockItems(
+    locationId: string,
+    suppliers: SupplierDocument[],
+  ): Promise<StockItemDocument[]> {
+    const wholesale = suppliers.find((supplier) => supplier.name === 'Demo Großhandel');
+    const freshMarket = suppliers.find((supplier) => supplier.name === 'Frischemarkt Demo');
+
+    return this.stockItemModel.insertMany([
+      {
+        locationId,
+        name: `${this.demoPrefix} Rinderhack`,
+        category: 'Fleisch',
+        unit: 'kg',
+        quantity: 8,
+        minQuantity: 5,
+        targetQuantity: 15,
+        supplierId: wholesale?._id.toString(),
+        supplierName: wholesale?.name ?? 'Demo Großhandel',
+        storageLocation: 'Kühlhaus 1',
+        note: 'Für Burger-Produktion',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: `${this.demoPrefix} Avocado`,
+        category: 'Gemüse',
+        unit: 'Stk.',
+        quantity: 4,
+        minQuantity: 8,
+        targetQuantity: 24,
+        supplierId: freshMarket?._id.toString(),
+        supplierName: freshMarket?.name ?? 'Frischemarkt Demo',
+        storageLocation: 'Kühlhaus 2',
+        note: 'Mindestbestand bewusst unterschritten',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: `${this.demoPrefix} Quinoa`,
+        category: 'Trockenlager',
+        unit: 'kg',
+        quantity: 12,
+        minQuantity: 4,
+        targetQuantity: 18,
+        supplierId: wholesale?._id.toString(),
+        supplierName: wholesale?.name ?? 'Bio Demo',
+        storageLocation: 'Regal A3',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: `${this.demoPrefix} Hauslimonade Sirup`,
+        category: 'Getränke',
+        unit: 'l',
+        quantity: 3,
+        minQuantity: 3,
+        targetQuantity: 10,
+        supplierId: wholesale?._id.toString(),
+        supplierName: wholesale?.name ?? 'Getränke Demo',
+        storageLocation: 'Barlager',
+        isActive: true,
+      },
+    ]);
+  }
+
+  private createStockMovements(
+    locationId: string,
+    stockItems: StockItemDocument[],
+    actor: AuthenticatedUser,
+  ): Promise<StockMovementDocument[]> {
+    return this.stockMovementModel.insertMany(
+      stockItems.map((item, index) => ({
+        locationId,
+        stockItemId: item._id.toString(),
+        stockItemName: item.name,
+        type: index % 2 === 0 ? StockMovementType.Receipt : StockMovementType.Usage,
+        quantityChange: index % 2 === 0 ? 5 : -2,
+        quantityAfter: item.quantity,
+        note: `${this.demoPrefix} Startbewegung`,
+        actorId: actor.sub,
+      })),
+    );
   }
 
   private atTime(date: Date, hours: number, minutes: number): Date {
