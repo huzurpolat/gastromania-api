@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
+import { DemoDataModule } from './demo-data/demo-data.module';
 import { DutySchedulesModule } from './duty-schedules/duty-schedules.module';
 import { InternalMessagesModule } from './internal-messages/internal-messages.module';
 import { LocationsModule } from './locations/locations.module';
@@ -37,6 +38,7 @@ import { WeeklyMenusModule } from './weekly-menus/weekly-menus.module';
     TimeTrackingModule,
     WeeklyMenusModule,
     InternalMessagesModule,
+    DemoDataModule,
   ],
   controllers: [],
   providers: [],
