@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { TableStatus } from '../schemas/table.schema';
@@ -38,6 +39,12 @@ export class CreateTableDto {
   @IsOptional()
   @IsString()
   area?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  icon?: string;
 
   @IsOptional()
   @IsEnum(TableStatus)

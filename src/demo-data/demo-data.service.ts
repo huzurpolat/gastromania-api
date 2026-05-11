@@ -5,6 +5,10 @@ import { Model } from 'mongoose';
 import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
+  Checklist,
+  ChecklistDocument,
+} from '../checklists/schemas/checklist.schema';
+import {
   DutyShift,
   DutyShiftDocument,
 } from '../duty-schedules/schemas/duty-shift.schema';
@@ -88,6 +92,8 @@ export class DemoDataService {
     private readonly stockMovementModel: Model<StockMovementDocument>,
     @InjectModel(Supplier.name)
     private readonly supplierModel: Model<SupplierDocument>,
+    @InjectModel(Checklist.name)
+    private readonly checklistModel: Model<ChecklistDocument>,
   ) {}
 
   async seed(actor: AuthenticatedUser): Promise<DemoDataResult> {
@@ -116,6 +122,7 @@ export class DemoDataService {
     const suppliers = await this.createSuppliers(locationId);
     const stockItems = await this.createStockItems(locationId, suppliers);
     const stockMovements = await this.createStockMovements(locationId, stockItems, actor);
+    const checklists = await this.createChecklists(locationId);
 
     return {
       locationId,
@@ -133,6 +140,7 @@ export class DemoDataService {
         stockItems: stockItems.length,
         stockMovements: stockMovements.length,
         suppliers: suppliers.length,
+        checklists: checklists.length,
       },
       demoUsers: users.map((user) => ({
         email: user.email,
@@ -160,6 +168,7 @@ export class DemoDataService {
       this.stockItemModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
       this.stockMovementModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
       this.supplierModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
+      this.checklistModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
       this.locationModel.deleteMany({ _id: { $in: locationIds } }).exec(),
       this.menuItemModel
         .deleteMany({ name: new RegExp(`^\\${this.demoPrefix}`) })
@@ -215,6 +224,7 @@ export class DemoDataService {
         locationId,
         seats: 2,
         area: 'Fenster',
+        icon: 'window',
         status: TableStatus.Occupied,
         isActive: true,
       },
@@ -223,6 +233,7 @@ export class DemoDataService {
         locationId,
         seats: 4,
         area: 'Innenraum',
+        icon: 'table_restaurant',
         status: TableStatus.Reserved,
         isActive: true,
       },
@@ -231,6 +242,7 @@ export class DemoDataService {
         locationId,
         seats: 4,
         area: 'Innenraum',
+        icon: 'chair',
         status: TableStatus.Available,
         isActive: true,
       },
@@ -239,6 +251,7 @@ export class DemoDataService {
         locationId,
         seats: 6,
         area: 'Terrasse',
+        icon: 'deck',
         status: TableStatus.Available,
         isActive: true,
       },
@@ -247,6 +260,7 @@ export class DemoDataService {
         locationId,
         seats: 2,
         area: 'Bar',
+        icon: 'local_bar',
         status: TableStatus.Occupied,
         isActive: true,
       },
@@ -608,6 +622,50 @@ export class DemoDataService {
         actorId: actor.sub,
       })),
     );
+  }
+
+  private createChecklists(locationId: string): Promise<ChecklistDocument[]> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return this.checklistModel.insertMany([
+      {
+        locationId,
+        date: today,
+        title: `${this.demoPrefix} Service Start`,
+        area: 'Service',
+        roles: [Role.Service, Role.Filialleiter],
+        tasks: [
+          { title: 'Tische kontrollieren und sauber eindecken', isDone: true },
+          { title: 'Reservierungen für heute prüfen', isDone: false },
+          { title: 'Kassenbestand zählen', isDone: false },
+        ],
+        note: 'Demo-Checkliste für den Tagesstart',
+      },
+      {
+        locationId,
+        date: today,
+        title: `${this.demoPrefix} Küche Mise en Place`,
+        area: 'Küche',
+        roles: [Role.Kueche, Role.Filialleiter],
+        tasks: [
+          { title: 'Kühlhaus-Temperaturen dokumentieren', isDone: true },
+          { title: 'Wochenmenü vorbereiten', isDone: false },
+          { title: 'Allergene für Tagesangebote prüfen', isDone: false },
+        ],
+      },
+      {
+        locationId,
+        date: today,
+        title: `${this.demoPrefix} Lager Kontrolle`,
+        area: 'Lager',
+        roles: [Role.Lager, Role.Filialleiter],
+        tasks: [
+          { title: 'Mindestbestände prüfen', isDone: false },
+          { title: 'Wareneingang gegen Lieferschein prüfen', isDone: false },
+        ],
+      },
+    ]);
   }
 
   private atTime(date: Date, hours: number, minutes: number): Date {

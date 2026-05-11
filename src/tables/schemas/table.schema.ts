@@ -24,6 +24,9 @@ export class RestaurantTable {
   @Prop({ trim: true })
   area?: string;
 
+  @Prop({ default: 'table_restaurant', trim: true })
+  icon!: string;
+
   @Prop({
     type: String,
     enum: Object.values(TableStatus),

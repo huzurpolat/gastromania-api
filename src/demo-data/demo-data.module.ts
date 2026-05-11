@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
+import { Checklist, ChecklistSchema } from '../checklists/schemas/checklist.schema';
 import {
   DutyShift,
   DutyShiftSchema,
@@ -52,6 +53,7 @@ import { DemoDataService } from './demo-data.service';
       { name: StockItem.name, schema: StockItemSchema },
       { name: StockMovement.name, schema: StockMovementSchema },
       { name: Supplier.name, schema: SupplierSchema },
+      { name: Checklist.name, schema: ChecklistSchema },
     ]),
   ],
   controllers: [DemoDataController],

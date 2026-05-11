@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
+import { ChecklistsModule } from './checklists/checklists.module';
 import { DemoDataModule } from './demo-data/demo-data.module';
 import { DutySchedulesModule } from './duty-schedules/duty-schedules.module';
 import { InternalMessagesModule } from './internal-messages/internal-messages.module';
@@ -43,6 +44,7 @@ import { WeeklyMenusModule } from './weekly-menus/weekly-menus.module';
     DemoDataModule,
     StockModule,
     SuppliersModule,
+    ChecklistsModule,
   ],
   controllers: [],
   providers: [],
