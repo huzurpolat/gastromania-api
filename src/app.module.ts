@@ -10,6 +10,7 @@ import { LocationsModule } from './locations/locations.module';
 import { MenuItemsModule } from './menu-items/menu-items.module';
 import { OrdersModule } from './orders/orders.module';
 import { ReservationsModule } from './reservations/reservations.module';
+import { SettingsModule } from './settings/settings.module';
 import { StockModule } from './stock/stock.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { TablesModule } from './tables/tables.module';
@@ -35,6 +36,7 @@ import { WeeklyMenusModule } from './weekly-menus/weekly-menus.module';
     LocationsModule,
     TablesModule,
     ReservationsModule,
+    SettingsModule,
     OrdersModule,
     MenuItemsModule,
     DutySchedulesModule,
