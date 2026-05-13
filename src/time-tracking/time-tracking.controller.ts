@@ -21,7 +21,7 @@ import { TimeTrackingService } from './time-tracking.service';
 
 @Controller('time-tracking')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager)
+@Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
 export class TimeTrackingController {
   constructor(private readonly timeTrackingService: TimeTrackingService) {}
 

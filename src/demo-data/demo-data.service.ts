@@ -111,6 +111,11 @@ export class DemoDataService {
     });
     const locationId = location._id.toString();
     const users = await this.createUsers(locationId);
+    const manager = users.find((user) => user.roles.includes(Role.Filialleiter));
+    if (manager) {
+      location.managerId = manager._id.toString();
+      await location.save();
+    }
     const tables = await this.createTables(locationId);
     const menuItems = await this.createMenuItems();
     const orders = await this.createOrders(locationId, tables);
@@ -183,6 +188,12 @@ export class DemoDataService {
     const passwordHash = await bcrypt.hash(this.demoPassword, 12);
     const users = [
       {
+        email: 'admin@demo.gastromania.local',
+        firstName: 'Ada',
+        lastName: 'Admin',
+        roles: [Role.Admin],
+      },
+      {
         email: 'filialleiter@demo.gastromania.local',
         firstName: 'Mira',
         lastName: 'Leitung',
@@ -205,6 +216,12 @@ export class DemoDataService {
         firstName: 'Leo',
         lastName: 'Lager',
         roles: [Role.Lager],
+      },
+      {
+        email: 'tellerwaescher@demo.gastromania.local',
+        firstName: 'Theo',
+        lastName: 'Spülküche',
+        roles: [Role.Tellerwaescher],
       },
     ].map((user) => ({
       ...user,
@@ -663,6 +680,18 @@ export class DemoDataService {
         tasks: [
           { title: 'Mindestbestände prüfen', isDone: false },
           { title: 'Wareneingang gegen Lieferschein prüfen', isDone: false },
+        ],
+      },
+      {
+        locationId,
+        date: today,
+        title: `${this.demoPrefix} Spülküche Tagesablauf`,
+        area: 'Spülküche',
+        roles: [Role.Tellerwaescher, Role.Filialleiter],
+        tasks: [
+          { title: 'Spülmaschine auf Funktion und Chemie prüfen', isDone: false },
+          { title: 'Sauberes Geschirr, Besteck und Gläser sortieren', isDone: false },
+          { title: 'Spülbereich reinigen und Müll trennen', isDone: false },
         ],
       },
     ]);

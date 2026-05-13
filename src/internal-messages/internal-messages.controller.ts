@@ -36,7 +36,7 @@ export class InternalMessagesController {
   }
 
   @Get()
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager)
+  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -45,7 +45,7 @@ export class InternalMessagesController {
   }
 
   @Sse('stream')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager)
+  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
   stream(
     @CurrentUser() user: AuthenticatedUser,
   ): Observable<MessageEvent> {

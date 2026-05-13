@@ -28,13 +28,13 @@ export class LocationsController {
   }
 
   @Get()
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager)
+  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
   findAll() {
     return this.locationsService.findAll();
   }
 
   @Get(':id')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager)
+  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
   findOne(@Param('id') id: string) {
     return this.locationsService.findOne(id);
   }

@@ -8,6 +8,7 @@ import {
   Max,
   MaxLength,
   Min,
+  Matches,
 } from 'class-validator';
 
 const trimString = (value: unknown): unknown =>
@@ -60,6 +61,37 @@ export class UpdateSettingsDto {
   @IsString()
   @MaxLength(16)
   orderPrefix?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  primaryColor?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  accentColor?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  backgroundColor?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  sidebarColor?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @Matches(/^#[0-9a-fA-F]{6}$/)
+  panelColor?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  brandName?: string;
 
   @Type(() => Number)
   @IsOptional()

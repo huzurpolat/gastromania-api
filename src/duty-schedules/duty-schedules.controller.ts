@@ -34,7 +34,7 @@ export class DutySchedulesController {
   }
 
   @Get()
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche)
+  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,

@@ -29,6 +29,24 @@ export class AppSettings {
   @Prop({ default: 'GM', trim: true })
   orderPrefix!: string;
 
+  @Prop({ default: '#1a7f64', trim: true })
+  primaryColor!: string;
+
+  @Prop({ default: '#86e0bd', trim: true })
+  accentColor!: string;
+
+  @Prop({ default: '#eef3f0', trim: true })
+  backgroundColor!: string;
+
+  @Prop({ default: '#0d1b17', trim: true })
+  sidebarColor!: string;
+
+  @Prop({ default: '#fbfdfb', trim: true })
+  panelColor!: string;
+
+  @Prop({ default: 'Gastromania', trim: true })
+  brandName!: string;
+
   @Prop({ default: 19, min: 0, max: 100 })
   defaultTaxRate!: number;
 

@@ -257,12 +257,17 @@ export class UsersService {
     }
 
     const roles = payload.roles ?? existingUser?.roles ?? [];
-    const allowedRoles = [Role.Service, Role.Kueche];
+    const allowedRoles = [
+      Role.Service,
+      Role.Kueche,
+      Role.Lager,
+      Role.Tellerwaescher,
+    ];
     const hasOnlyAllowedRoles = roles.every((role) => allowedRoles.includes(role));
 
     if (!roles.length || !hasOnlyAllowedRoles) {
       throw new ForbiddenException(
-        'Filialleiter duerfen nur Service- und Kuechenbenutzer verwalten',
+        'Filialleiter duerfen nur Filialteam-Benutzer verwalten',
       );
     }
 
@@ -307,7 +312,9 @@ export class UsersService {
     const managerLocationIds = await this.getManagerLocationIds(actor.sub);
 
     return {
-      roles: { $in: [Role.Service, Role.Kueche] },
+      roles: {
+        $in: [Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher],
+      },
       $or: [
         { locationId: { $in: managerLocationIds } },
         { locationIds: { $in: managerLocationIds } },

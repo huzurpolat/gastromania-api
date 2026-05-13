@@ -16,6 +16,12 @@ export interface SettingsResponse {
   timezone: string;
   currency: string;
   orderPrefix: string;
+  primaryColor: string;
+  accentColor: string;
+  backgroundColor: string;
+  sidebarColor: string;
+  panelColor: string;
+  brandName: string;
   defaultTaxRate: number;
   enablePushMessages: boolean;
   allowDemoData: boolean;
@@ -116,6 +122,12 @@ export class SettingsService {
       timezone: settings.timezone,
       currency: settings.currency,
       orderPrefix: settings.orderPrefix,
+      primaryColor: settings.primaryColor,
+      accentColor: settings.accentColor,
+      backgroundColor: settings.backgroundColor,
+      sidebarColor: settings.sidebarColor,
+      panelColor: settings.panelColor,
+      brandName: settings.brandName,
       defaultTaxRate: settings.defaultTaxRate,
       enablePushMessages: settings.enablePushMessages,
       allowDemoData: settings.allowDemoData,

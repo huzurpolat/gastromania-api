@@ -117,6 +117,17 @@ export class ChecklistsService {
         },
       ],
     },
+    {
+      templateKey: 'dishwashing',
+      title: 'Checkliste für die Spülküche',
+      area: 'Spülküche',
+      roles: [Role.Tellerwaescher, Role.Filialleiter],
+      tasks: [
+        { title: 'Spülmaschine auf Funktion, Temperatur und Chemie prüfen.' },
+        { title: 'Sauberes Geschirr, Besteck und Gläser sortieren und auffüllen.' },
+        { title: 'Spülbereich reinigen, Müll trennen und Boden sauber halten.' },
+      ],
+    },
   ];
 
   constructor(
