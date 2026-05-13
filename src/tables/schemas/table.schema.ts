@@ -10,6 +10,13 @@ export enum TableStatus {
   Inactive = 'Inactive',
 }
 
+export enum TableShape {
+  Round = 'round',
+  Square = 'square',
+  Rectangle = 'rectangle',
+  Bar = 'bar',
+}
+
 @Schema({ timestamps: true, versionKey: false })
 export class RestaurantTable {
   @Prop({ required: true, trim: true, index: true })
@@ -36,6 +43,25 @@ export class RestaurantTable {
 
   @Prop({ default: true })
   isActive!: boolean;
+
+  @Prop({ min: 0, max: 100 })
+  planX?: number;
+
+  @Prop({ min: 0, max: 100 })
+  planY?: number;
+
+  @Prop({ min: 6, max: 32 })
+  planWidth?: number;
+
+  @Prop({ min: 6, max: 24 })
+  planHeight?: number;
+
+  @Prop({
+    type: String,
+    enum: Object.values(TableShape),
+    default: TableShape.Rectangle,
+  })
+  planShape!: TableShape;
 }
 
 export const RestaurantTableSchema =

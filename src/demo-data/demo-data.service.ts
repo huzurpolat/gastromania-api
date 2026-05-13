@@ -31,6 +31,7 @@ import {
 import {
   RestaurantTable,
   RestaurantTableDocument,
+  TableShape,
   TableStatus,
 } from '../tables/schemas/table.schema';
 import { StockItem, StockItemDocument } from '../stock/schemas/stock-item.schema';
@@ -243,6 +244,11 @@ export class DemoDataService {
         area: 'Fenster',
         icon: 'window',
         status: TableStatus.Occupied,
+        planX: 8,
+        planY: 16,
+        planWidth: 12,
+        planHeight: 12,
+        planShape: TableShape.Round,
         isActive: true,
       },
       {
@@ -252,6 +258,11 @@ export class DemoDataService {
         area: 'Innenraum',
         icon: 'table_restaurant',
         status: TableStatus.Reserved,
+        planX: 28,
+        planY: 18,
+        planWidth: 14,
+        planHeight: 11,
+        planShape: TableShape.Rectangle,
         isActive: true,
       },
       {
@@ -261,6 +272,11 @@ export class DemoDataService {
         area: 'Innenraum',
         icon: 'chair',
         status: TableStatus.Available,
+        planX: 48,
+        planY: 18,
+        planWidth: 14,
+        planHeight: 11,
+        planShape: TableShape.Rectangle,
         isActive: true,
       },
       {
@@ -270,6 +286,11 @@ export class DemoDataService {
         area: 'Terrasse',
         icon: 'deck',
         status: TableStatus.Available,
+        planX: 72,
+        planY: 20,
+        planWidth: 16,
+        planHeight: 12,
+        planShape: TableShape.Rectangle,
         isActive: true,
       },
       {
@@ -279,6 +300,67 @@ export class DemoDataService {
         area: 'Bar',
         icon: 'local_bar',
         status: TableStatus.Occupied,
+        planX: 8,
+        planY: 72,
+        planWidth: 24,
+        planHeight: 10,
+        planShape: TableShape.Bar,
+        isActive: true,
+      },
+      {
+        name: 'Tisch 5',
+        locationId,
+        seats: 2,
+        area: 'Innenraum',
+        icon: 'chair',
+        status: TableStatus.Available,
+        planX: 26,
+        planY: 48,
+        planWidth: 12,
+        planHeight: 12,
+        planShape: TableShape.Square,
+        isActive: true,
+      },
+      {
+        name: 'Tisch 6',
+        locationId,
+        seats: 4,
+        area: 'Terrasse',
+        icon: 'deck',
+        status: TableStatus.Reserved,
+        planX: 70,
+        planY: 48,
+        planWidth: 16,
+        planHeight: 12,
+        planShape: TableShape.Rectangle,
+        isActive: true,
+      },
+      {
+        name: 'Tisch 7',
+        locationId,
+        seats: 8,
+        area: 'Separee',
+        icon: 'groups',
+        status: TableStatus.Available,
+        planX: 46,
+        planY: 68,
+        planWidth: 20,
+        planHeight: 13,
+        planShape: TableShape.Rectangle,
+        isActive: true,
+      },
+      {
+        name: 'Tisch 8',
+        locationId,
+        seats: 2,
+        area: 'Fenster',
+        icon: 'window',
+        status: TableStatus.Available,
+        planX: 8,
+        planY: 38,
+        planWidth: 12,
+        planHeight: 12,
+        planShape: TableShape.Round,
         isActive: true,
       },
     ]);
@@ -353,7 +435,7 @@ export class DemoDataService {
     locationId: string,
     tables: RestaurantTableDocument[],
   ): Promise<OrderDocument[]> {
-    return this.orderModel.insertMany([
+    const baseOrders = [
       {
         locationId,
         tableId: tables[0]._id.toString(),
@@ -385,7 +467,91 @@ export class DemoDataService {
         ],
         total: 38.7,
       },
+    ];
+
+    return this.orderModel.insertMany([
+      ...baseOrders,
+      ...this.createGeneratedOrders(locationId, tables, 50),
     ]);
+  }
+
+  private createGeneratedOrders(
+    locationId: string,
+    tables: RestaurantTableDocument[],
+    count: number,
+  ) {
+    const menuItems = [
+      { name: `${this.demoPrefix} Avocado Bowl`, price: 12.9, isKitchenItem: true },
+      { name: `${this.demoPrefix} Rinderburger`, price: 15.5, isKitchenItem: true },
+      { name: `${this.demoPrefix} Kürbissuppe`, price: 7.2, isKitchenItem: true },
+      { name: `${this.demoPrefix} Tiramisu`, price: 6.8, isKitchenItem: false },
+      { name: `${this.demoPrefix} Hauslimonade`, price: 4.5, isKitchenItem: false },
+    ];
+    const statuses = [
+      OrderStatus.Open,
+      OrderStatus.InProgress,
+      OrderStatus.Ready,
+      OrderStatus.Completed,
+      OrderStatus.Completed,
+      OrderStatus.Cancelled,
+    ];
+    const notes = [
+      'Ohne Zwiebeln',
+      'Extra Besteck',
+      'Allergene prüfen',
+      'Kinderportion',
+      'Schnell servieren',
+      'Getränke zuerst',
+      'Dessert später',
+      'Terrasse',
+    ];
+
+    return Array.from({ length: count }, (_, index) => {
+      const firstItem = menuItems[index % menuItems.length];
+      const secondItem = menuItems[(index + 2) % menuItems.length];
+      const items = [
+        {
+          name: firstItem.name,
+          quantity: (index % 3) + 1,
+          price: firstItem.price,
+          isKitchenItem: firstItem.isKitchenItem,
+        },
+        {
+          name: secondItem.name,
+          quantity: ((index + 1) % 2) + 1,
+          price: secondItem.price,
+          isKitchenItem: secondItem.isKitchenItem,
+        },
+      ];
+
+      if (index % 4 === 0) {
+        const extraItem = menuItems[(index + 4) % menuItems.length];
+        items.push({
+          name: extraItem.name,
+          quantity: 1,
+          price: extraItem.price,
+          isKitchenItem: extraItem.isKitchenItem,
+        });
+      }
+
+      const total = Number(
+        items
+          .reduce((sum, item) => sum + item.quantity * item.price, 0)
+          .toFixed(2),
+      );
+      const orderNumber = String(index + 1).padStart(2, '0');
+
+      return {
+        locationId,
+        tableId: tables[index % tables.length]._id.toString(),
+        status: statuses[index % statuses.length],
+        items,
+        total,
+        notes: `${this.demoPrefix} Zusatzbestellung ${orderNumber} - ${
+          notes[index % notes.length]
+        }`,
+      };
+    });
   }
 
   private createReservations(
@@ -551,6 +717,136 @@ export class DemoDataService {
         orderDeadline: 'bis 10:00 für Folgetag',
         minimumOrderValue: '80 EUR',
         customerNumber: 'FR-2042',
+        city: 'Berlin',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Demo Getränkelogistik',
+        contactName: 'Mara Sprudel',
+        phone: '+49 30 610001',
+        email: 'orders@getraenke-demo.test',
+        deliveryDays: 'Di, Do, Sa',
+        orderDeadline: 'Vortag 14:00',
+        minimumOrderValue: '120 EUR',
+        customerNumber: 'GET-3010',
+        city: 'Berlin',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Biohof Demo',
+        contactName: 'Lea Bio',
+        phone: '+49 30 610002',
+        email: 'verkauf@biohof-demo.test',
+        deliveryDays: 'Mo, Do',
+        orderDeadline: '2 Tage vorher',
+        minimumOrderValue: '90 EUR',
+        customerNumber: 'BIO-4402',
+        city: 'Brandenburg',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Fleischerei Demo',
+        contactName: 'Jonas Metzger',
+        phone: '+49 30 610003',
+        email: 'bestellung@fleischerei-demo.test',
+        deliveryDays: 'Mo bis Fr',
+        orderDeadline: 'Vortag 12:00',
+        minimumOrderValue: '200 EUR',
+        customerNumber: 'FL-1180',
+        city: 'Berlin',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Fischhandel Demo',
+        contactName: 'Tara Küste',
+        phone: '+49 30 610004',
+        email: 'fresh@fisch-demo.test',
+        deliveryDays: 'Di, Fr',
+        orderDeadline: 'Vortag 11:00',
+        minimumOrderValue: '180 EUR',
+        customerNumber: 'FI-2099',
+        city: 'Hamburg',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Bäckerei Demo',
+        contactName: 'Oskar Kruste',
+        phone: '+49 30 610005',
+        email: 'office@baeckerei-demo.test',
+        deliveryDays: 'täglich',
+        orderDeadline: 'bis 18:00 für Folgetag',
+        minimumOrderValue: '50 EUR',
+        customerNumber: 'BK-7781',
+        city: 'Berlin',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Molkerei Demo',
+        contactName: 'Nina Milch',
+        phone: '+49 30 610006',
+        email: 'order@molkerei-demo.test',
+        deliveryDays: 'Mo, Mi, Fr',
+        orderDeadline: 'Vortag 15:00',
+        minimumOrderValue: '75 EUR',
+        customerNumber: 'MO-3320',
+        city: 'Potsdam',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Reinigungsbedarf Demo',
+        contactName: 'Ben Hygiene',
+        phone: '+49 30 610007',
+        email: 'service@reinigung-demo.test',
+        deliveryDays: 'Mi',
+        orderDeadline: 'Montag 16:00',
+        minimumOrderValue: '60 EUR',
+        customerNumber: 'RB-9912',
+        city: 'Berlin',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Verpackungen Demo',
+        contactName: 'Mila Pack',
+        phone: '+49 30 610008',
+        email: 'sales@verpackung-demo.test',
+        deliveryDays: 'Di, Do',
+        orderDeadline: 'Vortag 13:00',
+        minimumOrderValue: '100 EUR',
+        customerNumber: 'VP-5021',
+        city: 'Berlin',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Kaffeerösterei Demo',
+        contactName: 'Rafi Bohne',
+        phone: '+49 30 610009',
+        email: 'kaffee@roesterei-demo.test',
+        deliveryDays: 'Mo, Fr',
+        orderDeadline: 'Donnerstag 10:00',
+        minimumOrderValue: '85 EUR',
+        customerNumber: 'KR-6404',
+        city: 'Berlin',
+        isActive: true,
+      },
+      {
+        locationId,
+        name: 'Gewürzhandel Demo',
+        contactName: 'Selin Aroma',
+        phone: '+49 30 610010',
+        email: 'order@gewuerz-demo.test',
+        deliveryDays: 'Do',
+        orderDeadline: 'Dienstag 15:00',
+        minimumOrderValue: '40 EUR',
+        customerNumber: 'GW-1207',
         city: 'Berlin',
         isActive: true,
       },

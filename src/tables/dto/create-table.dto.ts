@@ -3,13 +3,15 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsNumber,
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
-import { TableStatus } from '../schemas/table.schema';
+import { TableShape, TableStatus } from '../schemas/table.schema';
 
 const trimString = (value: unknown): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -53,4 +55,32 @@ export class CreateTableDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  planX?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  planY?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(6)
+  @Max(32)
+  planWidth?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(6)
+  @Max(24)
+  planHeight?: number;
+
+  @IsOptional()
+  @IsEnum(TableShape)
+  planShape?: TableShape;
 }
