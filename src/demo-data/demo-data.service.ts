@@ -590,18 +590,62 @@ export class DemoDataService {
     locationId: string,
     users: UserDocument[],
   ): Promise<DutyShiftDocument[]> {
-    const today = new Date();
+    const weekStart = this.getMonday(new Date());
+    const usersByRole = new Map<Role, UserDocument | undefined>(
+      Object.values(Role).map((role) => [
+        role,
+        users.find((user) => user.roles.includes(role)),
+      ]),
+    );
+    const shifts: Array<{
+      locationId: string;
+      employeeId: string;
+      role: Role;
+      startTime: Date;
+      endTime: Date;
+      note: string;
+    }> = [];
+    const addShift = (
+      role: Role,
+      dayOffset: number,
+      startHour: number,
+      endHour: number,
+      note: string,
+    ) => {
+      const user = usersByRole.get(role);
 
-    return this.dutyShiftModel.insertMany(
-      users.map((user, index) => ({
+      if (!user) {
+        return;
+      }
+
+      shifts.push({
         locationId,
         employeeId: user._id.toString(),
-        role: user.roles[0],
-        startTime: this.atTime(today, 9 + index, 0),
-        endTime: this.atTime(today, 17 + index, 0),
-        note: `${this.demoPrefix} Testschicht`,
-      })),
-    );
+        role,
+        startTime: this.atWeekDayTime(weekStart, dayOffset, startHour, 0),
+        endTime: this.atWeekDayTime(weekStart, dayOffset, endHour, 0),
+        note: `${this.demoPrefix} ${note}`,
+      });
+    };
+
+    for (let day = 0; day < 7; day += 1) {
+      addShift(Role.Service, day, day < 5 ? 10 : 11, day < 5 ? 16 : 17, 'Service Mittag');
+      addShift(Role.Kueche, day, 8, day < 5 ? 15 : 16, 'Küche Vorbereitung');
+
+      if (day < 5) {
+        addShift(Role.Filialleiter, day, 9, 17, 'Filialleitung');
+      }
+
+      if ([0, 2, 4].includes(day)) {
+        addShift(Role.Lager, day, 7, 13, 'Lager und Wareneingang');
+      }
+
+      if (day >= 1) {
+        addShift(Role.Tellerwaescher, day, day < 5 ? 12 : 11, day < 5 ? 20 : 19, 'Spülküche');
+      }
+    }
+
+    return this.dutyShiftModel.insertMany(shifts);
   }
 
   private createTimeEntries(
@@ -634,36 +678,88 @@ export class DemoDataService {
     menuItems: MenuItemDocument[],
   ): Promise<WeeklyMenuDocument[]> {
     const weekStart = this.getMonday(new Date());
-    const days = Array.from({ length: 5 }, (_, index) => {
-      const date = new Date(weekStart);
-      date.setDate(weekStart.getDate() + index);
-      const item = menuItems[index % menuItems.length];
-
-      return {
-        date,
-        menuType: (index % 2 === 0 ? 'Tagesmenü' : 'Mittagsmenü') as
-          | 'Tagesmenü'
-          | 'Mittagsmenü',
-        title: `${this.demoPrefix} ${item.name.replace(`${this.demoPrefix} `, '')}`,
-        description: 'Automatisch erzeugtes Demo-Angebot',
-        menuItemIds: [item._id.toString()],
-        menuItems: [{ menuItemId: item._id.toString(), price: Math.max(item.price - 1, 1) }],
-        price: Math.max(item.price - 1, 1),
-        isVegetarian: item.isVegan,
-        isActive: true,
-      };
-    });
+    const nextWeekStart = new Date(weekStart);
+    nextWeekStart.setDate(weekStart.getDate() + 7);
 
     return this.weeklyMenuModel.insertMany([
       {
         locationId,
-        title: `${this.demoPrefix} Wochenkarte`,
+        title: `${this.demoPrefix} Wochenkarte aktuell`,
         weekStart,
-        note: 'Demo-Wochenkarte für Tests',
+        note: 'Tages- und Mittagsmenüs für die aktuelle Demo-Woche',
         isActive: true,
-        days,
+        days: this.createDemoWeeklyMenuDays(weekStart, menuItems, 0),
+      },
+      {
+        locationId,
+        title: `${this.demoPrefix} Wochenkarte nächste Woche`,
+        weekStart: nextWeekStart,
+        note: 'Planbare Demo-Wochenkarte mit Tagesangeboten',
+        isActive: true,
+        days: this.createDemoWeeklyMenuDays(nextWeekStart, menuItems, 1),
       },
     ]);
+  }
+
+  private createDemoWeeklyMenuDays(
+    weekStart: Date,
+    menuItems: MenuItemDocument[],
+    variant: number,
+  ) {
+    const dayTitles = [
+      'Montagsangebot',
+      'Dienstagsklassiker',
+      'Mittwochsteller',
+      'Donnerstagslunch',
+      'Freitagskarte',
+      'Samstagsangebot',
+      'Sonntagsspecial',
+    ];
+    const descriptions = [
+      'Leichter Start in die Woche mit frischen Zutaten.',
+      'Beliebte Klassiker für den schnellen Mittagstisch.',
+      'Ausgewogene Tageskarte mit wechselnder Beilage.',
+      'Kompaktes Mittagsmenü für die Servicezeit.',
+      'Kräftiges Angebot für die umsatzstarke Schicht.',
+      'Wochenendkarte mit Dessertoption.',
+      'Ruhiges Angebot für Familien und Reservierungen.',
+    ];
+
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + index);
+      const selectedItems = [
+        menuItems[(index + variant) % menuItems.length],
+        menuItems[(index + variant + 2) % menuItems.length],
+      ];
+
+      if (index % 3 === 0) {
+        selectedItems.push(menuItems[(index + variant + 4) % menuItems.length]);
+      }
+
+      const dailyMenuItems = selectedItems.map((item, itemIndex) => ({
+        menuItemId: item._id.toString(),
+        price: this.roundPrice(Math.max(item.price - (itemIndex === 0 ? 1.5 : 0.7), 1)),
+      }));
+      const price = this.roundPrice(
+        dailyMenuItems.reduce((sum, item) => sum + item.price, 0),
+      );
+      const menuType = (index % 2 === 0 ? 'Tagesmenü' : 'Mittagsmenü') as
+        | 'Tagesmenü'
+        | 'Mittagsmenü';
+
+      return {
+        date,
+        menuType,
+        title: `${this.demoPrefix} ${dayTitles[index]}`,
+        description: descriptions[index],
+        menuItemIds: selectedItems.map((item) => item._id.toString()),
+        menuItems: dailyMenuItems,
+        price,
+        isVegetarian: selectedItems.every((item) => item.isVegan),
+        isActive: true,
+      };
+    });
   }
 
   private createInternalMessages(
@@ -993,8 +1089,25 @@ export class DemoDataService {
     ]);
   }
 
+  private roundPrice(value: number): number {
+    return Number(value.toFixed(2));
+  }
+
   private atTime(date: Date, hours: number, minutes: number): Date {
     const result = new Date(date);
+    result.setHours(hours, minutes, 0, 0);
+
+    return result;
+  }
+
+  private atWeekDayTime(
+    weekStart: Date,
+    dayOffset: number,
+    hours: number,
+    minutes: number,
+  ): Date {
+    const result = new Date(weekStart);
+    result.setDate(weekStart.getDate() + dayOffset);
     result.setHours(hours, minutes, 0, 0);
 
     return result;
