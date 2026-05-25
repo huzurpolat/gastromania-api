@@ -81,6 +81,12 @@ export class CreateTableDto {
   planHeight?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(359)
+  planRotation?: number;
+
+  @IsOptional()
   @IsEnum(TableShape)
   planShape?: TableShape;
 }

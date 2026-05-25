@@ -1,10 +1,17 @@
 import { Transform } from 'class-transformer';
+import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
 } from 'class-validator';
 
 const trimString = (value: unknown): unknown =>
@@ -15,6 +22,71 @@ const optionalTrimString = (value: unknown): unknown => {
 
   return trimmedValue === '' ? undefined : trimmedValue;
 };
+
+class LocationTablePlanAreaDto {
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
+  id!: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
+  label!: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  category?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  icon?: string;
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  x!: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  y!: number;
+
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  width!: number;
+
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  height!: number;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  notes?: string;
+}
+
+class LocationTablePlanObjectDto extends LocationTablePlanAreaDto {
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
+  kind!: string;
+
+  @IsNumber()
+  @Min(0)
+  @Max(359)
+  rotation!: number;
+}
 
 export class CreateLocationDto {
   @Transform(({ value }) => trimString(value))
@@ -61,4 +133,16 @@ export class CreateLocationDto {
   @IsOptional()
   @IsString()
   managerId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LocationTablePlanAreaDto)
+  tablePlanAreas?: LocationTablePlanAreaDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LocationTablePlanObjectDto)
+  tablePlanObjects?: LocationTablePlanObjectDto[];
 }

@@ -15,6 +15,7 @@ export enum TableShape {
   Square = 'square',
   Rectangle = 'rectangle',
   Bar = 'bar',
+  Vip = 'vip',
 }
 
 @Schema({ timestamps: true, versionKey: false })
@@ -55,6 +56,9 @@ export class RestaurantTable {
 
   @Prop({ min: 6, max: 24 })
   planHeight?: number;
+
+  @Prop({ min: 0, max: 359, default: 0 })
+  planRotation!: number;
 
   @Prop({
     type: String,

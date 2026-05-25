@@ -3,6 +3,77 @@ import { HydratedDocument } from 'mongoose';
 
 export type LocationDocument = HydratedDocument<Location>;
 
+@Schema({ _id: false })
+export class LocationTablePlanArea {
+  @Prop({ required: true, trim: true })
+  id!: string;
+
+  @Prop({ required: true, trim: true })
+  label!: string;
+
+  @Prop({ trim: true })
+  category?: string;
+
+  @Prop({ trim: true })
+  icon?: string;
+
+  @Prop({ required: true, min: 0, max: 100 })
+  x!: number;
+
+  @Prop({ required: true, min: 0, max: 100 })
+  y!: number;
+
+  @Prop({ required: true, min: 1, max: 100 })
+  width!: number;
+
+  @Prop({ required: true, min: 1, max: 100 })
+  height!: number;
+
+  @Prop({ trim: true })
+  notes?: string;
+}
+
+export const LocationTablePlanAreaSchema = SchemaFactory.createForClass(
+  LocationTablePlanArea,
+);
+
+@Schema({ _id: false })
+export class LocationTablePlanObject {
+  @Prop({ required: true, trim: true })
+  id!: string;
+
+  @Prop({ required: true, trim: true })
+  label!: string;
+
+  @Prop({ required: true, trim: true })
+  kind!: string;
+
+  @Prop({ required: true, trim: true })
+  icon!: string;
+
+  @Prop({ required: true, min: 0, max: 100 })
+  x!: number;
+
+  @Prop({ required: true, min: 0, max: 100 })
+  y!: number;
+
+  @Prop({ required: true, min: 1, max: 100 })
+  width!: number;
+
+  @Prop({ required: true, min: 1, max: 100 })
+  height!: number;
+
+  @Prop({ min: 0, max: 359, default: 0 })
+  rotation!: number;
+
+  @Prop({ trim: true })
+  notes?: string;
+}
+
+export const LocationTablePlanObjectSchema = SchemaFactory.createForClass(
+  LocationTablePlanObject,
+);
+
 @Schema({ timestamps: true, versionKey: false })
 export class Location {
   @Prop({ required: true, trim: true, index: true })
@@ -28,6 +99,12 @@ export class Location {
 
   @Prop()
   managerId?: string;
+
+  @Prop({ type: [LocationTablePlanAreaSchema], default: [] })
+  tablePlanAreas!: LocationTablePlanArea[];
+
+  @Prop({ type: [LocationTablePlanObjectSchema], default: [] })
+  tablePlanObjects!: LocationTablePlanObject[];
 }
 
 export const LocationSchema = SchemaFactory.createForClass(Location);
