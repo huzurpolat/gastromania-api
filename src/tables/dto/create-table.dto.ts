@@ -86,6 +86,12 @@ export class CreateTableDto {
   @Max(359)
   planRotation?: number;
 
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  planFloor?: string;
+
   @IsOptional()
   @IsEnum(TableShape)
   planShape?: TableShape;

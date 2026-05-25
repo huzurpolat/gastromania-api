@@ -48,6 +48,12 @@ class LocationTablePlanAreaDto {
   @MaxLength(80)
   icon?: string;
 
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  floor?: string;
+
   @IsNumber()
   @Min(0)
   @Max(100)
@@ -133,6 +139,12 @@ export class CreateLocationDto {
   @IsOptional()
   @IsString()
   managerId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  tablePlanFloors?: string[];
 
   @IsOptional()
   @IsArray()

@@ -60,6 +60,9 @@ export class RestaurantTable {
   @Prop({ min: 0, max: 359, default: 0 })
   planRotation!: number;
 
+  @Prop({ default: 'EG', trim: true, index: true })
+  planFloor!: string;
+
   @Prop({
     type: String,
     enum: Object.values(TableShape),

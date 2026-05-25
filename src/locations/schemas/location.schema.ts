@@ -17,6 +17,9 @@ export class LocationTablePlanArea {
   @Prop({ trim: true })
   icon?: string;
 
+  @Prop({ default: 'EG', trim: true })
+  floor!: string;
+
   @Prop({ required: true, min: 0, max: 100 })
   x!: number;
 
@@ -99,6 +102,9 @@ export class Location {
 
   @Prop()
   managerId?: string;
+
+  @Prop({ type: [String], default: ['EG'] })
+  tablePlanFloors!: string[];
 
   @Prop({ type: [LocationTablePlanAreaSchema], default: [] })
   tablePlanAreas!: LocationTablePlanArea[];
