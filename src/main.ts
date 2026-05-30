@@ -1,9 +1,11 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import helmet from 'helmet';
+import { join, resolve } from 'path';
 
-function isAllowedOrigin(origin: string): boolean {
+function isAllowedLocalOrigin(origin: string): boolean {
   const configuredOrigins = [
     'http://localhost:4202',
     'http://127.0.0.1:4202',
@@ -15,22 +17,49 @@ function isAllowedOrigin(origin: string): boolean {
       .filter(Boolean),
   ];
 
-  return configuredOrigins.includes(origin);
+  if (configuredOrigins.includes(origin)) {
+    return true;
+  }
+
+  try {
+    const url = new URL(origin);
+
+    if (url.port !== '4202') {
+      return false;
+    }
+
+    return (
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      url.hostname.startsWith('192.168.') ||
+      url.hostname.startsWith('10.') ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(url.hostname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.enableShutdownHooks();
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  app.useStaticAssets(resolve(process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')), {
+    prefix: '/uploads/',
+  });
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'same-site' },
+    }),
+  );
 
   app.enableCors({
     origin: (
       origin: string | undefined,
       callback: (error: Error | null, allow?: boolean) => void,
     ) => {
-      if (!origin || isAllowedOrigin(origin)) {
+      if (!origin || isAllowedLocalOrigin(origin)) {
         callback(null, true);
         return;
       }

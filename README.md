@@ -1,7 +1,9 @@
 # Gastromania API
 
-NestJS-API fuer Gastromania mit Mongoose/MongoDB, JWT-Auth und Docker-Production
-Image.
+NestJS-API fuer Gastromania. Die Infrastruktur folgt der Eventmania-
+Referenzarchitektur: Docker Compose startet die API als Production-Image,
+liest Runtime-Werte aus `.env` und verbindet das Frontend ueber den
+Service-Namen `gastromania-api`.
 
 ## Lokale Entwicklung
 
@@ -13,14 +15,20 @@ npm run start:dev
 - API: `http://localhost:3003`
 - Healthcheck: `http://localhost:3003/health`
 
-Wichtige Variablen:
+## Umgebung
+
+```bash
+cp .env.example .env
+```
+
+Mindestens erforderlich:
 
 ```env
 PORT=3003
-MONGODB_URI=mongodb://localhost:27017/gastromania
-JWT_SECRET=change-me
-JWT_EXPIRES_IN=8h
-FRONTEND_ORIGIN=http://localhost:4202,http://127.0.0.1:4202,http://localhost:8083,http://127.0.0.1:8083
+FRONTEND_ORIGIN=http://localhost:4202,http://localhost:8083
+MONGODB_URI=mongodb+srv://USER:PASSWORD@CLUSTER.mongodb.net/gastromania
+JWT_SECRET=replace-with-a-long-random-secret
+UPLOAD_DIR=/app/uploads
 ```
 
 ## Docker / TrueNAS
@@ -31,19 +39,17 @@ Der Stack wird aus dem Projektwurzelverzeichnis gestartet:
 docker compose up -d --build
 ```
 
-Compose setzt intern `PORT=3003` und verbindet die API ueber
-`mongodb://gastromania-mongo:27017/gastromania` mit MongoDB. Das Frontend
-erreicht die API im Docker-Netzwerk ueber den Service-Namen
-`gastromania-api:3003`.
+Compose setzt intern `PORT=3003`, mountet `./uploads:/app/uploads` und nutzt
+die Werte aus `gastromania-api/.env`.
 
 ## Deployment
 
 ```bash
-./deploy.sh
+APP_ROOT=/mnt/downloads_pool/apps/gastromania ./deploy.sh
 ```
 
-Das Deployment-Script baut die Images, stoppt alte Container, fuehrt Cleanup
-aus und startet den Stack neu.
+Das Script ist ein Compose-Wrapper wie bei Eventmania: `.env`-Pruefung, Pull,
+Build/Start des API-Service und Smoke-Check.
 
 ## Tests
 
@@ -60,6 +66,3 @@ docker compose logs -f gastromania-api
 curl http://localhost:3003/health
 curl http://localhost:8083/api/health
 ```
-
-Wenn der API-Healthcheck `database: disconnected` meldet, `MONGODB_URI` und den
-Container `gastromania-mongo` pruefen.
