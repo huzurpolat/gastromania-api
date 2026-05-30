@@ -17,6 +17,7 @@ import { TablesModule } from './tables/tables.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { UsersModule } from './users/users.module';
 import { WeeklyMenusModule } from './weekly-menus/weekly-menus.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -27,7 +28,10 @@ import { WeeklyMenusModule } from './weekly-menus/weekly-menus.module';
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        uri: config.get<string>('MONGODB_URI'),
+        uri: config.get<string>(
+          'MONGODB_URI',
+          'mongodb://localhost:27017/gastromania',
+        ),
       }),
     }),
 
@@ -48,7 +52,7 @@ import { WeeklyMenusModule } from './weekly-menus/weekly-menus.module';
     SuppliersModule,
     ChecklistsModule,
   ],
-  controllers: [],
+  controllers: [HealthController],
   providers: [],
 })
 export class AppModule {}
