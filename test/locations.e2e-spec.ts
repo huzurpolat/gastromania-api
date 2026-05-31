@@ -63,6 +63,7 @@ describe('LocationsController (e2e)', () => {
       street: 'Hauptstrasse 1',
       zip: '10115',
       city: 'Berlin',
+      icon: 'restaurant',
       isActive: true,
     };
 
@@ -75,6 +76,7 @@ describe('LocationsController (e2e)', () => {
         street: ' Hauptstrasse 1 ',
         zip: '10115',
         city: ' Berlin ',
+        icon: ' restaurant ',
       })
       .expect(201)
       .expect(responseBody);
@@ -84,6 +86,7 @@ describe('LocationsController (e2e)', () => {
       street: 'Hauptstrasse 1',
       zip: '10115',
       city: 'Berlin',
+      icon: 'restaurant',
     }, undefined);
   });
 

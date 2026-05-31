@@ -118,6 +118,12 @@ export class CreateLocationDto {
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()
   @IsString()
+  @MaxLength(80)
+  icon?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
   phone?: string;
 
   @Transform(({ value }) => {

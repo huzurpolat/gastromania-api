@@ -93,6 +93,9 @@ export class Location {
   @Prop({ required: true, trim: true, index: true })
   city!: string;
 
+  @Prop({ default: 'storefront', trim: true })
+  icon!: string;
+
   @Prop({ trim: true })
   phone?: string;
 
