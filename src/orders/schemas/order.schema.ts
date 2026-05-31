@@ -21,7 +21,7 @@ export enum OrderItemStatus {
 }
 
 export enum ProductionArea {
-  Kitchen = 'KÃ¼che',
+  Kitchen = 'Küche',
   Bar = 'Bar',
   Counter = 'Theke',
   Dessert = 'Dessert',
@@ -43,7 +43,7 @@ export enum PaymentStatus {
 }
 
 export enum CourseType {
-  Drink = 'GetrÃ¤nk',
+  Drink = 'Getränk',
   Starter = 'Vorspeise',
   Main = 'Hauptgericht',
   Dessert = 'Dessert',

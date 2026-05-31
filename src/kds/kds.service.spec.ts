@@ -6,6 +6,7 @@ import { KdsSettings } from './schemas/kds-settings.schema';
 import { KdsStatusLog } from './schemas/kds-status-log.schema';
 import { Order, OrderStatus } from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
+import { AccessPolicyService } from '../access/access-policy.service';
 
 describe('KdsService', () => {
   let service: KdsService;
@@ -31,6 +32,11 @@ describe('KdsService', () => {
   const realtimeService = {
     publish: jest.fn(),
   };
+  const accessPolicy = {
+    canAccessLocation: jest.fn(),
+    assertCanManageLocation: jest.fn(),
+    getScopedResourceFilter: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -41,6 +47,9 @@ describe('KdsService', () => {
       exec: jest.fn().mockResolvedValue(order),
     });
     logModel.create.mockResolvedValue({});
+    accessPolicy.canAccessLocation.mockResolvedValue(true);
+    accessPolicy.assertCanManageLocation.mockResolvedValue(undefined);
+    accessPolicy.getScopedResourceFilter.mockResolvedValue({});
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -49,6 +58,7 @@ describe('KdsService', () => {
         { provide: getModelToken(KdsStatusLog.name), useValue: logModel },
         { provide: getModelToken(KdsSettings.name), useValue: settingsModel },
         { provide: RealtimeService, useValue: realtimeService },
+        { provide: AccessPolicyService, useValue: accessPolicy },
       ],
     }).compile();
 

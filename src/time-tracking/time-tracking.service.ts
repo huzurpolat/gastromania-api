@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { Location, LocationDocument } from '../locations/schemas/location.schema';
@@ -23,6 +24,7 @@ export class TimeTrackingService {
     private readonly locationModel: Model<LocationDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async clockIn(
@@ -30,7 +32,7 @@ export class TimeTrackingService {
     actor: AuthenticatedUser,
   ): Promise<TimeEntryDocument> {
     const employeeId =
-      actor.roles.includes(Role.Admin) || actor.roles.includes(Role.Filialleiter)
+      this.accessPolicy.isManagementRole(actor)
         ? createTimeEntryDto.employeeId ?? actor.sub
         : actor.sub;
 
@@ -95,29 +97,21 @@ export class TimeTrackingService {
       query.clockOut = { $exists: false };
     }
 
-    if (filters.locationId) {
-      query.locationId = filters.locationId;
-    }
-
-    if (actor.roles.includes(Role.Admin)) {
-      if (filters.employeeId) {
-        query.employeeId = filters.employeeId;
-      }
-    } else if (actor.roles.includes(Role.Filialleiter)) {
-      const managerLocationIds = await this.getManagerLocationIds(actor.sub);
-
-      if (filters.locationId && !managerLocationIds.includes(filters.locationId)) {
-        throw new ForbiddenException('Nicht ausreichende Berechtigung');
-      }
-
-      query.locationId = filters.locationId ?? { $in: managerLocationIds };
-
+    if (this.accessPolicy.isManagementRole(actor)) {
+      Object.assign(
+        query,
+        await this.accessPolicy.getScopedResourceFilter(actor, filters.locationId),
+      );
       if (filters.employeeId) {
         await this.assertCanAccessEmployee(actor, filters.employeeId);
         query.employeeId = filters.employeeId;
       }
     } else {
       query.employeeId = actor.sub;
+      if (filters.locationId) {
+        await this.accessPolicy.assertCanAccessLocation(actor, filters.locationId);
+        query.locationId = filters.locationId;
+      }
     }
 
     return this.timeEntryModel.find(query).sort({ clockIn: -1 }).exec();
@@ -191,24 +185,17 @@ export class TimeTrackingService {
     actor: AuthenticatedUser,
     employeeId: string,
   ): Promise<void> {
-    if (actor.roles.includes(Role.Admin) || actor.sub === employeeId) {
+    if (this.accessPolicy.isPlatformAdmin(actor) || actor.sub === employeeId) {
       return;
     }
 
-    if (!actor.roles.includes(Role.Filialleiter)) {
-      throw new ForbiddenException('Nicht ausreichende Berechtigung');
-    }
-
-    const managerLocationIds = await this.getManagerLocationIds(actor.sub);
     const employee = await this.userModel.findById(employeeId).exec();
 
     if (!employee) {
       throw new NotFoundException('Mitarbeiter nicht gefunden');
     }
 
-    const employeeLocationIds = this.getUserLocationIds(employee);
-
-    if (!employeeLocationIds.some((id) => managerLocationIds.includes(id))) {
+    if (!(await this.accessPolicy.canManageUser(actor, employee))) {
       throw new ForbiddenException('Nicht ausreichende Berechtigung');
     }
   }
@@ -224,10 +211,6 @@ export class TimeTrackingService {
       throw new NotFoundException('Mitarbeiter nicht gefunden');
     }
 
-    if (actor.roles.includes(Role.Admin)) {
-      return;
-    }
-
     const employeeLocationIds = this.getUserLocationIds(employee);
 
     if (employeeLocationIds.length && !employeeLocationIds.includes(locationId)) {
@@ -236,13 +219,7 @@ export class TimeTrackingService {
       );
     }
 
-    if (actor.roles.includes(Role.Filialleiter)) {
-      const managerLocationIds = await this.getManagerLocationIds(actor.sub);
-
-      if (!managerLocationIds.includes(locationId)) {
-        throw new ForbiddenException('Nicht ausreichende Berechtigung');
-      }
-    }
+    await this.accessPolicy.assertCanAccessLocation(actor, locationId);
   }
 
   private async getManagerLocationIds(managerId: string): Promise<string[]> {

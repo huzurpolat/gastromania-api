@@ -1,13 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Role } from '../auth/enums/role.enum';
+import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { Location, LocationDocument } from '../locations/schemas/location.schema';
 import { CreateWeeklyMenuDto } from './dto/create-weekly-menu.dto';
@@ -21,19 +20,27 @@ export class WeeklyMenusService {
     private readonly weeklyMenuModel: Model<WeeklyMenuDocument>,
     @InjectModel(Location.name)
     private readonly locationModel: Model<LocationDocument>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async create(
     createWeeklyMenuDto: CreateWeeklyMenuDto,
     actor: AuthenticatedUser,
   ): Promise<WeeklyMenuDocument> {
-    await this.assertCanManageLocation(actor, createWeeklyMenuDto.locationId);
+    await this.accessPolicy.assertCanManageLocation(
+      actor,
+      createWeeklyMenuDto.locationId,
+    );
 
     try {
-      return await this.weeklyMenuModel.create(this.normalizePayload(createWeeklyMenuDto));
+      return await this.weeklyMenuModel.create(
+        this.normalizePayload(createWeeklyMenuDto),
+      );
     } catch (error) {
       if (this.isDuplicateKeyError(error)) {
-        throw new ConflictException('Für diese Filiale und Woche existiert bereits eine Wochenkarte');
+        throw new ConflictException(
+          'Fuer diese Filiale und Woche existiert bereits eine Wochenkarte',
+        );
       }
 
       throw error;
@@ -44,29 +51,14 @@ export class WeeklyMenusService {
     actor: AuthenticatedUser,
     filters: { locationId?: string; start?: string; end?: string },
   ): Promise<WeeklyMenuDocument[]> {
-    const query: Record<string, unknown> = {};
+    const query: Record<string, unknown> =
+      await this.accessPolicy.getScopedResourceFilter(actor, filters.locationId);
 
     if (filters.start || filters.end) {
       query.weekStart = {
         ...(filters.start ? { $gte: new Date(filters.start) } : {}),
         ...(filters.end ? { $lte: new Date(filters.end) } : {}),
       };
-    }
-
-    if (actor.roles.includes(Role.Admin)) {
-      if (filters.locationId) {
-        query.locationId = filters.locationId;
-      }
-    } else {
-      const locationIds = actor.roles.includes(Role.Filialleiter)
-        ? await this.getManagerLocationIds(actor.sub)
-        : [];
-
-      if (filters.locationId) {
-        query.locationId = filters.locationId;
-      } else if (locationIds.length) {
-        query.locationId = { $in: locationIds };
-      }
     }
 
     return this.weeklyMenuModel.find(query).sort({ weekStart: -1 }).exec();
@@ -84,8 +76,8 @@ export class WeeklyMenusService {
       throw new NotFoundException('Wochenkarte nicht gefunden');
     }
 
-    await this.assertCanManageLocation(actor, existingMenu.locationId);
-    await this.assertCanManageLocation(
+    await this.accessPolicy.assertCanManageLocation(actor, existingMenu.locationId);
+    await this.accessPolicy.assertCanManageLocation(
       actor,
       updateWeeklyMenuDto.locationId ?? existingMenu.locationId,
     );
@@ -105,7 +97,9 @@ export class WeeklyMenusService {
       return updatedMenu;
     } catch (error) {
       if (this.isDuplicateKeyError(error)) {
-        throw new ConflictException('Für diese Filiale und Woche existiert bereits eine Wochenkarte');
+        throw new ConflictException(
+          'Fuer diese Filiale und Woche existiert bereits eine Wochenkarte',
+        );
       }
 
       throw error;
@@ -120,7 +114,7 @@ export class WeeklyMenusService {
       throw new NotFoundException('Wochenkarte nicht gefunden');
     }
 
-    await this.assertCanManageLocation(actor, menu.locationId);
+    await this.accessPolicy.assertCanManageLocation(actor, menu.locationId);
     await this.weeklyMenuModel.findByIdAndDelete(id).exec();
   }
 
@@ -135,32 +129,13 @@ export class WeeklyMenusService {
             days: payload.days.map((day) => ({
               ...day,
               date: new Date(day.date),
-              menuType: day.menuType ?? 'Tagesmenü',
+              menuType: day.menuType ?? 'Tagesmenue',
               isActive: day.isActive ?? true,
               isVegetarian: day.isVegetarian ?? false,
             })),
           }
         : {}),
     };
-  }
-
-  private async assertCanManageLocation(
-    actor: AuthenticatedUser,
-    locationId: string,
-  ): Promise<void> {
-    if (actor.roles.includes(Role.Admin)) {
-      return;
-    }
-
-    if (!actor.roles.includes(Role.Filialleiter)) {
-      throw new ForbiddenException('Nicht ausreichende Berechtigung');
-    }
-
-    const managerLocationIds = await this.getManagerLocationIds(actor.sub);
-
-    if (!managerLocationIds.includes(locationId)) {
-      throw new ForbiddenException('Filialleiter dürfen nur Wochenkarten eigener Filialen verwalten');
-    }
   }
 
   private async getManagerLocationIds(managerId: string): Promise<string[]> {
@@ -174,7 +149,7 @@ export class WeeklyMenusService {
 
   private validateObjectId(id: string): void {
     if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Ungültige ID');
+      throw new BadRequestException('Ungueltige ID');
     }
   }
 

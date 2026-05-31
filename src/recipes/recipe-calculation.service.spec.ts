@@ -13,7 +13,7 @@ describe('RecipeCalculationService', () => {
     vatRate: 19,
     isActive: true,
     visibleInSales: true,
-    productionArea: 'KÃƒÂ¼che' as Recipe['productionArea'],
+    productionArea: 'Küche' as Recipe['productionArea'],
     preparationTimeMinutes: 12,
     portionSize: '1 Portion',
     basePortions: 2,

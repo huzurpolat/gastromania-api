@@ -9,6 +9,7 @@ import { AccessPolicyService } from '../access/access-policy.service';
 import { LoginDto } from './dto/login.dto';
 import { AuthenticatedUser } from './types/authenticated-request.type';
 import { Role } from './enums/role.enum';
+import { normalizeRoles } from './role-utils';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { toUserResponse, UserResponse } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
@@ -50,11 +51,12 @@ export class AuthService {
       throw new UnauthorizedException('E-Mail oder Passwort ist ungueltig');
     }
 
-    const permissions = await this.rbacService.permissionsForRoles(user.roles);
+    const roles = normalizeRoles(user.roles);
+    const permissions = await this.rbacService.permissionsForRoles(roles);
     const basePayload: AuthenticatedUser = {
       sub: user._id.toString(),
       email: user.email,
-      roles: user.roles,
+      roles,
       permissions,
       companyId: user.companyId,
       regionIds: user.regionIds ?? [],
@@ -76,6 +78,7 @@ export class AuthService {
       accessToken: await this.jwtService.signAsync(payload),
       user: {
         ...toUserResponse(user),
+        roles,
         permissions,
         locationIds: payload.locationIds,
       },

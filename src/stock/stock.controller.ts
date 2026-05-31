@@ -13,9 +13,11 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
@@ -30,12 +32,13 @@ import { UpdateStockItemDto } from './dto/update-stock-item.dto';
 import { StockService } from './stock.service';
 
 @Controller('stock')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(Role.Admin, Role.Filialleiter, Role.Lager, Role.Einkauf, Role.Kueche, Role.Service)
 export class StockController {
   constructor(private readonly stockService: StockService) {}
 
   @Post()
+  @Permissions('inventory.create')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager, Role.Einkauf)
   create(
     @Body() payload: CreateStockItemDto,
@@ -45,6 +48,7 @@ export class StockController {
   }
 
   @Get()
+  @Permissions('inventory.view')
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -53,6 +57,7 @@ export class StockController {
   }
 
   @Get('dashboard')
+  @Permissions('inventory.view')
   dashboard(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -61,6 +66,7 @@ export class StockController {
   }
 
   @Get('alerts')
+  @Permissions('inventory.view')
   findAlerts(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -69,6 +75,7 @@ export class StockController {
   }
 
   @Get('reports')
+  @Permissions('inventory.view')
   report(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -77,6 +84,7 @@ export class StockController {
   }
 
   @Get('locations')
+  @Permissions('inventory.view')
   findLocations(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -85,6 +93,7 @@ export class StockController {
   }
 
   @Post('locations')
+  @Permissions('inventory.create')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager)
   createLocation(
     @Body() payload: CreateInventoryLocationDto,
@@ -94,6 +103,7 @@ export class StockController {
   }
 
   @Patch('locations/:id')
+  @Permissions('inventory.update')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager)
   updateLocation(
     @Param('id') id: string,
@@ -104,23 +114,27 @@ export class StockController {
   }
 
   @Delete('locations/:id')
+  @Permissions('inventory.delete')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager)
   removeLocation(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.stockService.removeLocation(id, user);
   }
 
   @Get('categories')
+  @Permissions('categories.view')
   findCategories() {
     return this.stockService.findCategories();
   }
 
   @Post('categories')
+  @Permissions('categories.create')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager, Role.Einkauf)
   createCategory(@Body() payload: CreateInventoryCategoryDto) {
     return this.stockService.createCategory(payload);
   }
 
   @Patch('categories/:id')
+  @Permissions('categories.update')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager, Role.Einkauf)
   updateCategory(
     @Param('id') id: string,
@@ -130,12 +144,14 @@ export class StockController {
   }
 
   @Delete('categories/:id')
+  @Permissions('categories.delete')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager, Role.Einkauf)
   removeCategory(@Param('id') id: string) {
     return this.stockService.removeCategory(id);
   }
 
   @Get('inventory-sessions')
+  @Permissions('inventory.inventory.manage')
   listInventorySessions(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -144,6 +160,7 @@ export class StockController {
   }
 
   @Post('inventory-sessions')
+  @Permissions('inventory.inventory.manage')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager)
   startInventory(
     @Body() payload: StartInventorySessionDto,
@@ -153,6 +170,7 @@ export class StockController {
   }
 
   @Post('inventory-sessions/:id/complete')
+  @Permissions('inventory.inventory.manage')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager)
   completeInventory(
     @Param('id') id: string,
@@ -163,6 +181,7 @@ export class StockController {
   }
 
   @Get('movements')
+  @Permissions('inventory.view')
   findMovements(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -171,6 +190,7 @@ export class StockController {
   }
 
   @Patch(':id')
+  @Permissions('inventory.update')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager, Role.Einkauf)
   update(
     @Param('id') id: string,
@@ -181,6 +201,7 @@ export class StockController {
   }
 
   @Post(':id/adjust')
+  @Permissions('inventory.stock.adjust')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager, Role.Einkauf)
   adjust(
     @Param('id') id: string,
@@ -191,12 +212,14 @@ export class StockController {
   }
 
   @Delete(':id')
+  @Permissions('inventory.delete')
   @Roles(Role.Admin, Role.Filialleiter, Role.Lager)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.stockService.remove(id, user);
   }
 
   @Sse('stream')
+  @Permissions('inventory.view')
   stream(@CurrentUser() user: AuthenticatedUser): Observable<MessageEvent> {
     return this.stockService.stream(user);
   }

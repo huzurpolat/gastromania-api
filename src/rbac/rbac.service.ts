@@ -9,6 +9,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { isPlatformRole, normalizeRoles } from '../auth/role-utils';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateManagedRoleDto, UpdateManagedRoleDto } from './dto/role.dto';
 import {
@@ -61,12 +62,14 @@ export class RbacService implements OnModuleInit {
   }
 
   async permissionsForRoles(roleNames: string[] = []): Promise<string[]> {
-    if (roleNames.includes('Super Admin')) {
+    const normalizedRoleNames = normalizeRoles(roleNames);
+
+    if (isPlatformRole(normalizedRoleNames)) {
       return ['*'];
     }
 
     const roles = await this.roleModel
-      .find({ name: { $in: roleNames }, isActive: true })
+      .find({ name: { $in: normalizedRoleNames }, isActive: true })
       .exec();
     const permissions = roles.flatMap((role) => role.permissions ?? []);
 

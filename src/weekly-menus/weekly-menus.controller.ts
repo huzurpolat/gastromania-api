@@ -10,9 +10,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateWeeklyMenuDto } from './dto/create-weekly-menu.dto';
@@ -20,11 +22,12 @@ import { UpdateWeeklyMenuDto } from './dto/update-weekly-menu.dto';
 import { WeeklyMenusService } from './weekly-menus.service';
 
 @Controller('weekly-menus')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class WeeklyMenusController {
   constructor(private readonly weeklyMenusService: WeeklyMenusService) {}
 
   @Post()
+  @Permissions('menuItems.create')
   @Roles(Role.Admin, Role.Filialleiter)
   create(
     @Body() createWeeklyMenuDto: CreateWeeklyMenuDto,
@@ -34,6 +37,7 @@ export class WeeklyMenusController {
   }
 
   @Get()
+  @Permissions('menuItems.view')
   @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche)
   findAll(
     @CurrentUser() user: AuthenticatedUser,
@@ -45,6 +49,7 @@ export class WeeklyMenusController {
   }
 
   @Patch(':id')
+  @Permissions('menuItems.update')
   @Roles(Role.Admin, Role.Filialleiter)
   update(
     @Param('id') id: string,
@@ -55,6 +60,7 @@ export class WeeklyMenusController {
   }
 
   @Delete(':id')
+  @Permissions('menuItems.delete')
   @Roles(Role.Admin, Role.Filialleiter)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.weeklyMenusService.remove(id, user);

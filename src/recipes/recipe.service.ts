@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateRecipeDto, UpdateRecipeDto } from './dto/recipe.dto';
 import { RecipeCalculationService } from './recipe-calculation.service';
@@ -18,14 +19,18 @@ export class RecipeService {
     private readonly recipeModel: Model<RecipeDocument>,
     private readonly calculationService: RecipeCalculationService,
     private readonly inventoryService: RecipeInventoryService,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
-  async findAll(filters: {
-    q?: string;
-    category?: string;
-    productionArea?: string;
-    active?: string;
-  }) {
+  async findAll(
+    _actor: AuthenticatedUser,
+    filters: {
+      q?: string;
+      category?: string;
+      productionArea?: string;
+      active?: string;
+    },
+  ) {
     const query: Record<string, unknown> = { isArchived: { $ne: true } };
     if (filters.q) {
       query.$or = [
@@ -44,7 +49,7 @@ export class RecipeService {
     }));
   }
 
-  async findOne(id: string): Promise<RecipeDocument> {
+  async findOne(id: string, _actor?: AuthenticatedUser): Promise<RecipeDocument> {
     const recipe = await this.recipeModel.findById(id).exec();
     if (!recipe) throw new NotFoundException('Rezept nicht gefunden');
     return recipe;
@@ -63,14 +68,14 @@ export class RecipeService {
   }
 
   async update(id: string, payload: UpdateRecipeDto, actor: AuthenticatedUser) {
-    const recipe = await this.findOne(id);
+    const recipe = await this.findOne(id, actor);
     recipe.set(payload);
     this.addVersion(recipe, actor.sub);
     return recipe.save();
   }
 
   async copy(id: string, actor: AuthenticatedUser) {
-    const recipe = await this.findOne(id);
+    const recipe = await this.findOne(id, actor);
     const clone = recipe.toObject() as unknown as Record<string, unknown>;
     delete clone._id;
     clone.recipeNumber = await this.nextRecipeNumber();
@@ -82,15 +87,15 @@ export class RecipeService {
   }
 
   async archive(id: string, archived: boolean, actor: AuthenticatedUser) {
-    const recipe = await this.findOne(id);
+    const recipe = await this.findOne(id, actor);
     recipe.isArchived = archived;
     recipe.isActive = archived ? false : recipe.isActive;
     this.addVersion(recipe, actor.sub);
     return recipe.save();
   }
 
-  async remove(id: string) {
-    const recipe = await this.findOne(id);
+  async remove(id: string, actor: AuthenticatedUser) {
+    const recipe = await this.findOne(id, actor);
     if (!recipe.isArchived) {
       throw new BadRequestException(
         'Rezept muss vor dem Loeschen archiviert werden',
@@ -100,25 +105,33 @@ export class RecipeService {
     return { deleted: true };
   }
 
-  async costing(id: string) {
-    const recipe = await this.findOne(id);
+  async costing(id: string, actor: AuthenticatedUser) {
+    const recipe = await this.findOne(id, actor);
     return this.calculationService.calculate(recipe);
   }
 
-  async nutrition(id: string) {
-    return this.calculationService.nutrition(await this.findOne(id));
+  async nutrition(id: string, actor: AuthenticatedUser) {
+    return this.calculationService.nutrition(await this.findOne(id, actor));
   }
 
-  async allergens(id: string) {
-    const recipe = await this.findOne(id);
+  async allergens(id: string, actor: AuthenticatedUser) {
+    const recipe = await this.findOne(id, actor);
     return {
       allergens: this.calculationService.allergens(recipe),
       additives: this.calculationService.additives(recipe),
     };
   }
 
-  async calculate(id: string, portions = 1, locationId?: string) {
-    const recipe = await this.findOne(id);
+  async calculate(
+    id: string,
+    actor: AuthenticatedUser,
+    portions = 1,
+    locationId?: string,
+  ) {
+    const recipe = await this.findOne(id, actor);
+    if (locationId) {
+      await this.accessPolicy.assertCanAccessLocation(actor, locationId);
+    }
     return {
       costing: this.calculationService.calculate(recipe),
       nutrition: this.calculationService.nutrition(recipe),
@@ -143,7 +156,7 @@ export class RecipeService {
     };
   }
 
-  async report() {
+  async report(_actor: AuthenticatedUser) {
     const recipes = await this.recipeModel
       .find({ isArchived: { $ne: true } })
       .sort({ category: 1, name: 1 })

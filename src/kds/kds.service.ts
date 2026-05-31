@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
   Order,
@@ -61,15 +62,17 @@ export class KdsService {
     @InjectModel(KdsSettings.name)
     private readonly settingsModel: Model<KdsSettingsDocument>,
     private readonly realtimeService: RealtimeService,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
-  async findOrders(filters: KdsOrderFilters = {}): Promise<OrderDocument[]> {
-    const query: Record<string, unknown> = {};
-
-    if (filters.locationId) {
-      this.validateObjectId(filters.locationId, 'Standort-ID');
-      query.locationId = filters.locationId;
-    }
+  async findOrders(
+    actor: AuthenticatedUser,
+    filters: KdsOrderFilters = {},
+  ): Promise<OrderDocument[]> {
+    const query = await this.accessPolicy.getScopedResourceFilter(
+      actor,
+      filters.locationId,
+    );
 
     if (filters.status) {
       query.status = filters.status;
@@ -82,8 +85,11 @@ export class KdsService {
     return this.orderModel.find(query).sort({ createdAt: 1 }).exec();
   }
 
-  async findActive(filters: KdsOrderFilters = {}): Promise<OrderDocument[]> {
-    return this.findOrders({
+  async findActive(
+    actor: AuthenticatedUser,
+    filters: KdsOrderFilters = {},
+  ): Promise<OrderDocument[]> {
+    return this.findOrders(actor, {
       ...filters,
       status: undefined,
     }).then((orders) =>
@@ -91,11 +97,14 @@ export class KdsService {
     );
   }
 
-  async findOne(id: string): Promise<OrderDocument> {
+  async findOne(id: string, actor: AuthenticatedUser): Promise<OrderDocument> {
     this.validateObjectId(id, 'Bestell-ID');
     const order = await this.orderModel.findById(id).exec();
 
-    if (!order) {
+    if (
+      !order ||
+      !(await this.accessPolicy.canAccessLocation(actor, order.locationId))
+    ) {
       throw new NotFoundException('Bestellung nicht gefunden');
     }
 
@@ -107,7 +116,7 @@ export class KdsService {
     dto: UpdateOrderStatusDto,
     actor: AuthenticatedUser,
   ): Promise<OrderDocument> {
-    const order = await this.findOne(id);
+    const order = await this.findOne(id, actor);
     this.assertTransition(order.status, dto.status);
 
     const previousStatus = order.status;
@@ -164,7 +173,7 @@ export class KdsService {
     dto: UpdateOrderItemStatusDto,
     actor: AuthenticatedUser,
   ): Promise<OrderDocument> {
-    const order = await this.findOne(orderId);
+    const order = await this.findOne(orderId, actor);
     const item = order.items.find((entry) => entry._id?.toString() === itemId);
 
     if (!item) {
@@ -194,7 +203,7 @@ export class KdsService {
     dto: KdsActionDto,
     actor: AuthenticatedUser,
   ): Promise<OrderDocument> {
-    const order = await this.findOne(id);
+    const order = await this.findOne(id, actor);
 
     if (order.status !== OrderStatus.Ready) {
       throw new BadRequestException(
@@ -225,8 +234,12 @@ export class KdsService {
     );
   }
 
-  async getSettings(locationId: string): Promise<KdsSettingsDocument> {
+  async getSettings(
+    locationId: string,
+    actor: AuthenticatedUser,
+  ): Promise<KdsSettingsDocument> {
     this.validateObjectId(locationId, 'Standort-ID');
+    await this.accessPolicy.assertCanAccessLocation(actor, locationId);
 
     return this.settingsModel
       .findOneAndUpdate(
@@ -240,8 +253,10 @@ export class KdsService {
   async updateSettings(
     locationId: string,
     dto: UpdateKdsSettingsDto,
+    actor: AuthenticatedUser,
   ): Promise<KdsSettingsDocument> {
-    await this.getSettings(locationId);
+    await this.accessPolicy.assertCanManageLocation(actor, locationId);
+    await this.getSettings(locationId, actor);
 
     return this.settingsModel
       .findOneAndUpdate({ locationId }, dto, {
@@ -261,17 +276,16 @@ export class KdsService {
   }
 
   async findHistory(
+    actor: AuthenticatedUser,
     filters: {
       locationId?: string;
       orderId?: string;
     } = {},
   ): Promise<KdsStatusLogDocument[]> {
-    const query: Record<string, string> = {};
-
-    if (filters.locationId) {
-      this.validateObjectId(filters.locationId, 'Standort-ID');
-      query.locationId = filters.locationId;
-    }
+    const query = await this.accessPolicy.getScopedResourceFilter(
+      actor,
+      filters.locationId,
+    );
 
     if (filters.orderId) {
       this.validateObjectId(filters.orderId, 'Bestell-ID');
@@ -281,11 +295,15 @@ export class KdsService {
     return this.logModel.find(query).sort({ createdAt: -1 }).limit(250).exec();
   }
 
-  async pickupDisplay(locationId?: string) {
-    const activeOrders = await this.findActive({ locationId });
+  async pickupDisplay(actor: AuthenticatedUser, locationId?: string) {
+    const activeOrders = await this.findActive(actor, { locationId });
+    const calledFilter = await this.accessPolicy.getScopedResourceFilter(
+      actor,
+      locationId,
+    );
     const called = await this.orderModel
       .find({
-        ...(locationId ? { locationId } : {}),
+        ...calledFilter,
         calledAt: { $exists: true },
       })
       .sort({ calledAt: -1 })

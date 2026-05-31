@@ -13,14 +13,14 @@ export class PermissionsController {
   constructor(private readonly rbacService: RbacService) {}
 
   @Get('permissions')
-  @Roles(Role.SuperAdmin, Role.Admin)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin)
   @Permissions('roles.view')
   findAll() {
     return this.rbacService.permissionsCatalog();
   }
 
   @Get('users/:id/permissions')
-  @Roles(Role.SuperAdmin, Role.Admin, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Filialleiter)
   @Permissions('users.view')
   userPermissions(@Param('id') id: string) {
     return this.rbacService.permissionsForUser(id);

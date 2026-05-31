@@ -12,9 +12,11 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { ProductionArea } from '../orders/schemas/order.schema';
@@ -37,7 +39,7 @@ const KDS_ROLES = [
 ];
 
 @Controller('kds')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(...KDS_ROLES)
 export class KdsController {
   constructor(
@@ -46,27 +48,33 @@ export class KdsController {
   ) {}
 
   @Get('orders')
+  @Permissions('kds.view')
   findOrders(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
     @Query('area') area?: ProductionArea | 'Alle',
   ) {
-    return this.kdsService.findOrders({ locationId, area });
+    return this.kdsService.findOrders(user, { locationId, area });
   }
 
   @Get('orders/active')
+  @Permissions('kds.view')
   findActive(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
     @Query('area') area?: ProductionArea | 'Alle',
   ) {
-    return this.kdsService.findActive({ locationId, area });
+    return this.kdsService.findActive(user, { locationId, area });
   }
 
   @Get('orders/:id')
-  findOne(@Param('id') id: string) {
-    return this.kdsService.findOne(id);
+  @Permissions('kds.view')
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.kdsService.findOne(id, user);
   }
 
   @Patch('orders/:id/status')
+  @Permissions('kds.manage')
   updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateOrderStatusDto,
@@ -76,6 +84,7 @@ export class KdsController {
   }
 
   @Patch('orders/:id/items/:itemId/status')
+  @Permissions('kds.manage')
   updateItemStatus(
     @Param('id') id: string,
     @Param('itemId') itemId: string,
@@ -86,6 +95,7 @@ export class KdsController {
   }
 
   @Post('orders/:id/call')
+  @Permissions('kds.manage')
   callOrder(
     @Param('id') id: string,
     @Body() dto: KdsActionDto,
@@ -95,6 +105,7 @@ export class KdsController {
   }
 
   @Post('orders/:id/complete')
+  @Permissions('kds.manage')
   completeOrder(
     @Param('id') id: string,
     @Body() dto: KdsActionDto,
@@ -104,6 +115,7 @@ export class KdsController {
   }
 
   @Post('orders/:id/cancel')
+  @Permissions('kds.manage')
   cancelOrder(
     @Param('id') id: string,
     @Body() dto: KdsActionDto,
@@ -113,33 +125,46 @@ export class KdsController {
   }
 
   @Get('settings')
-  getSettings(@Query('locationId') locationId: string) {
-    return this.kdsService.getSettings(locationId);
+  @Permissions('kds.view')
+  getSettings(
+    @Query('locationId') locationId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.kdsService.getSettings(locationId, user);
   }
 
   @Patch('settings')
+  @Permissions('kds.manage')
   @Roles(Role.Admin, Role.Filialleiter)
   updateSettings(
     @Query('locationId') locationId: string,
     @Body() dto: UpdateKdsSettingsDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.kdsService.updateSettings(locationId, dto);
+    return this.kdsService.updateSettings(locationId, dto, user);
   }
 
   @Get('history')
+  @Permissions('kds.view')
   findHistory(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
     @Query('orderId') orderId?: string,
   ) {
-    return this.kdsService.findHistory({ locationId, orderId });
+    return this.kdsService.findHistory(user, { locationId, orderId });
   }
 
   @Get('pickup-display')
-  pickupDisplay(@Query('locationId') locationId?: string) {
-    return this.kdsService.pickupDisplay(locationId);
+  @Permissions('kds.view')
+  pickupDisplay(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+  ) {
+    return this.kdsService.pickupDisplay(user, locationId);
   }
 
   @Sse('events')
+  @Permissions('kds.view')
   events(): Observable<MessageEvent> {
     return this.realtimeService.stream();
   }

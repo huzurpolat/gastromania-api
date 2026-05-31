@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { Location, LocationDocument } from '../locations/schemas/location.schema';
@@ -23,6 +24,7 @@ export class DutySchedulesService {
     private readonly locationModel: Model<LocationDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async create(
@@ -56,21 +58,16 @@ export class DutySchedulesService {
       };
     }
 
-    if (actor.roles.includes(Role.Admin)) {
-      if (filters.locationId) {
-        query.locationId = filters.locationId;
-      }
-    } else if (actor.roles.includes(Role.Filialleiter)) {
-      const managerLocationIds = await this.getManagerLocationIds(actor.sub);
-      const locationIds = filters.locationId
-        ? managerLocationIds.filter((id) => id === filters.locationId)
-        : managerLocationIds;
-
-      query.locationId = { $in: locationIds };
+    if (this.accessPolicy.isManagementRole(actor)) {
+      Object.assign(
+        query,
+        await this.accessPolicy.getScopedResourceFilter(actor, filters.locationId),
+      );
     } else {
       query.employeeId = actor.sub;
 
       if (filters.locationId) {
+        await this.accessPolicy.assertCanAccessLocation(actor, filters.locationId);
         query.locationId = filters.locationId;
       }
     }
@@ -143,21 +140,7 @@ export class DutySchedulesService {
     actor: AuthenticatedUser,
     locationId: string,
   ): Promise<void> {
-    if (actor.roles.includes(Role.Admin)) {
-      return;
-    }
-
-    if (!actor.roles.includes(Role.Filialleiter)) {
-      throw new ForbiddenException('Nicht ausreichende Berechtigung');
-    }
-
-    const managerLocationIds = await this.getManagerLocationIds(actor.sub);
-
-    if (!managerLocationIds.includes(locationId)) {
-      throw new ForbiddenException(
-        'Filialleiter duerfen nur Dienstplaene eigener Filialen verwalten',
-      );
-    }
+    await this.accessPolicy.assertCanManageLocation(actor, locationId);
   }
 
   private async assertEmployeeCanWorkAtLocation(
@@ -176,11 +159,7 @@ export class DutySchedulesService {
       ...(employee.locationId ? [employee.locationId] : []),
     ];
 
-    if (
-      !employee.roles.includes(Role.Admin) &&
-      employeeLocationIds.length &&
-      !employeeLocationIds.includes(locationId)
-    ) {
+    if (employeeLocationIds.length && !employeeLocationIds.includes(locationId)) {
       throw new BadRequestException(
         'Mitarbeiter ist dieser Filiale nicht zugewiesen',
       );

@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { JwtAuthGuard } from '../src/auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../src/auth/guards/permissions.guard';
 import { RolesGuard } from '../src/auth/guards/roles.guard';
 import { LocationsController } from '../src/locations/locations.controller';
 import { LocationsService } from '../src/locations/locations.service';
@@ -31,6 +32,8 @@ describe('LocationsController (e2e)', () => {
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(PermissionsGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

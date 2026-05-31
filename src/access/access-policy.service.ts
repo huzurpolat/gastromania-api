@@ -8,6 +8,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { Role } from '../auth/enums/role.enum';
+import { hasAnyRole as hasAnyNormalizedRole, normalizeRoles } from '../auth/role-utils';
 import { Company, CompanyDocument } from '../companies/schemas/company.schema';
 import {
   Location,
@@ -265,7 +266,7 @@ export class AccessPolicyService {
       return true;
     }
 
-    if ((target.roles ?? []).some((role) => this.platformRoles().includes(role))) {
+    if (normalizeRoles(target.roles ?? []).some((role) => this.platformRoles().includes(role))) {
       return false;
     }
 
@@ -292,7 +293,7 @@ export class AccessPolicyService {
     if (this.hasAnyRole(actor, [Role.Regionalleiter])) {
       return (
         sharesLocation &&
-        !(target.roles ?? []).some((role) =>
+        !normalizeRoles(target.roles ?? []).some((role) =>
           [
             Role.PlatformAdmin,
             Role.SuperAdmin,
@@ -307,7 +308,7 @@ export class AccessPolicyService {
     if (this.hasAnyRole(actor, [Role.Filialleiter, Role.Restaurantleiter])) {
       return (
         sharesLocation &&
-        (target.roles ?? []).every((role) =>
+        normalizeRoles(target.roles ?? []).every((role) =>
           [Role.Schichtleiter, ...this.operationalRoles()].includes(
             role as Role,
           ),
@@ -455,7 +456,7 @@ export class AccessPolicyService {
   }
 
   private hasAnyRole(user: AuthenticatedUser | undefined, roles: Role[]): boolean {
-    return Boolean(user?.roles?.some((role) => roles.includes(role as Role)));
+    return hasAnyNormalizedRole(user?.roles, roles);
   }
 
   private platformRoles(): string[] {

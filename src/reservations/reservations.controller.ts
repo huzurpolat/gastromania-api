@@ -10,9 +10,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateReservationDto } from './dto/create-reservation.dto';
@@ -20,11 +22,12 @@ import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { ReservationsService } from './reservations.service';
 
 @Controller('reservations')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class ReservationsController {
   constructor(private readonly reservationsService: ReservationsService) {}
 
   @Post()
+  @Permissions('reservations.create')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter, Role.Service)
   create(
     @Body() createReservationDto: CreateReservationDto,
@@ -34,6 +37,7 @@ export class ReservationsController {
   }
 
   @Get()
+  @Permissions('reservations.view')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter, Role.Service)
   findAll(
     @CurrentUser() user: AuthenticatedUser,
@@ -44,12 +48,14 @@ export class ReservationsController {
   }
 
   @Get(':id')
+  @Permissions('reservations.view')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter, Role.Service)
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.reservationsService.findOne(id, user);
   }
 
   @Patch(':id')
+  @Permissions('reservations.update')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter, Role.Service)
   update(
     @Param('id') id: string,
@@ -60,6 +66,7 @@ export class ReservationsController {
   }
 
   @Delete(':id')
+  @Permissions('reservations.delete')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.reservationsService.remove(id, user);

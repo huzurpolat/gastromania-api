@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { AccessPolicyService } from '../access/access-policy.service';
+import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { MenuItem, MenuItemDocument } from './schemas/menu-item.schema';
@@ -15,11 +17,15 @@ export class MenuItemsService {
   constructor(
     @InjectModel(MenuItem.name)
     private readonly menuItemModel: Model<MenuItemDocument>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async create(
     createMenuItemDto: CreateMenuItemDto,
+    actor: AuthenticatedUser,
   ): Promise<MenuItemDocument> {
+    this.assertManagementActor(actor);
+
     try {
       return await this.menuItemModel.create(createMenuItemDto);
     } catch (error) {
@@ -33,11 +39,11 @@ export class MenuItemsService {
     }
   }
 
-  async findAll(): Promise<MenuItemDocument[]> {
+  async findAll(_actor: AuthenticatedUser): Promise<MenuItemDocument[]> {
     return this.menuItemModel.find().sort({ category: 1, name: 1 }).exec();
   }
 
-  async findOne(id: string): Promise<MenuItemDocument> {
+  async findOne(id: string, _actor?: AuthenticatedUser): Promise<MenuItemDocument> {
     this.validateObjectId(id);
 
     const menuItem = await this.menuItemModel.findById(id).exec();
@@ -52,7 +58,9 @@ export class MenuItemsService {
   async update(
     id: string,
     updateMenuItemDto: UpdateMenuItemDto,
+    actor: AuthenticatedUser,
   ): Promise<MenuItemDocument> {
+    this.assertManagementActor(actor);
     this.validateObjectId(id);
 
     try {
@@ -79,7 +87,8 @@ export class MenuItemsService {
     }
   }
 
-  async remove(id: string): Promise<MenuItemDocument> {
+  async remove(id: string, actor: AuthenticatedUser): Promise<MenuItemDocument> {
+    this.assertManagementActor(actor);
     this.validateObjectId(id);
 
     const deletedMenuItem = await this.menuItemModel
@@ -96,6 +105,12 @@ export class MenuItemsService {
   private validateObjectId(id: string): void {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Ungueltige Artikel-ID');
+    }
+  }
+
+  private assertManagementActor(actor: AuthenticatedUser): void {
+    if (!this.accessPolicy.isManagementRole(actor)) {
+      throw new BadRequestException('Globale Speisekartenpflege ist Management vorbehalten');
     }
   }
 

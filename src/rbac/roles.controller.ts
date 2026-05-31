@@ -29,7 +29,7 @@ import { RbacService } from './rbac.service';
 
 @Controller('roles')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
-@Roles(Role.SuperAdmin, Role.Admin)
+@Roles(Role.PlatformAdmin, Role.SuperAdmin)
 export class RolesController {
   constructor(private readonly rbacService: RbacService) {}
 

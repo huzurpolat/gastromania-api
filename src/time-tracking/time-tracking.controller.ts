@@ -10,9 +10,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateTimeEntryDto } from './dto/create-time-entry.dto';
@@ -20,12 +22,13 @@ import { UpdateTimeEntryDto } from './dto/update-time-entry.dto';
 import { TimeTrackingService } from './time-tracking.service';
 
 @Controller('time-tracking')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
 export class TimeTrackingController {
   constructor(private readonly timeTrackingService: TimeTrackingService) {}
 
   @Post('clock-in')
+  @Permissions('employees.create')
   clockIn(
     @Body() createTimeEntryDto: CreateTimeEntryDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -34,11 +37,13 @@ export class TimeTrackingController {
   }
 
   @Patch(':id/clock-out')
+  @Permissions('employees.update')
   clockOut(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.timeTrackingService.clockOut(id, user);
   }
 
   @Get()
+  @Permissions('employees.view')
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -57,6 +62,7 @@ export class TimeTrackingController {
   }
 
   @Patch(':id')
+  @Permissions('employees.update')
   @Roles(Role.Admin, Role.Filialleiter)
   update(
     @Param('id') id: string,
@@ -67,6 +73,7 @@ export class TimeTrackingController {
   }
 
   @Delete(':id')
+  @Permissions('employees.delete')
   @Roles(Role.Admin, Role.Filialleiter)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.timeTrackingService.remove(id, user);

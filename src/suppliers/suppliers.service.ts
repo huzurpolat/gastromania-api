@@ -1,7 +1,7 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Role } from '../auth/enums/role.enum';
+import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { Location, LocationDocument } from '../locations/schemas/location.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -41,6 +41,7 @@ export class SuppliersService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Location.name)
     private readonly locationModel: Model<LocationDocument>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async create(payload: CreateSupplierDto, actor: AuthenticatedUser): Promise<SupplierResponse> {
@@ -79,26 +80,11 @@ export class SuppliersService {
   }
 
   private async assertCanUseLocation(actor: AuthenticatedUser, locationId: string): Promise<void> {
-    if (actor.roles.includes(Role.Admin)) return;
-    const locationIds = await this.getReadableLocationIds(actor);
-    if (!locationIds.includes(locationId)) {
-      throw new ForbiddenException('Kein Zugriff auf diese Filiale');
-    }
+    await this.accessPolicy.assertCanAccessLocation(actor, locationId);
   }
 
   private async getReadableLocationIds(actor: AuthenticatedUser): Promise<string[]> {
-    if (actor.roles.includes(Role.Admin)) {
-      const locations = await this.locationModel.find().select('_id').exec();
-      return locations.map((location) => location._id.toString());
-    }
-    const user = await this.userModel.findById(actor.sub).select('locationId locationIds').exec();
-    const ownLocationIds = user
-      ? [...new Set([...(user.locationIds ?? []), ...(user.locationId ? [user.locationId] : [])])].map((id) => id.toString())
-      : [];
-    const managedLocationIds = actor.roles.includes(Role.Filialleiter)
-      ? await this.getManagedLocationIds(actor.sub)
-      : [];
-    return [...new Set([...ownLocationIds, ...managedLocationIds])];
+    return this.accessPolicy.getReadableLocationIds(actor);
   }
 
   private async getManagedLocationIds(managerId: string): Promise<string[]> {
