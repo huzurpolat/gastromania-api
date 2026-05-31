@@ -102,6 +102,74 @@ describe('AccessPolicyService', () => {
     ).resolves.toEqual(['bonn']);
   });
 
+  it('covers the accepted scope matrix for platform, region, area, branch and operative roles', async () => {
+    await expect(
+      service.getReadableLocationIds(user([Role.PlatformAdmin])),
+    ).resolves.toEqual(['bonn', 'essen', 'frankfurt', 'mitte', 'muenchen']);
+    await expect(
+      service.getReadableLocationIds(
+        user([Role.Regionalleiter], { regionIds: ['nrw'] }),
+      ),
+    ).resolves.toEqual(['bonn', 'essen']);
+    await expect(
+      service.getReadableLocationIds(
+        user([Role.Bereichsleiter], {
+          locationIds: ['bonn'],
+          managedLocationIds: ['bonn'],
+        }),
+      ),
+    ).resolves.toEqual(['bonn']);
+    await expect(
+      service.getReadableLocationIds(
+        user([Role.Filialleiter], {
+          locationIds: ['bonn', 'essen'],
+          managedLocationIds: ['bonn', 'essen'],
+        }),
+      ),
+    ).resolves.toEqual(['bonn', 'essen']);
+    await expect(
+      service.getReadableLocationIds(user([Role.Service], { locationIds: ['bonn'] })),
+    ).resolves.toEqual(['bonn']);
+  });
+
+  it('rejects direct access to foreign locations', async () => {
+    const serviceUser = user([Role.Service], { locationIds: ['bonn'] });
+
+    await expect(service.canAccessLocation(serviceUser, 'frankfurt')).resolves.toBe(
+      false,
+    );
+    await expect(
+      service.getScopedResourceFilter(serviceUser, 'frankfurt'),
+    ).rejects.toThrow('Kein Zugriff auf diesen Standort');
+  });
+
+  it('prevents lower roles from assigning higher roles', () => {
+    expect(
+      service.canAssignRole(
+        user([Role.Regionalleiter], { regionIds: ['nrw'] }),
+        Role.CompanyAdmin,
+      ),
+    ).toBe(false);
+    expect(
+      service.canAssignRole(
+        user([Role.Bereichsleiter], {
+          locationIds: ['bonn'],
+          managedLocationIds: ['bonn'],
+        }),
+        Role.Regionalleiter,
+      ),
+    ).toBe(false);
+    expect(
+      service.canAssignRole(
+        user([Role.Filialleiter], {
+          locationIds: ['bonn'],
+          managedLocationIds: ['bonn'],
+        }),
+        Role.Bereichsleiter,
+      ),
+    ).toBe(false);
+  });
+
   it('allows platform admins globally and blocks lower roles from managing higher roles', async () => {
     await expect(
       service.getReadableLocationIds(user([Role.PlatformAdmin])),
