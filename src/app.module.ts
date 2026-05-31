@@ -9,6 +9,7 @@ import { DutySchedulesModule } from './duty-schedules/duty-schedules.module';
 import { InternalMessagesModule } from './internal-messages/internal-messages.module';
 import { LocationsModule } from './locations/locations.module';
 import { MenuItemsModule } from './menu-items/menu-items.module';
+import { MobileModule } from './mobile/mobile.module';
 import { OrdersModule } from './orders/orders.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { RbacModule } from './rbac/rbac.module';
@@ -48,6 +49,7 @@ import { HealthController } from './health.controller';
     KdsModule,
     RbacModule,
     SettingsModule,
+    MobileModule,
     OrdersModule,
     MenuItemsModule,
     DutySchedulesModule,
