@@ -114,7 +114,7 @@ export class DemoDataService {
       multiManagerLocationKeys: ['bonn', 'essen'],
       locations: [
         { key: 'bonn', name: 'Bonn', city: 'Bonn', zip: '53111', street: 'Markt 1', emailSlug: 'bonn', icon: 'restaurant' },
-        { key: 'koeln', name: 'Koeln', city: 'Koeln', zip: '50667', street: 'Domplatz 4', emailSlug: 'koeln', icon: 'storefront' },
+        { key: 'koeln', name: 'Köln', city: 'Köln', zip: '50667', street: 'Domplatz 4', emailSlug: 'koeln', icon: 'storefront' },
         { key: 'essen', name: 'Essen', city: 'Essen', zip: '45127', street: 'Limbecker Platz 7', emailSlug: 'essen', icon: 'local_cafe' },
         { key: 'olpe', name: 'Olpe', city: 'Olpe', zip: '57462', street: 'Biggeseestrasse 12', emailSlug: 'olpe', icon: 'deck' },
       ],
@@ -139,8 +139,8 @@ export class DemoDataService {
       mainLocationKey: 'muenchen',
       multiManagerLocationKeys: ['muenchen', 'augsburg'],
       locations: [
-        { key: 'muenchen', name: 'Muenchen', city: 'Muenchen', zip: '80331', street: 'Marienplatz 3', emailSlug: 'muenchen', icon: 'restaurant' },
-        { key: 'nuernberg', name: 'Nuernberg', city: 'Nuernberg', zip: '90403', street: 'Hauptmarkt 6', emailSlug: 'nuernberg', icon: 'storefront' },
+        { key: 'muenchen', name: 'München', city: 'München', zip: '80331', street: 'Marienplatz 3', emailSlug: 'muenchen', icon: 'restaurant' },
+        { key: 'nuernberg', name: 'Nürnberg', city: 'Nürnberg', zip: '90403', street: 'Hauptmarkt 6', emailSlug: 'nuernberg', icon: 'storefront' },
         { key: 'augsburg', name: 'Augsburg', city: 'Augsburg', zip: '86150', street: 'Rathausplatz 2', emailSlug: 'augsburg', icon: 'local_cafe' },
         { key: 'regensburg', name: 'Regensburg', city: 'Regensburg', zip: '93047', street: 'Domplatz 9', emailSlug: 'regensburg', icon: 'deck' },
       ],
@@ -155,7 +155,7 @@ export class DemoDataService {
         { key: 'mitte', name: 'Berlin Mitte', city: 'Berlin', zip: '10115', street: 'Torstrasse 15', emailSlug: 'mitte', icon: 'restaurant' },
         { key: 'kreuzberg', name: 'Berlin Kreuzberg', city: 'Berlin', zip: '10997', street: 'Oranienstrasse 24', emailSlug: 'kreuzberg', icon: 'local_bar' },
         { key: 'charlottenburg', name: 'Berlin Charlottenburg', city: 'Berlin', zip: '10623', street: 'Kantstrasse 10', emailSlug: 'charlottenburg', icon: 'storefront' },
-        { key: 'neukoelln', name: 'Berlin Neukoelln', city: 'Berlin', zip: '12043', street: 'Karl-Marx-Strasse 88', emailSlug: 'neukoelln', icon: 'local_cafe' },
+        { key: 'neukoelln', name: 'Berlin Neukölln', city: 'Berlin', zip: '12043', street: 'Karl-Marx-Strasse 88', emailSlug: 'neukoelln', icon: 'local_cafe' },
       ],
     },
   ];
@@ -213,6 +213,7 @@ export class DemoDataService {
       locationsByKey,
       departments,
     );
+    this.validateDemoUsers(users, locationsByKey);
     await this.assignLocationManagers(locations, users);
 
     const locationId = this.requireMapValue(locationsByKey, 'bonn')._id.toString();
@@ -657,6 +658,125 @@ export class DemoDataService {
     );
   }
 
+  private validateDemoUsers(
+    users: UserDocument[],
+    locationsByKey: Map<string, LocationDocument>,
+  ): void {
+    const usersByEmail = new Map<string, UserDocument>();
+
+    users.forEach((user) => {
+      if (usersByEmail.has(user.email)) {
+        throw new Error(`Doppelter Demo-Account: ${user.email}`);
+      }
+
+      if (!user.passwordHash || 'password' in user) {
+        throw new Error(`Ungueltiger Passwort-Seed fuer ${user.email}`);
+      }
+
+      usersByEmail.set(user.email, user);
+    });
+
+    for (const regionConfig of this.demoRegions) {
+      const regionLocationKeys = regionConfig.locations.map(
+        (location) => location.key,
+      );
+      const managedLocationKeys = regionConfig.multiManagerLocationKeys;
+      const mainLocation = this.getMainLocationConfig(regionConfig);
+
+      this.assertUserScope(
+        usersByEmail,
+        `admin@${regionConfig.key}.local`,
+        [Role.RegionAdmin],
+        regionLocationKeys,
+        regionLocationKeys,
+        locationsByKey,
+      );
+      this.assertUserScope(
+        usersByEmail,
+        `regionalleiter@${regionConfig.key}.local`,
+        [Role.Regionalleiter],
+        regionLocationKeys,
+        regionLocationKeys,
+        locationsByKey,
+      );
+      this.assertUserScope(
+        usersByEmail,
+        `bereichsleiter@${regionConfig.key}.local`,
+        [Role.Bereichsleiter],
+        managedLocationKeys,
+        managedLocationKeys,
+        locationsByKey,
+      );
+
+      for (const locationConfig of regionConfig.locations) {
+        const locationKeys =
+          locationConfig.key === regionConfig.mainLocationKey
+            ? managedLocationKeys
+            : [locationConfig.key];
+
+        this.assertUserScope(
+          usersByEmail,
+          `filialleiter@${locationConfig.emailSlug}.local`,
+          [Role.Filialleiter],
+          locationKeys,
+          locationKeys,
+          locationsByKey,
+        );
+      }
+
+      [
+        ['service', Role.Service],
+        ['kueche', Role.Kueche],
+        ['lager', Role.Lager],
+        ['spuelkueche', Role.Tellerwaescher],
+        ['reinigung', Role.Reinigung],
+      ].forEach(([prefix, role]) => {
+        this.assertUserScope(
+          usersByEmail,
+          `${prefix}@${mainLocation.emailSlug}.local`,
+          [role as Role],
+          [mainLocation.key],
+          [],
+          locationsByKey,
+        );
+      });
+    }
+  }
+
+  private assertUserScope(
+    usersByEmail: Map<string, UserDocument>,
+    email: string,
+    roles: Role[],
+    locationKeys: string[],
+    managedLocationKeys: string[],
+    locationsByKey: Map<string, LocationDocument>,
+  ): void {
+    const user = usersByEmail.get(email);
+
+    if (!user) {
+      throw new Error(`Demo-Account fehlt: ${email}`);
+    }
+
+    if (!this.sameValues(user.roles, roles)) {
+      throw new Error(`Falsche Rolle fuer Demo-Account: ${email}`);
+    }
+
+    const locationIds = locationKeys.map((key) =>
+      this.requireMapValue(locationsByKey, key)._id.toString(),
+    );
+    const managedLocationIds = managedLocationKeys.map((key) =>
+      this.requireMapValue(locationsByKey, key)._id.toString(),
+    );
+
+    if (!this.sameValues(user.locationIds ?? [], locationIds)) {
+      throw new Error(`Falsche Standort-Zuweisung fuer Demo-Account: ${email}`);
+    }
+
+    if (!this.sameValues(user.managedLocationIds ?? [], managedLocationIds)) {
+      throw new Error(`Falsche Managed-Standorte fuer Demo-Account: ${email}`);
+    }
+  }
+
   private requireMapValue<T>(map: Map<string, T>, key: string): T {
     const value = map.get(key);
     if (!value) {
@@ -666,15 +786,25 @@ export class DemoDataService {
     return value;
   }
 
-  private getMainLocationSlug(regionConfig: DemoRegionConfig): string {
+  private getMainLocationConfig(regionConfig: DemoRegionConfig): DemoLocationConfig {
     return this.requireMapValue(
       new Map(regionConfig.locations.map((location) => [location.key, location])),
       regionConfig.mainLocationKey,
-    ).emailSlug;
+    );
+  }
+
+  private getMainLocationSlug(regionConfig: DemoRegionConfig): string {
+    return this.getMainLocationConfig(regionConfig).emailSlug;
   }
 
   private capitalize(value: string): string {
     return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+
+  private sameValues(first: string[], second: string[]): boolean {
+    const normalize = (values: string[]) => [...new Set(values)].sort();
+
+    return JSON.stringify(normalize(first)) === JSON.stringify(normalize(second));
   }
 
   private createTables(locationId: string): Promise<RestaurantTableDocument[]> {
