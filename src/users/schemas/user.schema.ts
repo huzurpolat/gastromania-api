@@ -14,7 +14,12 @@ export interface UserResponse {
   taxNumber?: string;
   vatId?: string;
   taxOffice?: string;
-  roles: Role[];
+  employeeNumber?: string;
+  department?: string;
+  profileImageUrl?: string;
+  lastLoginAt?: Date;
+  roles: string[];
+  permissions?: string[];
   isActive: boolean;
   locationId?: string;
   locationIds?: string[];
@@ -63,12 +68,23 @@ export class User {
   @Prop({ trim: true })
   taxOffice?: string;
 
+  @Prop({ trim: true })
+  employeeNumber?: string;
+
+  @Prop({ trim: true })
+  department?: string;
+
+  @Prop({ trim: true })
+  profileImageUrl?: string;
+
+  @Prop()
+  lastLoginAt?: Date;
+
   @Prop({
     type: [String],
-    enum: Object.values(Role),
     default: [Role.Service],
   })
-  roles!: Role[];
+  roles!: string[];
 
   @Prop({ default: true })
   isActive!: boolean;
@@ -92,6 +108,10 @@ export const toUserResponse = (user: UserDocument): UserResponse => ({
   taxNumber: user.taxNumber,
   vatId: user.vatId,
   taxOffice: user.taxOffice,
+  employeeNumber: user.employeeNumber,
+  department: user.department,
+  profileImageUrl: user.profileImageUrl,
+  lastLoginAt: user.lastLoginAt,
   roles: user.roles,
   isActive: user.isActive,
   locationId: user.locationId,

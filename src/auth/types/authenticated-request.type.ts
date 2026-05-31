@@ -1,10 +1,10 @@
 import { Request } from 'express';
-import { Role } from '../enums/role.enum';
-
 export interface AuthenticatedUser {
   sub: string;
   email: string;
-  roles: Role[];
+  roles: string[];
+  permissions?: string[];
+  locationIds?: string[];
 }
 
 export interface AuthenticatedRequest extends Request {

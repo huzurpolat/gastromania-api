@@ -4,13 +4,11 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
-  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
-import { Role } from '../../auth/enums/role.enum';
 
 const trimString = (value: unknown): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -70,11 +68,26 @@ export class CreateUserDto {
   @IsString()
   taxOffice?: string;
 
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  employeeNumber?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  department?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  profileImageUrl?: string;
+
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
-  @IsEnum(Role, { each: true })
-  roles?: Role[];
+  @IsString({ each: true })
+  roles?: string[];
 
   @IsOptional()
   @IsBoolean()

@@ -36,7 +36,7 @@ export class UsersService {
 
   async create(
     createUserDto: CreateUserDto,
-    rolesOverride?: Role[],
+    rolesOverride?: string[],
     actor?: AuthenticatedUser,
   ): Promise<UserResponse> {
     await this.assertCanManagePayload(actor, createUserDto);
@@ -61,6 +61,9 @@ export class UsersService {
         taxNumber: createUserDto.taxNumber,
         vatId: createUserDto.vatId,
         taxOffice: createUserDto.taxOffice,
+        employeeNumber: createUserDto.employeeNumber,
+        department: createUserDto.department,
+        profileImageUrl: createUserDto.profileImageUrl,
         roles: rolesOverride ?? createUserDto.roles,
         isActive: createUserDto.isActive,
         locationId: createUserDto.locationId ?? locationIds[0],
@@ -93,10 +96,7 @@ export class UsersService {
     return this.userModel.countDocuments().exec();
   }
 
-  async findById(
-    id: string,
-    actor?: AuthenticatedUser,
-  ): Promise<UserResponse> {
+  async findById(id: string, actor?: AuthenticatedUser): Promise<UserResponse> {
     this.validateObjectId(id);
 
     const user = await this.userModel.findById(id).exec();
@@ -128,11 +128,9 @@ export class UsersService {
     const update: Partial<User> = {};
     const locationIds = this.getUniqueLocationIds([
       ...(updateUserDto.locationIds ?? existingUser.locationIds ?? []),
-      ...(
-        updateUserDto.locationId ?? existingUser.locationId
-          ? [updateUserDto.locationId ?? existingUser.locationId]
-          : []
-      ),
+      ...((updateUserDto.locationId ?? existingUser.locationId)
+        ? [updateUserDto.locationId ?? existingUser.locationId]
+        : []),
     ]);
 
     if (updateUserDto.email !== undefined) {
@@ -167,11 +165,32 @@ export class UsersService {
       update.taxOffice = updateUserDto.taxOffice;
     }
 
+    if (updateUserDto.employeeNumber !== undefined) {
+      update.employeeNumber = updateUserDto.employeeNumber;
+    }
+
+    if (updateUserDto.department !== undefined) {
+      update.department = updateUserDto.department;
+    }
+
+    if (updateUserDto.profileImageUrl !== undefined) {
+      update.profileImageUrl = updateUserDto.profileImageUrl;
+    }
+
     if (updateUserDto.roles !== undefined) {
       update.roles = updateUserDto.roles;
     }
 
     if (updateUserDto.isActive !== undefined) {
+      if (
+        updateUserDto.isActive === false &&
+        existingUser.roles.includes(Role.SuperAdmin) &&
+        (await this.countActiveSuperAdmins()) <= 1
+      ) {
+        throw new ForbiddenException(
+          'Der letzte Super Admin darf nicht deaktiviert werden',
+        );
+      }
       update.isActive = updateUserDto.isActive;
     }
 
@@ -222,6 +241,14 @@ export class UsersService {
     }
 
     await this.assertCanManageUser(actor, user);
+    if (
+      user.roles.includes(Role.SuperAdmin) &&
+      (await this.countActiveSuperAdmins()) <= 1
+    ) {
+      throw new ForbiddenException(
+        'Der letzte Super Admin darf nicht geloescht werden',
+      );
+    }
     await this.userModel.findByIdAndDelete(id).exec();
   }
 
@@ -248,7 +275,11 @@ export class UsersService {
     payload: CreateUserDto | UpdateUserDto,
     existingUser?: UserDocument,
   ): Promise<void> {
-    if (!actor || actor.roles.includes(Role.Admin)) {
+    if (
+      !actor ||
+      actor.roles.includes(Role.SuperAdmin) ||
+      actor.roles.includes(Role.Admin)
+    ) {
       return;
     }
 
@@ -257,13 +288,17 @@ export class UsersService {
     }
 
     const roles = payload.roles ?? existingUser?.roles ?? [];
-    const allowedRoles = [
+    const allowedRoles: string[] = [
       Role.Service,
       Role.Kueche,
       Role.Lager,
+      Role.Bar,
+      Role.Theke,
       Role.Tellerwaescher,
     ];
-    const hasOnlyAllowedRoles = roles.every((role) => allowedRoles.includes(role));
+    const hasOnlyAllowedRoles = roles.every((role) =>
+      allowedRoles.includes(role),
+    );
 
     if (!roles.length || !hasOnlyAllowedRoles) {
       throw new ForbiddenException(
@@ -274,16 +309,16 @@ export class UsersService {
     const managerLocationIds = await this.getManagerLocationIds(actor.sub);
     const targetLocationIds = this.getUniqueLocationIds([
       ...(payload.locationIds ?? existingUser?.locationIds ?? []),
-      ...(
-        payload.locationId ?? existingUser?.locationId
-          ? [payload.locationId ?? existingUser?.locationId]
-          : []
-      ),
+      ...((payload.locationId ?? existingUser?.locationId)
+        ? [payload.locationId ?? existingUser?.locationId]
+        : []),
     ]);
 
     if (
       !targetLocationIds.length ||
-      targetLocationIds.some((locationId) => !managerLocationIds.includes(locationId))
+      targetLocationIds.some(
+        (locationId) => !managerLocationIds.includes(locationId),
+      )
     ) {
       throw new ForbiddenException(
         'Filialleiter duerfen Benutzer nur eigenen Filialen zuweisen',
@@ -295,7 +330,11 @@ export class UsersService {
     actor: AuthenticatedUser | undefined,
     user: UserDocument,
   ): Promise<void> {
-    if (!actor || actor.roles.includes(Role.Admin)) {
+    if (
+      !actor ||
+      actor.roles.includes(Role.SuperAdmin) ||
+      actor.roles.includes(Role.Admin)
+    ) {
       return;
     }
 
@@ -305,7 +344,10 @@ export class UsersService {
   private async getManageableUsersQuery(
     actor: AuthenticatedUser,
   ): Promise<Record<string, unknown>> {
-    if (actor.roles.includes(Role.Admin)) {
+    if (
+      actor.roles.includes(Role.SuperAdmin) ||
+      actor.roles.includes(Role.Admin)
+    ) {
       return {};
     }
 
@@ -313,7 +355,14 @@ export class UsersService {
 
     return {
       roles: {
-        $in: [Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher],
+        $in: [
+          Role.Service,
+          Role.Kueche,
+          Role.Bar,
+          Role.Theke,
+          Role.Lager,
+          Role.Tellerwaescher,
+        ],
       },
       $or: [
         { locationId: { $in: managerLocationIds } },
@@ -331,7 +380,15 @@ export class UsersService {
     return locations.map((location) => location._id.toString());
   }
 
-  private getUniqueLocationIds(locationIds: Array<string | undefined>): string[] {
+  private countActiveSuperAdmins(): Promise<number> {
+    return this.userModel
+      .countDocuments({ roles: Role.SuperAdmin, isActive: true })
+      .exec();
+  }
+
+  private getUniqueLocationIds(
+    locationIds: Array<string | undefined>,
+  ): string[] {
     return [...new Set(locationIds.filter((id): id is string => Boolean(id)))];
   }
 

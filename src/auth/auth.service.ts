@@ -11,6 +11,7 @@ import { Role } from './enums/role.enum';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { toUserResponse, UserResponse } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
+import { RbacService } from '../rbac/rbac.service';
 
 export interface LoginResponse {
   accessToken: string;
@@ -22,6 +23,7 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly usersService: UsersService,
+    private readonly rbacService: RbacService,
   ) {}
 
   async login(loginDto: LoginDto): Promise<LoginResponse> {
@@ -46,15 +48,26 @@ export class AuthService {
       throw new UnauthorizedException('E-Mail oder Passwort ist ungueltig');
     }
 
+    const permissions = await this.rbacService.permissionsForRoles(user.roles);
     const payload: AuthenticatedUser = {
       sub: user._id.toString(),
       email: user.email,
       roles: user.roles,
+      permissions,
+      locationIds: [
+        ...new Set([
+          ...(user.locationIds ?? []),
+          ...(user.locationId ? [user.locationId] : []),
+        ]),
+      ],
     };
 
     return {
       accessToken: await this.jwtService.signAsync(payload),
-      user: toUserResponse(user),
+      user: {
+        ...toUserResponse(user),
+        permissions,
+      },
     };
   }
 

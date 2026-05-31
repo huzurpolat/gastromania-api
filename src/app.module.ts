@@ -10,6 +10,7 @@ import { LocationsModule } from './locations/locations.module';
 import { MenuItemsModule } from './menu-items/menu-items.module';
 import { OrdersModule } from './orders/orders.module';
 import { ReservationsModule } from './reservations/reservations.module';
+import { RbacModule } from './rbac/rbac.module';
 import { KdsModule } from './kds/kds.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SettingsModule } from './settings/settings.module';
@@ -44,6 +45,7 @@ import { HealthController } from './health.controller';
     ReservationsModule,
     RealtimeModule,
     KdsModule,
+    RbacModule,
     SettingsModule,
     OrdersModule,
     MenuItemsModule,

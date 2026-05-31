@@ -70,7 +70,7 @@ export interface DemoDataResult {
   demoUsers: Array<{
     email: string;
     password: string;
-    role: Role;
+    role: string;
   }>;
 }
 
@@ -843,7 +843,8 @@ export class DemoDataService {
       const price = this.roundPrice(
         dailyMenuItems.reduce((sum, item) => sum + item.price, 0),
       );
-      const menuType = index % 2 === 0 ? 'Tagesmenü' : 'Mittagsmenü';
+      const menuType: 'Tagesmenü' | 'Mittagsmenü' =
+        index % 2 === 0 ? 'Tagesmenü' : 'Mittagsmenü';
 
       return {
         date,
@@ -868,7 +869,7 @@ export class DemoDataService {
         locationId,
         senderId: actor.sub,
         senderName: 'Demo Admin',
-        senderRoles: actor.roles,
+        senderRoles: actor.roles as Role[],
         targetRoles: [Role.Service],
         message: 'Bitte Tisch 2 für die Reservierung vorbereiten.',
         priority: InternalMessagePriority.Important,
@@ -877,7 +878,7 @@ export class DemoDataService {
         locationId,
         senderId: actor.sub,
         senderName: 'Demo Admin',
-        senderRoles: actor.roles,
+        senderRoles: actor.roles as Role[],
         targetRoles: [Role.Kueche],
         message: 'Demo: Burger-Bestellung priorisieren.',
         priority: InternalMessagePriority.Normal,
