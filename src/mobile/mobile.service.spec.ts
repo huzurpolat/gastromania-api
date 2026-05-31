@@ -70,6 +70,10 @@ describe('MobileService', () => {
         employeeId: 'u1',
         employeeName: 'service@test.local',
       }),
+      expect.objectContaining({
+        sub: 'u1',
+        email: 'service@test.local',
+      }),
     );
   });
 

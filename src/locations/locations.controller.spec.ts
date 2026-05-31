@@ -25,6 +25,13 @@ describe('LocationsController', () => {
     update: jest.fn(),
     remove: jest.fn(),
   };
+  const actor = {
+    sub: 'user-admin',
+    email: 'admin@nrw.local',
+    roles: ['Admin'],
+    regionIds: ['region-nrw'],
+    locationIds: ['6627d9a2c6f2d8f3e2b1a001'],
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -57,20 +64,20 @@ describe('LocationsController', () => {
 
     locationsService.create.mockResolvedValue(location);
 
-    await expect(controller.create(dto)).resolves.toBe(location);
-    expect(locationsService.create).toHaveBeenCalledWith(dto);
+    await expect(controller.create(dto, actor)).resolves.toBe(location);
+    expect(locationsService.create).toHaveBeenCalledWith(dto, actor);
   });
 
   it('returns all locations', async () => {
     locationsService.findAll.mockResolvedValue([location]);
 
-    await expect(controller.findAll()).resolves.toEqual([location]);
+    await expect(controller.findAll(actor)).resolves.toEqual([location]);
   });
 
   it('returns one location', async () => {
     locationsService.findOne.mockResolvedValue(location);
 
-    await expect(controller.findOne('6627d9a2c6f2d8f3e2b1a001')).resolves.toBe(
+    await expect(controller.findOne('6627d9a2c6f2d8f3e2b1a001', actor)).resolves.toBe(
       location,
     );
   });
@@ -81,18 +88,19 @@ describe('LocationsController', () => {
     locationsService.update.mockResolvedValue(location);
 
     await expect(
-      controller.update('6627d9a2c6f2d8f3e2b1a001', dto),
+      controller.update('6627d9a2c6f2d8f3e2b1a001', dto, actor),
     ).resolves.toBe(location);
     expect(locationsService.update).toHaveBeenCalledWith(
       '6627d9a2c6f2d8f3e2b1a001',
       dto,
+      actor,
     );
   });
 
   it('removes a location', async () => {
     locationsService.remove.mockResolvedValue(location);
 
-    await expect(controller.remove('6627d9a2c6f2d8f3e2b1a001')).resolves.toBe(
+    await expect(controller.remove('6627d9a2c6f2d8f3e2b1a001', actor)).resolves.toBe(
       location,
     );
   });

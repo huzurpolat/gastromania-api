@@ -138,6 +138,16 @@ export class CreateLocationDto {
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()
   @IsString()
+  companyId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  regionId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
   managerId?: string;
 
   @IsOptional()

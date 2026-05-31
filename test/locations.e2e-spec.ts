@@ -81,7 +81,7 @@ describe('LocationsController (e2e)', () => {
       street: 'Hauptstrasse 1',
       zip: '10115',
       city: 'Berlin',
-    });
+    }, undefined);
   });
 
   it('POST /api/locations rejects unknown properties', async () => {

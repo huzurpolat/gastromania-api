@@ -79,6 +79,8 @@ export const LocationTablePlanObjectSchema = SchemaFactory.createForClass(
 
 @Schema({ timestamps: true, versionKey: false })
 export class Location {
+  _id!: string;
+
   @Prop({ required: true, trim: true, index: true })
   name!: string;
 
@@ -100,6 +102,12 @@ export class Location {
   @Prop({ default: true })
   isActive!: boolean;
 
+  @Prop({ trim: true, index: true })
+  companyId?: string;
+
+  @Prop({ trim: true, index: true })
+  regionId?: string;
+
   @Prop()
   managerId?: string;
 
@@ -116,3 +124,4 @@ export class Location {
 export const LocationSchema = SchemaFactory.createForClass(Location);
 
 LocationSchema.index({ city: 1, name: 1 });
+LocationSchema.index({ companyId: 1, regionId: 1, isActive: 1 });

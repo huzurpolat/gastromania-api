@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcrypt';
+import { AccessPolicyService } from '../access/access-policy.service';
 import { LoginDto } from './dto/login.dto';
 import { AuthenticatedUser } from './types/authenticated-request.type';
 import { Role } from './enums/role.enum';
@@ -24,6 +25,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly usersService: UsersService,
     private readonly rbacService: RbacService,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async login(loginDto: LoginDto): Promise<LoginResponse> {
@@ -49,17 +51,25 @@ export class AuthService {
     }
 
     const permissions = await this.rbacService.permissionsForRoles(user.roles);
-    const payload: AuthenticatedUser = {
+    const basePayload: AuthenticatedUser = {
       sub: user._id.toString(),
       email: user.email,
       roles: user.roles,
       permissions,
+      companyId: user.companyId,
+      regionIds: user.regionIds ?? [],
       locationIds: [
         ...new Set([
           ...(user.locationIds ?? []),
           ...(user.locationId ? [user.locationId] : []),
         ]),
       ],
+      managedLocationIds: user.managedLocationIds ?? [],
+      departmentIds: user.departmentIds ?? [],
+    };
+    const payload: AuthenticatedUser = {
+      ...basePayload,
+      locationIds: await this.accessPolicy.getReadableLocationIds(basePayload),
     };
 
     return {
@@ -67,6 +77,7 @@ export class AuthService {
       user: {
         ...toUserResponse(user),
         permissions,
+        locationIds: payload.locationIds,
       },
     };
   }

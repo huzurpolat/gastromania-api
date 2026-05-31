@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { AccessPolicyService } from '../access/access-policy.service';
+import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationDto } from './dto/update-reservation.dto';
 import { Reservation, ReservationDocument } from './schemas/reservation.schema';
@@ -19,13 +21,19 @@ export class ReservationsService {
   constructor(
     @InjectModel(Reservation.name)
     private readonly reservationModel: Model<ReservationDocument>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async create(
     createReservationDto: CreateReservationDto,
+    actor: AuthenticatedUser,
   ): Promise<ReservationDocument> {
     this.validateObjectId(createReservationDto.locationId, 'Standort-ID');
     this.validateObjectId(createReservationDto.tableId, 'Tisch-ID');
+    await this.accessPolicy.assertCanAccessLocation(
+      actor,
+      createReservationDto.locationId,
+    );
     this.validateTimeRange(
       createReservationDto.startTime,
       createReservationDto.endTime,
@@ -35,13 +43,16 @@ export class ReservationsService {
   }
 
   async findAll(
+    actor: AuthenticatedUser,
     filters: ReservationFilters = {},
   ): Promise<ReservationDocument[]> {
-    const query: ReservationFilters = {};
+    const query = await this.accessPolicy.getScopedResourceFilter(
+      actor,
+      filters.locationId,
+    );
 
     if (filters.locationId) {
       this.validateObjectId(filters.locationId, 'Standort-ID');
-      query.locationId = filters.locationId;
     }
 
     if (filters.tableId) {
@@ -52,12 +63,18 @@ export class ReservationsService {
     return this.reservationModel.find(query).sort({ startTime: 1 }).exec();
   }
 
-  async findOne(id: string): Promise<ReservationDocument> {
+  async findOne(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<ReservationDocument> {
     this.validateObjectId(id, 'Reservierungs-ID');
 
     const reservation = await this.reservationModel.findById(id).exec();
 
-    if (!reservation) {
+    if (
+      !reservation ||
+      !(await this.accessPolicy.canAccessLocation(actor, reservation.locationId))
+    ) {
       throw new NotFoundException('Reservierung nicht gefunden');
     }
 
@@ -67,11 +84,21 @@ export class ReservationsService {
   async update(
     id: string,
     updateReservationDto: UpdateReservationDto,
+    actor: AuthenticatedUser,
   ): Promise<ReservationDocument> {
     this.validateObjectId(id, 'Reservierungs-ID');
+    const currentReservation = await this.findOne(id, actor);
+    await this.accessPolicy.assertCanAccessLocation(
+      actor,
+      currentReservation.locationId,
+    );
 
     if (updateReservationDto.locationId) {
       this.validateObjectId(updateReservationDto.locationId, 'Standort-ID');
+      await this.accessPolicy.assertCanAccessLocation(
+        actor,
+        updateReservationDto.locationId,
+      );
     }
 
     if (updateReservationDto.tableId) {
@@ -79,7 +106,6 @@ export class ReservationsService {
     }
 
     if (updateReservationDto.startTime || updateReservationDto.endTime) {
-      const currentReservation = await this.findOne(id);
       this.validateTimeRange(
         updateReservationDto.startTime ??
           currentReservation.startTime.toISOString(),
@@ -102,8 +128,13 @@ export class ReservationsService {
     return updatedReservation;
   }
 
-  async remove(id: string): Promise<ReservationDocument> {
+  async remove(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<ReservationDocument> {
     this.validateObjectId(id, 'Reservierungs-ID');
+    const reservation = await this.findOne(id, actor);
+    await this.accessPolicy.assertCanManageLocation(actor, reservation.locationId);
 
     const deletedReservation = await this.reservationModel
       .findByIdAndDelete(id)

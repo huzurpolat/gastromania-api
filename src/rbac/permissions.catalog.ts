@@ -62,8 +62,21 @@ export const ALL_PERMISSIONS = PERMISSION_DEFINITIONS.map(
 );
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
+  PlatformAdmin: ['*'],
   'Super Admin': ['*'],
-  Admin: ALL_PERMISSIONS,
+  CompanyAdmin: ALL_PERMISSIONS.filter(
+    (permission) => !permission.startsWith('settings.update'),
+  ),
+  Admin: ALL_PERMISSIONS.filter(
+    (permission) => !permission.startsWith('settings.update'),
+  ),
+  Regionalleiter: ALL_PERMISSIONS.filter(
+    (permission) =>
+      !permission.startsWith('roles.delete') &&
+      !permission.startsWith('roles.permissions.update') &&
+      !permission.startsWith('settings.update') &&
+      !permission.startsWith('audit.view'),
+  ),
   Filialleiter: ALL_PERMISSIONS.filter(
     (permission) =>
       !permission.startsWith('roles.delete') &&

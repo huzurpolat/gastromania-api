@@ -89,7 +89,7 @@ export class DashboardAnalyticsService {
     const range = query.range ?? 'today';
     const { from, to } = this.resolvePeriod(range, query.from, query.to);
     const isGlobalUser =
-      user.roles.includes(Role.SuperAdmin) || user.roles.includes(Role.Admin);
+      user.roles.includes(Role.PlatformAdmin) || user.roles.includes(Role.SuperAdmin);
 
     if (isGlobalUser) {
       return {
@@ -556,7 +556,7 @@ export class DashboardAnalyticsService {
 
   private async availableLocations(user: AuthenticatedUser) {
     const isGlobalUser =
-      user.roles.includes(Role.SuperAdmin) || user.roles.includes(Role.Admin);
+      user.roles.includes(Role.PlatformAdmin) || user.roles.includes(Role.SuperAdmin);
     const filter = isGlobalUser
       ? { isActive: true }
       : { isActive: true, _id: { $in: user.locationIds ?? [] } };

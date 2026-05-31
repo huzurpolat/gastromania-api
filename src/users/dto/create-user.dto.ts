@@ -96,6 +96,17 @@ export class CreateUserDto {
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()
   @IsString()
+  companyId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  regionIds?: string[];
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
   locationId?: string;
 
   @IsOptional()
@@ -103,4 +114,22 @@ export class CreateUserDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   locationIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  managedLocationIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  departmentIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  responsibilities?: string[];
 }

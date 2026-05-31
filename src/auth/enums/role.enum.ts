@@ -1,6 +1,9 @@
 export enum Role {
+  PlatformAdmin = 'PlatformAdmin',
   SuperAdmin = 'Super Admin',
+  CompanyAdmin = 'CompanyAdmin',
   Admin = 'Admin',
+  Regionalleiter = 'Regionalleiter',
   Filialleiter = 'Filialleiter',
   Restaurantleiter = 'Restaurantleiter',
   Schichtleiter = 'Schichtleiter',

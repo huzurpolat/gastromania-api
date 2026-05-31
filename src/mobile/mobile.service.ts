@@ -6,6 +6,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { Role } from '../auth/enums/role.enum';
 import {
   Checklist,
   ChecklistStatus,
@@ -192,7 +193,7 @@ export class MobileService {
       employeeId: actor.sub,
       employeeName: actor.email,
       items: payload.items,
-    });
+    }, actor);
   }
 
   async updateOrder(
@@ -200,9 +201,9 @@ export class MobileService {
     id: string,
     payload: UpdateMobileOrderDto,
   ) {
-    const order = await this.ordersService.findOne(id);
+    const order = await this.ordersService.findOne(id, actor);
     this.assertCanUseLocation(actor, order.locationId);
-    return this.ordersService.update(id, payload);
+    return this.ordersService.update(id, payload, actor);
   }
 
   async tasks(actor: AuthenticatedUser, query: MobileQueryDto) {
@@ -382,7 +383,7 @@ export class MobileService {
     const day = query.date ? new Date(query.date) : new Date();
     const range = this.dayRange(day);
     const canSeeAll =
-      actor.roles.includes('Super Admin') || actor.roles.includes('Admin');
+      actor.roles.includes(Role.PlatformAdmin) || actor.roles.includes(Role.SuperAdmin);
 
     if (canSeeAll) {
       return {
@@ -405,7 +406,7 @@ export class MobileService {
   }
 
   private assertCanUseLocation(actor: AuthenticatedUser, locationId: string) {
-    if (actor.roles.includes('Super Admin') || actor.roles.includes('Admin'))
+    if (actor.roles.includes(Role.PlatformAdmin) || actor.roles.includes(Role.SuperAdmin))
       return;
     if (!(actor.locationIds ?? []).includes(locationId)) {
       throw new ForbiddenException('Kein Zugriff auf diese Filiale');
@@ -413,7 +414,7 @@ export class MobileService {
   }
 
   private actorLocationFilter(actor: AuthenticatedUser) {
-    if (actor.roles.includes('Super Admin') || actor.roles.includes('Admin'))
+    if (actor.roles.includes(Role.PlatformAdmin) || actor.roles.includes(Role.SuperAdmin))
       return {};
     return { _id: { $in: actor.locationIds ?? [] } };
   }

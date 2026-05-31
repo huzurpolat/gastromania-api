@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import { AccessPolicyService } from '../access/access-policy.service';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { LocationsService } from './locations.service';
@@ -25,6 +26,21 @@ describe('LocationsService', () => {
     findByIdAndUpdate: jest.fn(),
     findByIdAndDelete: jest.fn(),
   };
+  const actor = {
+    sub: 'user-admin',
+    email: 'admin@nrw.local',
+    roles: ['Admin'],
+    regionIds: ['region-nrw'],
+    locationIds: ['6627d9a2c6f2d8f3e2b1a001'],
+  };
+  const accessPolicy = {
+    assertCompanyExists: jest.fn(),
+    assertRegionExists: jest.fn(),
+    assertAssignableScope: jest.fn(),
+    getReadableLocationFilter: jest.fn(),
+    canAccessLocation: jest.fn(),
+    assertCanManageLocation: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -34,11 +50,17 @@ describe('LocationsService', () => {
           provide: getModelToken(Location.name),
           useValue: locationModel,
         },
+        {
+          provide: AccessPolicyService,
+          useValue: accessPolicy,
+        },
       ],
     }).compile();
 
     service = module.get<LocationsService>(LocationsService);
     jest.clearAllMocks();
+    accessPolicy.getReadableLocationFilter.mockResolvedValue({});
+    accessPolicy.canAccessLocation.mockResolvedValue(true);
   });
 
   it('creates a location', async () => {
@@ -51,8 +73,12 @@ describe('LocationsService', () => {
 
     locationModel.create.mockResolvedValue(location);
 
-    await expect(service.create(dto)).resolves.toBe(location);
-    expect(locationModel.create).toHaveBeenCalledWith(dto);
+    await expect(service.create(dto, actor)).resolves.toBe(location);
+    expect(locationModel.create).toHaveBeenCalledWith({
+      ...dto,
+      companyId: undefined,
+      regionId: 'region-nrw',
+    });
   });
 
   it('returns all locations sorted by newest first', async () => {
@@ -61,7 +87,7 @@ describe('LocationsService', () => {
 
     locationModel.find.mockReturnValue({ sort });
 
-    await expect(service.findAll()).resolves.toEqual([location]);
+    await expect(service.findAll(actor)).resolves.toEqual([location]);
     expect(sort).toHaveBeenCalledWith({ createdAt: -1 });
   });
 
@@ -70,13 +96,13 @@ describe('LocationsService', () => {
       exec: jest.fn().mockResolvedValue(location),
     });
 
-    await expect(service.findOne('6627d9a2c6f2d8f3e2b1a001')).resolves.toBe(
+    await expect(service.findOne('6627d9a2c6f2d8f3e2b1a001', actor)).resolves.toBe(
       location,
     );
   });
 
   it('throws BadRequestException for an invalid id', async () => {
-    await expect(service.findOne('invalid-id')).rejects.toBeInstanceOf(
+    await expect(service.findOne('invalid-id', actor)).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
@@ -87,7 +113,7 @@ describe('LocationsService', () => {
     });
 
     await expect(
-      service.findOne('6627d9a2c6f2d8f3e2b1a001'),
+      service.findOne('6627d9a2c6f2d8f3e2b1a001', actor),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -98,7 +124,7 @@ describe('LocationsService', () => {
       exec: jest.fn().mockResolvedValue(location),
     });
 
-    await expect(service.update('6627d9a2c6f2d8f3e2b1a001', dto)).resolves.toBe(
+    await expect(service.update('6627d9a2c6f2d8f3e2b1a001', dto, actor)).resolves.toBe(
       location,
     );
     expect(locationModel.findByIdAndUpdate).toHaveBeenCalledWith(
@@ -116,8 +142,19 @@ describe('LocationsService', () => {
       exec: jest.fn().mockResolvedValue(location),
     });
 
-    await expect(service.remove('6627d9a2c6f2d8f3e2b1a001')).resolves.toBe(
+    await expect(service.remove('6627d9a2c6f2d8f3e2b1a001', actor)).resolves.toBe(
       location,
     );
+  });
+
+  it('returns NotFoundException for locations outside the actor scope', async () => {
+    accessPolicy.canAccessLocation.mockResolvedValue(false);
+    locationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(location),
+    });
+
+    await expect(
+      service.findOne('6627d9a2c6f2d8f3e2b1a001', actor),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

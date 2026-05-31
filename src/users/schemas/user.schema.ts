@@ -21,8 +21,13 @@ export interface UserResponse {
   roles: string[];
   permissions?: string[];
   isActive: boolean;
+  companyId?: string;
+  regionIds?: string[];
   locationId?: string;
   locationIds?: string[];
+  managedLocationIds?: string[];
+  departmentIds?: string[];
+  responsibilities?: string[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -89,11 +94,26 @@ export class User {
   @Prop({ default: true })
   isActive!: boolean;
 
+  @Prop({ trim: true, index: true })
+  companyId?: string;
+
+  @Prop({ type: [String], default: [], index: true })
+  regionIds?: string[];
+
   @Prop({ trim: true })
   locationId?: string;
 
   @Prop({ type: [String], default: [] })
   locationIds?: string[];
+
+  @Prop({ type: [String], default: [], index: true })
+  managedLocationIds?: string[];
+
+  @Prop({ type: [String], default: [], index: true })
+  departmentIds?: string[];
+
+  @Prop({ type: [String], default: [] })
+  responsibilities?: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
@@ -114,8 +134,13 @@ export const toUserResponse = (user: UserDocument): UserResponse => ({
   lastLoginAt: user.lastLoginAt,
   roles: user.roles,
   isActive: user.isActive,
+  companyId: user.companyId,
+  regionIds: user.regionIds,
   locationId: user.locationId,
   locationIds: user.locationIds,
+  managedLocationIds: user.managedLocationIds,
+  departmentIds: user.departmentIds,
+  responsibilities: user.responsibilities,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });

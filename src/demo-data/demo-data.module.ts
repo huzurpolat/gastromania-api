@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Checklist, ChecklistSchema } from '../checklists/schemas/checklist.schema';
+import { Company, CompanySchema } from '../companies/schemas/company.schema';
 import {
   DutyShift,
   DutyShiftSchema,
@@ -17,6 +18,7 @@ import {
   Reservation,
   ReservationSchema,
 } from '../reservations/schemas/reservation.schema';
+import { Region, RegionSchema } from '../regions/schemas/region.schema';
 import {
   RestaurantTable,
   RestaurantTableSchema,
@@ -41,6 +43,8 @@ import { DemoDataService } from './demo-data.service';
     AuthJwtModule,
     MongooseModule.forFeature([
       { name: Location.name, schema: LocationSchema },
+      { name: Company.name, schema: CompanySchema },
+      { name: Region.name, schema: RegionSchema },
       { name: RestaurantTable.name, schema: RestaurantTableSchema },
       { name: MenuItem.name, schema: MenuItemSchema },
       { name: Order.name, schema: OrderSchema },

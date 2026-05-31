@@ -8,6 +8,7 @@ import {
   Checklist,
   ChecklistDocument,
 } from '../checklists/schemas/checklist.schema';
+import { Company, CompanyDocument } from '../companies/schemas/company.schema';
 import {
   DutyShift,
   DutyShiftDocument,
@@ -35,6 +36,7 @@ import {
   ReservationDocument,
   ReservationStatus,
 } from '../reservations/schemas/reservation.schema';
+import { Region, RegionDocument } from '../regions/schemas/region.schema';
 import {
   RestaurantTable,
   RestaurantTableDocument,
@@ -108,11 +110,26 @@ export class DemoDataService {
     private readonly supplierModel: Model<SupplierDocument>,
     @InjectModel(Checklist.name)
     private readonly checklistModel: Model<ChecklistDocument>,
+    @InjectModel(Company.name)
+    private readonly companyModel: Model<CompanyDocument>,
+    @InjectModel(Region.name)
+    private readonly regionModel: Model<RegionDocument>,
   ) {}
 
   async seed(actor: AuthenticatedUser): Promise<DemoDataResult> {
     await this.clearExistingDemoData();
 
+    const company = await this.companyModel.create({
+      name: `${this.demoPrefix} Gastrowerk24`,
+      type: 'restaurant-group',
+      isActive: true,
+    });
+    const region = await this.regionModel.create({
+      companyId: company._id.toString(),
+      name: 'NRW',
+      code: 'NRW',
+      isActive: true,
+    });
     const location = await this.locationModel.create({
       name: `${this.demoPrefix} Testfiliale Innenstadt`,
       street: 'Demoallee 12',
@@ -121,10 +138,16 @@ export class DemoDataService {
       phone: '+49 30 123456',
       email: 'demo-filiale@gastromania.local',
       isActive: true,
+      companyId: company._id.toString(),
+      regionId: region._id.toString(),
       managerId: actor.sub,
     });
     const locationId = location._id.toString();
-    const users = await this.createUsers(locationId);
+    const users = await this.createUsers(
+      locationId,
+      company._id.toString(),
+      region._id.toString(),
+    );
     const manager = users.find((user) =>
       user.roles.includes(Role.Filialleiter),
     );
@@ -218,16 +241,32 @@ export class DemoDataService {
         .deleteMany({ locationId: { $in: locationIds } })
         .exec(),
       this.locationModel.deleteMany({ _id: { $in: locationIds } }).exec(),
+      this.regionModel.deleteMany({ name: 'NRW', code: 'NRW' }).exec(),
+      this.companyModel
+        .deleteMany({ name: new RegExp(`^\\${this.demoPrefix}`) })
+        .exec(),
       this.menuItemModel
         .deleteMany({ name: new RegExp(`^\\${this.demoPrefix}`) })
         .exec(),
       this.userModel.deleteMany({ email: /@demo\.gastromania\.local$/ }).exec(),
+      this.userModel.deleteMany({ email: /@nrw\.local$/ }).exec(),
     ]);
   }
 
-  private async createUsers(locationId: string): Promise<UserDocument[]> {
+  private async createUsers(
+    locationId: string,
+    companyId: string,
+    regionId: string,
+  ): Promise<UserDocument[]> {
     const passwordHash = await bcrypt.hash(this.demoPassword, 12);
     const users = [
+      {
+        email: 'admin@nrw.local',
+        firstName: 'Nora',
+        lastName: 'NRW',
+        roles: [Role.Admin],
+        regionIds: [regionId],
+      },
       {
         email: 'admin@demo.gastromania.local',
         firstName: 'Ada',
@@ -268,8 +307,13 @@ export class DemoDataService {
       ...user,
       passwordHash,
       isActive: true,
+      companyId,
+      regionIds: user.regionIds ?? [regionId],
       locationId,
       locationIds: [locationId],
+      managedLocationIds: user.roles.includes(Role.Filialleiter)
+        ? [locationId]
+        : [],
     }));
 
     return this.userModel.insertMany(users);

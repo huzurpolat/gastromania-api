@@ -10,6 +10,7 @@ import bcrypt from 'bcrypt';
 import { Model, Types } from 'mongoose';
 import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { AccessPolicyService } from '../access/access-policy.service';
 import {
   Location,
   LocationDocument,
@@ -32,6 +33,7 @@ export class UsersService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Location.name)
     private readonly locationModel: Model<LocationDocument>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async create(
@@ -49,6 +51,9 @@ export class UsersService {
       ...(createUserDto.locationIds ?? []),
       ...(createUserDto.locationId ? [createUserDto.locationId] : []),
     ]);
+    const managedLocationIds = this.getUniqueLocationIds(
+      createUserDto.managedLocationIds ?? [],
+    );
 
     try {
       const user = await this.userModel.create({
@@ -66,8 +71,13 @@ export class UsersService {
         profileImageUrl: createUserDto.profileImageUrl,
         roles: rolesOverride ?? createUserDto.roles,
         isActive: createUserDto.isActive,
+        companyId: createUserDto.companyId ?? actor?.companyId,
+        regionIds: createUserDto.regionIds ?? actor?.regionIds ?? [],
         locationId: createUserDto.locationId ?? locationIds[0],
         locationIds,
+        managedLocationIds,
+        departmentIds: createUserDto.departmentIds ?? [],
+        responsibilities: createUserDto.responsibilities ?? [],
       });
 
       return toUserResponse(user);
@@ -194,6 +204,14 @@ export class UsersService {
       update.isActive = updateUserDto.isActive;
     }
 
+    if (updateUserDto.companyId !== undefined) {
+      update.companyId = updateUserDto.companyId;
+    }
+
+    if (updateUserDto.regionIds !== undefined) {
+      update.regionIds = updateUserDto.regionIds;
+    }
+
     if (updateUserDto.locationId !== undefined) {
       update.locationId = updateUserDto.locationId;
     }
@@ -201,6 +219,20 @@ export class UsersService {
     if (updateUserDto.locationIds !== undefined) {
       update.locationIds = locationIds;
       update.locationId = updateUserDto.locationId ?? locationIds[0];
+    }
+
+    if (updateUserDto.managedLocationIds !== undefined) {
+      update.managedLocationIds = this.getUniqueLocationIds(
+        updateUserDto.managedLocationIds,
+      );
+    }
+
+    if (updateUserDto.departmentIds !== undefined) {
+      update.departmentIds = updateUserDto.departmentIds;
+    }
+
+    if (updateUserDto.responsibilities !== undefined) {
+      update.responsibilities = updateUserDto.responsibilities;
     }
 
     if (updateUserDto.password !== undefined) {
@@ -275,54 +307,30 @@ export class UsersService {
     payload: CreateUserDto | UpdateUserDto,
     existingUser?: UserDocument,
   ): Promise<void> {
-    if (
-      !actor ||
-      actor.roles.includes(Role.SuperAdmin) ||
-      actor.roles.includes(Role.Admin)
-    ) {
+    if (!actor) {
       return;
     }
 
-    if (!actor.roles.includes(Role.Filialleiter)) {
-      throw new ForbiddenException('Nicht ausreichende Berechtigung');
+    const scopedPayload = {
+      companyId: payload.companyId ?? existingUser?.companyId,
+      regionIds: payload.regionIds ?? existingUser?.regionIds ?? [],
+      locationId: payload.locationId ?? existingUser?.locationId,
+      locationIds: payload.locationIds ?? existingUser?.locationIds ?? [],
+      managedLocationIds:
+        payload.managedLocationIds ?? existingUser?.managedLocationIds ?? [],
+      departmentIds: payload.departmentIds ?? existingUser?.departmentIds ?? [],
+      roles: payload.roles ?? existingUser?.roles ?? [],
+    };
+
+    await this.accessPolicy.assertAssignableScope(actor, scopedPayload);
+
+    if (existingUser) {
+      await this.accessPolicy.assertCanManageUser(actor, existingUser);
     }
 
     const roles = payload.roles ?? existingUser?.roles ?? [];
-    const allowedRoles: string[] = [
-      Role.Service,
-      Role.Kueche,
-      Role.Lager,
-      Role.Bar,
-      Role.Theke,
-      Role.Tellerwaescher,
-    ];
-    const hasOnlyAllowedRoles = roles.every((role) =>
-      allowedRoles.includes(role),
-    );
-
-    if (!roles.length || !hasOnlyAllowedRoles) {
-      throw new ForbiddenException(
-        'Filialleiter duerfen nur Filialteam-Benutzer verwalten',
-      );
-    }
-
-    const managerLocationIds = await this.getManagerLocationIds(actor.sub);
-    const targetLocationIds = this.getUniqueLocationIds([
-      ...(payload.locationIds ?? existingUser?.locationIds ?? []),
-      ...((payload.locationId ?? existingUser?.locationId)
-        ? [payload.locationId ?? existingUser?.locationId]
-        : []),
-    ]);
-
-    if (
-      !targetLocationIds.length ||
-      targetLocationIds.some(
-        (locationId) => !managerLocationIds.includes(locationId),
-      )
-    ) {
-      throw new ForbiddenException(
-        'Filialleiter duerfen Benutzer nur eigenen Filialen zuweisen',
-      );
+    if (!roles.length || roles.some((role) => !this.accessPolicy.canAssignRole(actor, role))) {
+      throw new ForbiddenException('Diese Rolle darf nicht vergeben werden');
     }
   }
 
@@ -330,45 +338,17 @@ export class UsersService {
     actor: AuthenticatedUser | undefined,
     user: UserDocument,
   ): Promise<void> {
-    if (
-      !actor ||
-      actor.roles.includes(Role.SuperAdmin) ||
-      actor.roles.includes(Role.Admin)
-    ) {
+    if (!actor) {
       return;
     }
 
-    await this.assertCanManagePayload(actor, {}, user);
+    await this.accessPolicy.assertCanManageUser(actor, user);
   }
 
   private async getManageableUsersQuery(
     actor: AuthenticatedUser,
   ): Promise<Record<string, unknown>> {
-    if (
-      actor.roles.includes(Role.SuperAdmin) ||
-      actor.roles.includes(Role.Admin)
-    ) {
-      return {};
-    }
-
-    const managerLocationIds = await this.getManagerLocationIds(actor.sub);
-
-    return {
-      roles: {
-        $in: [
-          Role.Service,
-          Role.Kueche,
-          Role.Bar,
-          Role.Theke,
-          Role.Lager,
-          Role.Tellerwaescher,
-        ],
-      },
-      $or: [
-        { locationId: { $in: managerLocationIds } },
-        { locationIds: { $in: managerLocationIds } },
-      ],
-    };
+    return this.accessPolicy.getManageableUsersFilter(actor);
   }
 
   private async getManagerLocationIds(managerId: string): Promise<string[]> {

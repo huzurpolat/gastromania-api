@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
+import { AccessModule } from './access/access.module';
 import { ChecklistsModule } from './checklists/checklists.module';
+import { CompaniesModule } from './companies/companies.module';
 import { DemoDataModule } from './demo-data/demo-data.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DutySchedulesModule } from './duty-schedules/duty-schedules.module';
@@ -13,6 +15,7 @@ import { MobileModule } from './mobile/mobile.module';
 import { OrdersModule } from './orders/orders.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { RecipesModule } from './recipes/recipes.module';
+import { RegionsModule } from './regions/regions.module';
 import { RbacModule } from './rbac/rbac.module';
 import { KdsModule } from './kds/kds.module';
 import { RealtimeModule } from './realtime/realtime.module';
@@ -41,6 +44,9 @@ import { HealthController } from './health.controller';
       }),
     }),
 
+    AccessModule,
+    CompaniesModule,
+    RegionsModule,
     UsersModule,
     AuthModule,
     LocationsModule,

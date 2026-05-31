@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { AccessPolicyService } from '../access/access-policy.service';
+import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -32,10 +34,15 @@ export class OrdersService {
     private readonly orderModel: Model<OrderDocument>,
     private readonly realtimeService: RealtimeService,
     private readonly recipeInventoryService: RecipeInventoryService,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
-  async create(createOrderDto: CreateOrderDto): Promise<OrderDocument> {
+  async create(
+    createOrderDto: CreateOrderDto,
+    actor: AuthenticatedUser,
+  ): Promise<OrderDocument> {
     this.validateObjectId(createOrderDto.locationId, 'Standort-ID');
+    await this.accessPolicy.assertCanAccessLocation(actor, createOrderDto.locationId);
     if (createOrderDto.tableId) {
       this.validateObjectId(createOrderDto.tableId, 'Tisch-ID');
     }
@@ -82,12 +89,17 @@ export class OrdersService {
     return order;
   }
 
-  async findAll(filters: OrderFilters = {}): Promise<OrderDocument[]> {
-    const query: OrderFilters = {};
+  async findAll(
+    actor: AuthenticatedUser,
+    filters: OrderFilters = {},
+  ): Promise<OrderDocument[]> {
+    const query = await this.accessPolicy.getScopedResourceFilter(
+      actor,
+      filters.locationId,
+    );
 
     if (filters.locationId) {
       this.validateObjectId(filters.locationId, 'Standort-ID');
-      query.locationId = filters.locationId;
     }
 
     if (filters.tableId) {
@@ -102,12 +114,15 @@ export class OrdersService {
     return this.orderModel.find(query).sort({ createdAt: -1 }).exec();
   }
 
-  async findOne(id: string): Promise<OrderDocument> {
+  async findOne(id: string, actor?: AuthenticatedUser): Promise<OrderDocument> {
     this.validateObjectId(id, 'Bestell-ID');
 
     const order = await this.orderModel.findById(id).exec();
 
-    if (!order) {
+    if (
+      !order ||
+      (actor && !(await this.accessPolicy.canAccessLocation(actor, order.locationId)))
+    ) {
       throw new NotFoundException('Bestellung nicht gefunden');
     }
 
@@ -117,11 +132,15 @@ export class OrdersService {
   async update(
     id: string,
     updateOrderDto: UpdateOrderDto,
+    actor: AuthenticatedUser,
   ): Promise<OrderDocument> {
     this.validateObjectId(id, 'Bestell-ID');
+    const currentOrder = await this.findOne(id, actor);
+    await this.accessPolicy.assertCanAccessLocation(actor, currentOrder.locationId);
 
     if (updateOrderDto.locationId) {
       this.validateObjectId(updateOrderDto.locationId, 'Standort-ID');
+      await this.accessPolicy.assertCanAccessLocation(actor, updateOrderDto.locationId);
     }
 
     if (updateOrderDto.tableId) {
@@ -135,7 +154,6 @@ export class OrdersService {
         : {}),
     };
 
-    const currentOrder = await this.findOne(id);
     const statusChanged =
       updateOrderDto.status && updateOrderDto.status !== currentOrder.status;
     const statusTimestamps = statusChanged
@@ -168,8 +186,10 @@ export class OrdersService {
     return updatedOrder;
   }
 
-  async remove(id: string): Promise<OrderDocument> {
+  async remove(id: string, actor: AuthenticatedUser): Promise<OrderDocument> {
     this.validateObjectId(id, 'Bestell-ID');
+    const order = await this.findOne(id, actor);
+    await this.accessPolicy.assertCanManageLocation(actor, order.locationId);
 
     const deletedOrder = await this.orderModel.findByIdAndDelete(id).exec();
 
