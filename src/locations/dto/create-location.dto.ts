@@ -119,6 +119,12 @@ export class CreateLocationDto {
   @IsOptional()
   @IsString()
   @MaxLength(80)
+  federalState?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
   icon?: string;
 
   @Transform(({ value }) => optionalTrimString(value))

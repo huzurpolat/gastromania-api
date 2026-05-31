@@ -16,6 +16,7 @@ describe('LocationsService', () => {
     street: 'Hauptstrasse 1',
     zip: '10115',
     city: 'Berlin',
+    federalState: 'Berlin',
     isActive: true,
   } as unknown as LocationDocument;
 
@@ -69,6 +70,7 @@ describe('LocationsService', () => {
       street: 'Hauptstrasse 1',
       zip: '10115',
       city: 'Berlin',
+      federalState: 'Berlin',
     };
 
     locationModel.create.mockResolvedValue(location);
@@ -118,7 +120,10 @@ describe('LocationsService', () => {
   });
 
   it('updates a location', async () => {
-    const dto: UpdateLocationDto = { city: 'Hamburg' };
+    const dto: UpdateLocationDto = {
+      city: 'Hamburg',
+      federalState: 'Hamburg',
+    };
 
     locationModel.findByIdAndUpdate.mockReturnValue({
       exec: jest.fn().mockResolvedValue(location),

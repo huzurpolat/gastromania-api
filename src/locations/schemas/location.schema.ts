@@ -93,6 +93,9 @@ export class Location {
   @Prop({ required: true, trim: true, index: true })
   city!: string;
 
+  @Prop({ trim: true, index: true })
+  federalState?: string;
+
   @Prop({ default: 'storefront', trim: true })
   icon!: string;
 
@@ -127,4 +130,5 @@ export class Location {
 export const LocationSchema = SchemaFactory.createForClass(Location);
 
 LocationSchema.index({ city: 1, name: 1 });
+LocationSchema.index({ federalState: 1, city: 1, name: 1 });
 LocationSchema.index({ companyId: 1, regionId: 1, isActive: 1 });

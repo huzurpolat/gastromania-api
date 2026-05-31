@@ -15,6 +15,7 @@ describe('LocationsController', () => {
     street: 'Hauptstrasse 1',
     zip: '10115',
     city: 'Berlin',
+    federalState: 'Berlin',
     isActive: true,
   } as unknown as LocationDocument;
 
@@ -60,6 +61,7 @@ describe('LocationsController', () => {
       street: 'Hauptstrasse 1',
       zip: '10115',
       city: 'Berlin',
+      federalState: 'Berlin',
     };
 
     locationsService.create.mockResolvedValue(location);
@@ -83,7 +85,10 @@ describe('LocationsController', () => {
   });
 
   it('updates a location', async () => {
-    const dto: UpdateLocationDto = { city: 'Hamburg' };
+    const dto: UpdateLocationDto = {
+      city: 'Hamburg',
+      federalState: 'Hamburg',
+    };
 
     locationsService.update.mockResolvedValue(location);
 

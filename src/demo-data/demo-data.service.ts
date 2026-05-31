@@ -95,6 +95,7 @@ interface DemoRegionConfig {
   key: string;
   name: string;
   code: string;
+  federalState: string;
   locations: DemoLocationConfig[];
   mainLocationKey: string;
   multiManagerLocationKeys: string[];
@@ -110,6 +111,7 @@ export class DemoDataService {
       key: 'nrw',
       name: 'NRW',
       code: 'NRW',
+      federalState: 'Nordrhein-Westfalen',
       mainLocationKey: 'bonn',
       multiManagerLocationKeys: ['bonn', 'essen'],
       locations: [
@@ -123,6 +125,7 @@ export class DemoDataService {
       key: 'hessen',
       name: 'Hessen',
       code: 'HESSEN',
+      federalState: 'Hessen',
       mainLocationKey: 'frankfurt',
       multiManagerLocationKeys: ['frankfurt', 'wiesbaden'],
       locations: [
@@ -136,6 +139,7 @@ export class DemoDataService {
       key: 'bayern',
       name: 'Bayern',
       code: 'BAYERN',
+      federalState: 'Bayern',
       mainLocationKey: 'muenchen',
       multiManagerLocationKeys: ['muenchen', 'augsburg'],
       locations: [
@@ -149,6 +153,7 @@ export class DemoDataService {
       key: 'berlin',
       name: 'Berlin',
       code: 'BERLIN',
+      federalState: 'Berlin',
       mainLocationKey: 'mitte',
       multiManagerLocationKeys: ['mitte', 'kreuzberg'],
       locations: [
@@ -378,6 +383,7 @@ export class DemoDataService {
           street: locationConfig.street,
           zip: locationConfig.zip,
           city: locationConfig.city,
+          federalState: regionConfig.federalState,
           phone: '+49 228 100000',
           email: `${locationConfig.emailSlug}@gastromania.local`,
           icon: locationConfig.icon,
