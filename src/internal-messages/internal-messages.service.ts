@@ -7,9 +7,9 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Observable, Subject, filter, from, map, switchMap } from 'rxjs';
+import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { Location, LocationDocument } from '../locations/schemas/location.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateInternalMessageDto } from './dto/create-internal-message.dto';
 import {
@@ -40,8 +40,7 @@ export class InternalMessagesService {
     private readonly messageModel: Model<InternalMessageDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
-    @InjectModel(Location.name)
-    private readonly locationModel: Model<LocationDocument>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async create(
@@ -113,13 +112,14 @@ export class InternalMessagesService {
   }
 
   private assertCanSend(actor: AuthenticatedUser): void {
-    const canSend = [Role.Admin, Role.Filialleiter, Role.Service].some((role) =>
-      actor.roles.includes(role),
-    );
+    const canSend =
+      this.accessPolicy.isPlatformAdmin(actor) ||
+      this.accessPolicy.isManagementRole(actor) ||
+      actor.roles.includes(Role.Service);
 
     if (!canSend) {
       throw new ForbiddenException(
-        'Nur Admin, Filialleiter und Service duerfen Push-Nachrichten senden',
+        'Nur Management und Service duerfen Push-Nachrichten senden',
       );
     }
   }
@@ -127,60 +127,12 @@ export class InternalMessagesService {
   private async assertCanUseLocation(
     actor: AuthenticatedUser,
     locationId: string,
-    allowAdmin = true,
   ): Promise<void> {
-    if (allowAdmin && actor.roles.includes(Role.Admin)) {
-      return;
-    }
-
-    const locationIds = await this.getUserLocationIds(actor.sub);
-    const managedLocationIds = actor.roles.includes(Role.Filialleiter)
-      ? await this.getManagedLocationIds(actor.sub)
-      : [];
-    const readableLocationIds = [...new Set([...locationIds, ...managedLocationIds])];
-
-    if (!readableLocationIds.includes(locationId)) {
-      throw new ForbiddenException('Kein Zugriff auf diese Filiale');
-    }
+    await this.accessPolicy.assertCanAccessLocation(actor, locationId);
   }
 
   private async getReadableLocationIds(actor: AuthenticatedUser): Promise<string[]> {
-    if (actor.roles.includes(Role.Admin)) {
-      const locations = await this.locationModel.find().select('_id').exec();
-
-      return locations.map((location) => location._id.toString());
-    }
-
-    const locationIds = await this.getUserLocationIds(actor.sub);
-    const managedLocationIds = actor.roles.includes(Role.Filialleiter)
-      ? await this.getManagedLocationIds(actor.sub)
-      : [];
-
-    return [...new Set([...locationIds, ...managedLocationIds])];
-  }
-
-  private async getUserLocationIds(userId: string): Promise<string[]> {
-    const user = await this.userModel.findById(userId).select('locationId locationIds').exec();
-
-    if (!user) {
-      return [];
-    }
-
-    return [
-      ...new Set([
-        ...(user.locationIds ?? []),
-        ...(user.locationId ? [user.locationId] : []),
-      ]),
-    ].map((id) => id.toString());
-  }
-
-  private async getManagedLocationIds(managerId: string): Promise<string[]> {
-    const locations = await this.locationModel
-      .find({ managerId })
-      .select('_id')
-      .exec();
-
-    return locations.map((location) => location._id.toString());
+    return this.accessPolicy.getReadableLocationIds(actor);
   }
 
   private canReceive(

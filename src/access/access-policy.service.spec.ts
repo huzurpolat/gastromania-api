@@ -146,6 +146,12 @@ describe('AccessPolicyService', () => {
   it('prevents lower roles from assigning higher roles', () => {
     expect(
       service.canAssignRole(
+        user([Role.CompanyAdmin], { companyId: 'gastro' }),
+        Role.PlatformAdmin,
+      ),
+    ).toBe(false);
+    expect(
+      service.canAssignRole(
         user([Role.Regionalleiter], { regionIds: ['nrw'] }),
         Role.CompanyAdmin,
       ),
@@ -168,6 +174,77 @@ describe('AccessPolicyService', () => {
         Role.Bereichsleiter,
       ),
     ).toBe(false);
+  });
+
+  it('enforces the user-management hierarchy by role and scope', async () => {
+    await expect(
+      service.canManageUser(
+        user([Role.RegionAdmin], { companyId: 'gastro', regionIds: ['nrw'] }),
+        {
+          roles: [Role.Regionalleiter],
+          companyId: 'gastro',
+          regionIds: ['nrw'],
+          locationIds: ['bonn'],
+          managedLocationIds: [],
+        } as never,
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageUser(
+        user([Role.Regionalleiter], { companyId: 'gastro', regionIds: ['nrw'] }),
+        {
+          roles: [Role.CompanyAdmin],
+          companyId: 'gastro',
+          regionIds: ['nrw'],
+          locationIds: ['bonn'],
+          managedLocationIds: [],
+        } as never,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      service.canManageUser(
+        user([Role.Bereichsleiter], {
+          companyId: 'gastro',
+          locationIds: ['bonn', 'essen'],
+          managedLocationIds: ['bonn', 'essen'],
+        }),
+        {
+          roles: [Role.Filialleiter],
+          companyId: 'gastro',
+          regionIds: ['nrw'],
+          locationIds: ['essen'],
+          managedLocationIds: ['essen'],
+        } as never,
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageUser(
+        user([Role.Filialleiter], {
+          companyId: 'gastro',
+          locationIds: ['bonn', 'essen'],
+          managedLocationIds: ['bonn', 'essen'],
+        }),
+        {
+          roles: [Role.Service],
+          companyId: 'gastro',
+          regionIds: ['nrw'],
+          locationIds: ['essen'],
+          managedLocationIds: [],
+        } as never,
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageUser(
+        user([Role.Service], { companyId: 'gastro', locationIds: ['bonn'] }),
+        {
+          roles: [Role.Schichtleiter],
+          companyId: 'gastro',
+          regionIds: ['nrw'],
+          locationIds: ['bonn'],
+          managedLocationIds: [],
+        } as never,
+      ),
+    ).resolves.toBe(false);
   });
 
   it('allows platform admins globally and blocks lower roles from managing higher roles', async () => {
