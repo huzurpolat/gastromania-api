@@ -27,7 +27,14 @@ export class LocationsController {
 
   @Post()
   @Permissions('locations.create')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+  )
   create(
     @Body() createLocationDto: CreateLocationDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -41,8 +48,10 @@ export class LocationsController {
     Role.PlatformAdmin,
     Role.SuperAdmin,
     Role.CompanyAdmin,
+    Role.RegionAdmin,
     Role.Admin,
     Role.Regionalleiter,
+    Role.Bereichsleiter,
     Role.Filialleiter,
     Role.Restaurantleiter,
     Role.Schichtleiter,
@@ -62,8 +71,10 @@ export class LocationsController {
     Role.PlatformAdmin,
     Role.SuperAdmin,
     Role.CompanyAdmin,
+    Role.RegionAdmin,
     Role.Admin,
     Role.Regionalleiter,
+    Role.Bereichsleiter,
     Role.Filialleiter,
     Role.Restaurantleiter,
     Role.Schichtleiter,
@@ -83,8 +94,10 @@ export class LocationsController {
     Role.PlatformAdmin,
     Role.SuperAdmin,
     Role.CompanyAdmin,
+    Role.RegionAdmin,
     Role.Admin,
     Role.Regionalleiter,
+    Role.Bereichsleiter,
     Role.Filialleiter,
   )
   update(
@@ -97,7 +110,14 @@ export class LocationsController {
 
   @Delete(':id')
   @Permissions('locations.delete')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+  )
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.locationsService.remove(id, user);
   }

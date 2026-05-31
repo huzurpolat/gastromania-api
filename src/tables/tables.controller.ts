@@ -28,28 +28,28 @@ export class TablesController {
 
   @Post()
   @Permissions('locations.create')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   create(@Body() createTableDto: CreateTableDto, @CurrentUser() user: AuthenticatedUser) {
     return this.tablesService.create(createTableDto, user);
   }
 
   @Get()
   @Permissions('locations.view')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter, Role.Service)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service)
   findAll(@CurrentUser() user: AuthenticatedUser, @Query('locationId') locationId?: string) {
     return this.tablesService.findAll(user, locationId);
   }
 
   @Get(':id')
   @Permissions('locations.view')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter, Role.Service)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service)
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.tablesService.findOne(id, user);
   }
 
   @Patch(':id')
   @Permissions('locations.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   update(
     @Param('id') id: string,
     @Body() updateTableDto: UpdateTableDto,

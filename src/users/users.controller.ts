@@ -27,8 +27,10 @@ import { UsersService } from './users.service';
   Role.PlatformAdmin,
   Role.SuperAdmin,
   Role.CompanyAdmin,
+  Role.RegionAdmin,
   Role.Admin,
   Role.Regionalleiter,
+  Role.Bereichsleiter,
   Role.Filialleiter,
   Role.Restaurantleiter,
 )

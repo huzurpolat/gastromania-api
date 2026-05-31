@@ -10,6 +10,11 @@ import {
 } from '../checklists/schemas/checklist.schema';
 import { Company, CompanyDocument } from '../companies/schemas/company.schema';
 import {
+  Department,
+  DepartmentDocument,
+  DepartmentType,
+} from '../departments/schemas/department.schema';
+import {
   DutyShift,
   DutyShiftDocument,
 } from '../duty-schedules/schemas/duty-shift.schema';
@@ -76,10 +81,84 @@ export interface DemoDataResult {
   }>;
 }
 
+interface DemoLocationConfig {
+  key: string;
+  name: string;
+  city: string;
+  zip: string;
+  street: string;
+  emailSlug: string;
+  icon: string;
+}
+
+interface DemoRegionConfig {
+  key: string;
+  name: string;
+  code: string;
+  locations: DemoLocationConfig[];
+  mainLocationKey: string;
+  multiManagerLocationKeys: string[];
+}
+
 @Injectable()
 export class DemoDataService {
   private readonly demoPrefix = '[Demo]';
   private readonly demoPassword = 'Demo123!';
+  private readonly demoCompanyName = 'Gastro Group Deutschland';
+  private readonly demoRegions: DemoRegionConfig[] = [
+    {
+      key: 'nrw',
+      name: 'NRW',
+      code: 'NRW',
+      mainLocationKey: 'bonn',
+      multiManagerLocationKeys: ['bonn', 'essen'],
+      locations: [
+        { key: 'bonn', name: 'Bonn', city: 'Bonn', zip: '53111', street: 'Markt 1', emailSlug: 'bonn', icon: 'restaurant' },
+        { key: 'koeln', name: 'Koeln', city: 'Koeln', zip: '50667', street: 'Domplatz 4', emailSlug: 'koeln', icon: 'storefront' },
+        { key: 'essen', name: 'Essen', city: 'Essen', zip: '45127', street: 'Limbecker Platz 7', emailSlug: 'essen', icon: 'local_cafe' },
+        { key: 'olpe', name: 'Olpe', city: 'Olpe', zip: '57462', street: 'Biggeseestrasse 12', emailSlug: 'olpe', icon: 'deck' },
+      ],
+    },
+    {
+      key: 'hessen',
+      name: 'Hessen',
+      code: 'HESSEN',
+      mainLocationKey: 'frankfurt',
+      multiManagerLocationKeys: ['frankfurt', 'wiesbaden'],
+      locations: [
+        { key: 'frankfurt', name: 'Frankfurt', city: 'Frankfurt am Main', zip: '60311', street: 'Roemerberg 2', emailSlug: 'frankfurt', icon: 'restaurant' },
+        { key: 'wiesbaden', name: 'Wiesbaden', city: 'Wiesbaden', zip: '65183', street: 'Schlossplatz 1', emailSlug: 'wiesbaden', icon: 'storefront' },
+        { key: 'kassel', name: 'Kassel', city: 'Kassel', zip: '34117', street: 'Koenigsplatz 5', emailSlug: 'kassel', icon: 'local_cafe' },
+        { key: 'darmstadt', name: 'Darmstadt', city: 'Darmstadt', zip: '64283', street: 'Luisenplatz 8', emailSlug: 'darmstadt', icon: 'local_bar' },
+      ],
+    },
+    {
+      key: 'bayern',
+      name: 'Bayern',
+      code: 'BAYERN',
+      mainLocationKey: 'muenchen',
+      multiManagerLocationKeys: ['muenchen', 'augsburg'],
+      locations: [
+        { key: 'muenchen', name: 'Muenchen', city: 'Muenchen', zip: '80331', street: 'Marienplatz 3', emailSlug: 'muenchen', icon: 'restaurant' },
+        { key: 'nuernberg', name: 'Nuernberg', city: 'Nuernberg', zip: '90403', street: 'Hauptmarkt 6', emailSlug: 'nuernberg', icon: 'storefront' },
+        { key: 'augsburg', name: 'Augsburg', city: 'Augsburg', zip: '86150', street: 'Rathausplatz 2', emailSlug: 'augsburg', icon: 'local_cafe' },
+        { key: 'regensburg', name: 'Regensburg', city: 'Regensburg', zip: '93047', street: 'Domplatz 9', emailSlug: 'regensburg', icon: 'deck' },
+      ],
+    },
+    {
+      key: 'berlin',
+      name: 'Berlin',
+      code: 'BERLIN',
+      mainLocationKey: 'mitte',
+      multiManagerLocationKeys: ['mitte', 'kreuzberg'],
+      locations: [
+        { key: 'mitte', name: 'Berlin Mitte', city: 'Berlin', zip: '10115', street: 'Torstrasse 15', emailSlug: 'mitte', icon: 'restaurant' },
+        { key: 'kreuzberg', name: 'Berlin Kreuzberg', city: 'Berlin', zip: '10997', street: 'Oranienstrasse 24', emailSlug: 'kreuzberg', icon: 'local_bar' },
+        { key: 'charlottenburg', name: 'Berlin Charlottenburg', city: 'Berlin', zip: '10623', street: 'Kantstrasse 10', emailSlug: 'charlottenburg', icon: 'storefront' },
+        { key: 'neukoelln', name: 'Berlin Neukoelln', city: 'Berlin', zip: '12043', street: 'Karl-Marx-Strasse 88', emailSlug: 'neukoelln', icon: 'local_cafe' },
+      ],
+    },
+  ];
 
   constructor(
     @InjectModel(Location.name)
@@ -112,6 +191,8 @@ export class DemoDataService {
     private readonly checklistModel: Model<ChecklistDocument>,
     @InjectModel(Company.name)
     private readonly companyModel: Model<CompanyDocument>,
+    @InjectModel(Department.name)
+    private readonly departmentModel: Model<DepartmentDocument>,
     @InjectModel(Region.name)
     private readonly regionModel: Model<RegionDocument>,
   ) {}
@@ -120,47 +201,30 @@ export class DemoDataService {
     await this.clearExistingDemoData();
 
     const company = await this.companyModel.create({
-      name: `${this.demoPrefix} Gastrowerk24`,
+      name: this.demoCompanyName,
       type: 'restaurant-group',
       isActive: true,
     });
-    const region = await this.regionModel.create({
-      companyId: company._id.toString(),
-      name: 'NRW',
-      code: 'NRW',
-      isActive: true,
-    });
-    const location = await this.locationModel.create({
-      name: `${this.demoPrefix} Testfiliale Innenstadt`,
-      street: 'Demoallee 12',
-      zip: '10115',
-      city: 'Berlin',
-      phone: '+49 30 123456',
-      email: 'demo-filiale@gastromania.local',
-      isActive: true,
-      companyId: company._id.toString(),
-      regionId: region._id.toString(),
-      managerId: actor.sub,
-    });
-    const locationId = location._id.toString();
+    const { departments, locations, locationsByKey, regionsByKey } =
+      await this.createOrganization(company._id.toString(), actor.sub);
     const users = await this.createUsers(
-      locationId,
       company._id.toString(),
-      region._id.toString(),
+      regionsByKey,
+      locationsByKey,
+      departments,
     );
-    const manager = users.find((user) =>
-      user.roles.includes(Role.Filialleiter),
+    await this.assignLocationManagers(locations, users);
+
+    const locationId = this.requireMapValue(locationsByKey, 'bonn')._id.toString();
+    const primaryUsers = users.filter((user) =>
+      (user.locationIds ?? []).includes(locationId),
     );
-    if (manager) {
-      location.managerId = manager._id.toString();
-      await location.save();
-    }
     const tables = await this.createTables(locationId);
     const menuItems = await this.createMenuItems();
     const orders = await this.createOrders(locationId, tables);
     const reservations = await this.createReservations(locationId, tables);
-    const dutyShifts = await this.createDutyShifts(locationId, users);
-    const timeEntries = await this.createTimeEntries(locationId, users);
+    const dutyShifts = await this.createDutyShifts(locationId, primaryUsers);
+    const timeEntries = await this.createTimeEntries(locationId, primaryUsers);
     const weeklyMenus = await this.createWeeklyMenu(locationId, menuItems);
     const internalMessages = await this.createInternalMessages(
       locationId,
@@ -178,7 +242,10 @@ export class DemoDataService {
     return {
       locationId,
       created: {
-        locations: 1,
+        companies: 1,
+        regions: regionsByKey.size,
+        locations: locations.length,
+        departments: departments.length,
         users: users.length,
         tables: tables.length,
         menuItems: menuItems.length,
@@ -202,8 +269,25 @@ export class DemoDataService {
   }
 
   private async clearExistingDemoData(): Promise<void> {
+    const localDomainPattern =
+      /@(nrw|hessen|bayern|berlin|bonn|koeln|essen|olpe|frankfurt|wiesbaden|kassel|darmstadt|muenchen|nuernberg|augsburg|regensburg|mitte|kreuzberg|charlottenburg|neukoelln|demo\.gastromania)\.local$/;
+    const demoCompanies = await this.companyModel
+      .find({
+        $or: [
+          { name: this.demoCompanyName },
+          { name: new RegExp(`^\\${this.demoPrefix}`) },
+        ],
+      })
+      .select('_id')
+      .exec();
+    const companyIds = demoCompanies.map((company) => company._id.toString());
     const demoLocations = await this.locationModel
-      .find({ name: new RegExp(`^\\${this.demoPrefix}`) })
+      .find({
+        $or: [
+          { companyId: { $in: companyIds } },
+          { name: new RegExp(`^\\${this.demoPrefix}`) },
+        ],
+      })
       .select('_id')
       .exec();
     const locationIds = demoLocations.map((location) =>
@@ -240,83 +324,357 @@ export class DemoDataService {
       this.checklistModel
         .deleteMany({ locationId: { $in: locationIds } })
         .exec(),
+      this.departmentModel
+        .deleteMany({
+          $or: [
+            { companyId: { $in: companyIds } },
+            { locationId: { $in: locationIds } },
+          ],
+        })
+        .exec(),
       this.locationModel.deleteMany({ _id: { $in: locationIds } }).exec(),
-      this.regionModel.deleteMany({ name: 'NRW', code: 'NRW' }).exec(),
+      this.regionModel
+        .deleteMany({
+          $or: [
+            { companyId: { $in: companyIds } },
+            { code: { $in: this.demoRegions.map((region) => region.code) } },
+          ],
+        })
+        .exec(),
       this.companyModel
-        .deleteMany({ name: new RegExp(`^\\${this.demoPrefix}`) })
+        .deleteMany({
+          $or: [
+            { name: this.demoCompanyName },
+            { name: new RegExp(`^\\${this.demoPrefix}`) },
+          ],
+        })
         .exec(),
       this.menuItemModel
         .deleteMany({ name: new RegExp(`^\\${this.demoPrefix}`) })
         .exec(),
-      this.userModel.deleteMany({ email: /@demo\.gastromania\.local$/ }).exec(),
-      this.userModel.deleteMany({ email: /@nrw\.local$/ }).exec(),
+      this.userModel.deleteMany({ email: localDomainPattern }).exec(),
+    ]);
+  }
+
+  private async createOrganization(companyId: string, actorId: string) {
+    const regionsByKey = new Map<string, RegionDocument>();
+    const locationsByKey = new Map<string, LocationDocument>();
+    const locations: LocationDocument[] = [];
+    const departments: DepartmentDocument[] = [];
+
+    for (const regionConfig of this.demoRegions) {
+      const region = await this.regionModel.create({
+        companyId,
+        name: regionConfig.name,
+        code: regionConfig.code,
+        isActive: true,
+      });
+      regionsByKey.set(regionConfig.key, region);
+
+      for (const locationConfig of regionConfig.locations) {
+        const location = await this.locationModel.create({
+          name: locationConfig.name,
+          street: locationConfig.street,
+          zip: locationConfig.zip,
+          city: locationConfig.city,
+          phone: '+49 228 100000',
+          email: `${locationConfig.emailSlug}@gastromania.local`,
+          icon: locationConfig.icon,
+          isActive: true,
+          companyId,
+          regionId: region._id.toString(),
+          managerId: actorId,
+        });
+        locations.push(location);
+        locationsByKey.set(locationConfig.key, location);
+        departments.push(
+          ...(await this.createDepartments(
+            companyId,
+            location._id.toString(),
+          )),
+        );
+      }
+    }
+
+    return { departments, locations, locationsByKey, regionsByKey };
+  }
+
+  private createDepartments(
+    companyId: string,
+    locationId: string,
+  ): Promise<DepartmentDocument[]> {
+    return this.departmentModel.insertMany([
+      { companyId, locationId, name: 'Service', type: DepartmentType.Service },
+      { companyId, locationId, name: 'Kueche', type: DepartmentType.Kueche },
+      { companyId, locationId, name: 'Lager', type: DepartmentType.Lager },
+      {
+        companyId,
+        locationId,
+        name: 'Spuelkueche',
+        type: DepartmentType.Spuelkueche,
+      },
+      {
+        companyId,
+        locationId,
+        name: 'Reinigung',
+        type: DepartmentType.Reinigung,
+      },
     ]);
   }
 
   private async createUsers(
-    locationId: string,
     companyId: string,
-    regionId: string,
+    regionsByKey: Map<string, RegionDocument>,
+    locationsByKey: Map<string, LocationDocument>,
+    departments: DepartmentDocument[],
   ): Promise<UserDocument[]> {
     const passwordHash = await bcrypt.hash(this.demoPassword, 12);
-    const users = [
-      {
-        email: 'admin@nrw.local',
-        firstName: 'Nora',
-        lastName: 'NRW',
-        roles: [Role.Admin],
-        regionIds: [regionId],
-      },
-      {
-        email: 'admin@demo.gastromania.local',
-        firstName: 'Ada',
-        lastName: 'Admin',
-        roles: [Role.Admin],
-      },
-      {
-        email: 'filialleiter@demo.gastromania.local',
-        firstName: 'Mira',
-        lastName: 'Leitung',
-        roles: [Role.Filialleiter],
-      },
-      {
-        email: 'service@demo.gastromania.local',
-        firstName: 'Sami',
-        lastName: 'Service',
-        roles: [Role.Service],
-      },
-      {
-        email: 'kueche@demo.gastromania.local',
-        firstName: 'Klara',
-        lastName: 'Küche',
-        roles: [Role.Kueche],
-      },
-      {
-        email: 'lager@demo.gastromania.local',
-        firstName: 'Leo',
-        lastName: 'Lager',
-        roles: [Role.Lager],
-      },
-      {
-        email: 'tellerwaescher@demo.gastromania.local',
-        firstName: 'Theo',
-        lastName: 'Spülküche',
-        roles: [Role.Tellerwaescher],
-      },
-    ].map((user) => ({
-      ...user,
-      passwordHash,
-      isActive: true,
-      companyId,
-      regionIds: user.regionIds ?? [regionId],
-      locationId,
-      locationIds: [locationId],
-      managedLocationIds: user.roles.includes(Role.Filialleiter)
-        ? [locationId]
-        : [],
-    }));
+    const users: Array<Partial<User>> = [];
+    const departmentByLocationAndType = new Map<string, string>();
+    departments.forEach((department) => {
+      departmentByLocationAndType.set(
+        `${department.locationId}:${department.type}`,
+        department._id.toString(),
+      );
+    });
 
-    return this.userModel.insertMany(users);
+    for (const regionConfig of this.demoRegions) {
+      const region = this.requireMapValue(regionsByKey, regionConfig.key);
+      const regionId = region._id.toString();
+      const regionLocations = regionConfig.locations.map((location) =>
+        this.requireMapValue(locationsByKey, location.key),
+      );
+      const regionLocationIds = regionLocations.map((location) =>
+        location._id.toString(),
+      );
+      const managedLocationIds = regionConfig.multiManagerLocationKeys.map(
+        (locationKey) =>
+          this.requireMapValue(locationsByKey, locationKey)._id.toString(),
+      );
+      const mainLocation = this.requireMapValue(
+        locationsByKey,
+        regionConfig.mainLocationKey,
+      );
+      const mainLocationId = mainLocation._id.toString();
+
+      users.push(
+        this.createDemoUser({
+          email: `admin@${regionConfig.key}.local`,
+          firstName: 'Admin',
+          lastName: regionConfig.name,
+          roles: [Role.RegionAdmin],
+          companyId,
+          regionIds: [regionId],
+          locationIds: regionLocationIds,
+          managedLocationIds: regionLocationIds,
+          passwordHash,
+        }),
+        this.createDemoUser({
+          email: `regionalleiter@${regionConfig.key}.local`,
+          firstName: 'Regionalleitung',
+          lastName: regionConfig.name,
+          roles: [Role.Regionalleiter],
+          companyId,
+          regionIds: [regionId],
+          locationIds: regionLocationIds,
+          managedLocationIds: regionLocationIds,
+          passwordHash,
+        }),
+        this.createDemoUser({
+          email: `bereichsleiter@${regionConfig.key}.local`,
+          firstName: 'Bereichsleitung',
+          lastName: regionConfig.name,
+          roles: [Role.Bereichsleiter],
+          companyId,
+          regionIds: [regionId],
+          locationIds: managedLocationIds,
+          managedLocationIds,
+          passwordHash,
+        }),
+      );
+
+      for (const locationConfig of regionConfig.locations) {
+        const location = this.requireMapValue(locationsByKey, locationConfig.key);
+        const locationId = location._id.toString();
+        const assignedLocationIds =
+          locationConfig.key === regionConfig.mainLocationKey
+            ? managedLocationIds
+            : [locationId];
+
+        users.push(
+          this.createDemoUser({
+            email: `filialleiter@${locationConfig.emailSlug}.local`,
+            firstName: 'Filialleitung',
+            lastName: locationConfig.name,
+            roles: [Role.Filialleiter],
+            companyId,
+            regionIds: [regionId],
+            locationIds: assignedLocationIds,
+            managedLocationIds: assignedLocationIds,
+            passwordHash,
+          }),
+        );
+      }
+
+      users.push(
+        this.createOperationalUser(
+          'service',
+          Role.Service,
+          DepartmentType.Service,
+          regionConfig,
+          regionId,
+          companyId,
+          mainLocationId,
+          departmentByLocationAndType,
+          passwordHash,
+        ),
+        this.createOperationalUser(
+          'kueche',
+          Role.Kueche,
+          DepartmentType.Kueche,
+          regionConfig,
+          regionId,
+          companyId,
+          mainLocationId,
+          departmentByLocationAndType,
+          passwordHash,
+        ),
+        this.createOperationalUser(
+          'lager',
+          Role.Lager,
+          DepartmentType.Lager,
+          regionConfig,
+          regionId,
+          companyId,
+          mainLocationId,
+          departmentByLocationAndType,
+          passwordHash,
+        ),
+        this.createOperationalUser(
+          'spuelkueche',
+          Role.Tellerwaescher,
+          DepartmentType.Spuelkueche,
+          regionConfig,
+          regionId,
+          companyId,
+          mainLocationId,
+          departmentByLocationAndType,
+          passwordHash,
+        ),
+        this.createOperationalUser(
+          'reinigung',
+          Role.Reinigung,
+          DepartmentType.Reinigung,
+          regionConfig,
+          regionId,
+          companyId,
+          mainLocationId,
+          departmentByLocationAndType,
+          passwordHash,
+        ),
+      );
+    }
+
+    return this.userModel.insertMany(users as User[]);
+  }
+
+  private createDemoUser(user: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    roles: Role[];
+    companyId: string;
+    regionIds: string[];
+    locationIds: string[];
+    managedLocationIds: string[];
+    passwordHash: string;
+    departmentIds?: string[];
+  }): Partial<User> {
+    return {
+      ...user,
+      isActive: true,
+      locationId: user.locationIds[0],
+      departmentIds: user.departmentIds ?? [],
+      responsibilities: [],
+    };
+  }
+
+  private createOperationalUser(
+    prefix: string,
+    role: Role,
+    departmentType: DepartmentType,
+    regionConfig: DemoRegionConfig,
+    regionId: string,
+    companyId: string,
+    locationId: string,
+    departmentByLocationAndType: Map<string, string>,
+    passwordHash: string,
+  ): Partial<User> {
+    const departmentId = departmentByLocationAndType.get(
+      `${locationId}:${departmentType}`,
+    );
+
+    return this.createDemoUser({
+      email: `${prefix}@${this.getMainLocationSlug(regionConfig)}.local`,
+      firstName: this.capitalize(prefix),
+      lastName: regionConfig.name,
+      roles: [role],
+      companyId,
+      regionIds: [regionId],
+      locationIds: [locationId],
+      managedLocationIds: [],
+      passwordHash,
+      departmentIds: departmentId ? [departmentId] : [],
+    });
+  }
+
+  private async assignLocationManagers(
+    locations: LocationDocument[],
+    users: UserDocument[],
+  ): Promise<void> {
+    const filialleiterByLocation = new Map<string, string>();
+
+    users
+      .filter((user) => user.roles.includes(Role.Filialleiter))
+      .forEach((user) => {
+        for (const locationId of user.managedLocationIds ?? user.locationIds ?? []) {
+          if (!filialleiterByLocation.has(locationId)) {
+            filialleiterByLocation.set(locationId, user._id.toString());
+          }
+        }
+      });
+
+    await Promise.all(
+      locations.map((location) => {
+        const managerId = filialleiterByLocation.get(location._id.toString());
+        if (!managerId) {
+          return Promise.resolve(location);
+        }
+
+        location.managerId = managerId;
+        return location.save();
+      }),
+    );
+  }
+
+  private requireMapValue<T>(map: Map<string, T>, key: string): T {
+    const value = map.get(key);
+    if (!value) {
+      throw new Error(`Demo-Datensatz fehlt: ${key}`);
+    }
+
+    return value;
+  }
+
+  private getMainLocationSlug(regionConfig: DemoRegionConfig): string {
+    return this.requireMapValue(
+      new Map(regionConfig.locations.map((location) => [location.key, location])),
+      regionConfig.mainLocationKey,
+    ).emailSlug;
+  }
+
+  private capitalize(value: string): string {
+    return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
   private createTables(locationId: string): Promise<RestaurantTableDocument[]> {

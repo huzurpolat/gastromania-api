@@ -7,6 +7,7 @@ import { ChecklistsModule } from './checklists/checklists.module';
 import { CompaniesModule } from './companies/companies.module';
 import { DemoDataModule } from './demo-data/demo-data.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { DepartmentsModule } from './departments/departments.module';
 import { DutySchedulesModule } from './duty-schedules/duty-schedules.module';
 import { InternalMessagesModule } from './internal-messages/internal-messages.module';
 import { LocationsModule } from './locations/locations.module';
@@ -48,6 +49,7 @@ import { HealthController } from './health.controller';
     CompaniesModule,
     RegionsModule,
     UsersModule,
+    DepartmentsModule,
     AuthModule,
     LocationsModule,
     TablesModule,

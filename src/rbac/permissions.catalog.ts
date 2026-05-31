@@ -70,6 +70,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   CompanyAdmin: ALL_PERMISSIONS.filter(
     (permission) => !permission.startsWith('settings.update'),
   ),
+  RegionAdmin: ALL_PERMISSIONS.filter(
+    (permission) =>
+      !permission.startsWith('settings.update') &&
+      !permission.startsWith('audit.view') &&
+      !permission.startsWith('companies.create') &&
+      !permission.startsWith('companies.update'),
+  ),
   Admin: ALL_PERMISSIONS.filter(
     (permission) => !permission.startsWith('settings.update'),
   ),
@@ -84,6 +91,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     (permission) =>
       !permission.startsWith('roles.delete') &&
       !permission.startsWith('settings.update'),
+  ),
+  Bereichsleiter: ALL_PERMISSIONS.filter(
+    (permission) =>
+      !permission.startsWith('roles.delete') &&
+      !permission.startsWith('roles.permissions.update') &&
+      !permission.startsWith('settings.update') &&
+      !permission.startsWith('audit.view') &&
+      !permission.startsWith('companies.') &&
+      !permission.startsWith('regions.'),
   ),
   Restaurantleiter: [
     'dashboard.view',

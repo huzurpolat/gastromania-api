@@ -23,7 +23,13 @@ import { RecipeService } from './recipe.service';
 @Controller('recipes')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(
+  Role.PlatformAdmin,
+  Role.SuperAdmin,
+  Role.CompanyAdmin,
+  Role.RegionAdmin,
   Role.Admin,
+  Role.Regionalleiter,
+  Role.Bereichsleiter,
   Role.Filialleiter,
   Role.Kueche,
   Role.Lager,
@@ -59,7 +65,7 @@ export class RecipesController {
 
   @Post()
   @Permissions('recipes.create')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Kueche, Role.Lager, Role.Einkauf)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Kueche, Role.Lager, Role.Einkauf)
   create(
     @Body() payload: CreateRecipeDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -69,7 +75,7 @@ export class RecipesController {
 
   @Patch(':id')
   @Permissions('recipes.update')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Kueche, Role.Lager, Role.Einkauf)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Kueche, Role.Lager, Role.Einkauf)
   update(
     @Param('id') id: string,
     @Body() payload: UpdateRecipeDto,
@@ -80,14 +86,14 @@ export class RecipesController {
 
   @Post(':id/copy')
   @Permissions('recipes.create')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Kueche, Role.Lager, Role.Einkauf)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Kueche, Role.Lager, Role.Einkauf)
   copy(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.recipeService.copy(id, user);
   }
 
   @Patch(':id/archive')
   @Permissions('recipes.update')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Kueche, Role.Lager, Role.Einkauf)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Kueche, Role.Lager, Role.Einkauf)
   archive(
     @Param('id') id: string,
     @Body('archived') archived: boolean,
@@ -98,7 +104,7 @@ export class RecipesController {
 
   @Delete(':id')
   @Permissions('recipes.delete')
-  @Roles(Role.Admin, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.recipeService.remove(id, user);
   }

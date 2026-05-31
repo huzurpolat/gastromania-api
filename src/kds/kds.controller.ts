@@ -30,7 +30,13 @@ import { UpdateKdsSettingsDto } from './dto/update-kds-settings.dto';
 import { KdsService } from './kds.service';
 
 const KDS_ROLES = [
+  Role.PlatformAdmin,
+  Role.SuperAdmin,
+  Role.CompanyAdmin,
+  Role.RegionAdmin,
   Role.Admin,
+  Role.Regionalleiter,
+  Role.Bereichsleiter,
   Role.Filialleiter,
   Role.Kueche,
   Role.Bar,
@@ -135,7 +141,7 @@ export class KdsController {
 
   @Patch('settings')
   @Permissions('kds.manage')
-  @Roles(Role.Admin, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   updateSettings(
     @Query('locationId') locationId: string,
     @Body() dto: UpdateKdsSettingsDto,

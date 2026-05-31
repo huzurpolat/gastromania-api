@@ -6,10 +6,14 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { Role } from '../auth/enums/role.enum';
 import { hasAnyRole as hasAnyNormalizedRole, normalizeRoles } from '../auth/role-utils';
+import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { Company, CompanyDocument } from '../companies/schemas/company.schema';
+import {
+  Department,
+  DepartmentDocument,
+} from '../departments/schemas/department.schema';
 import {
   Location,
   LocationDocument,
@@ -32,6 +36,8 @@ export class AccessPolicyService {
   constructor(
     @InjectModel(Company.name)
     private readonly companyModel: Model<CompanyDocument>,
+    @InjectModel(Department.name)
+    private readonly departmentModel: Model<DepartmentDocument>,
     @InjectModel(Region.name)
     private readonly regionModel: Model<RegionDocument>,
     @InjectModel(Location.name)
@@ -48,11 +54,21 @@ export class AccessPolicyService {
     return this.hasAnyRole(user, [Role.CompanyAdmin, Role.Admin]);
   }
 
+  isRegionAdmin(user?: AuthenticatedUser): boolean {
+    return this.hasAnyRole(user, [Role.RegionAdmin]);
+  }
+
+  isBereichsleiter(user?: AuthenticatedUser): boolean {
+    return this.hasAnyRole(user, [Role.Bereichsleiter]);
+  }
+
   isManagementRole(user?: AuthenticatedUser): boolean {
     return this.hasAnyRole(user, [
       Role.CompanyAdmin,
+      Role.RegionAdmin,
       Role.Admin,
       Role.Regionalleiter,
+      Role.Bereichsleiter,
       Role.Filialleiter,
       Role.Restaurantleiter,
     ]);
@@ -67,19 +83,41 @@ export class AccessPolicyService {
       ...(user.locationIds ?? []),
       ...(user.managedLocationIds ?? []),
     ]);
-    const scopedFilter = this.locationScopeFilter(user, directIds);
 
-    if (!Object.keys(scopedFilter).length) {
+    if (this.isCompanyAdmin(user) && user.companyId) {
+      return this.unique([
+        ...directIds,
+        ...(await this.findLocationIds({ companyId: user.companyId })),
+      ]);
+    }
+
+    if (
+      (this.isRegionAdmin(user) || this.hasAnyRole(user, [Role.Regionalleiter])) &&
+      user.regionIds?.length
+    ) {
+      return this.unique([
+        ...directIds,
+        ...(await this.findLocationIds({ regionId: { $in: user.regionIds } })),
+      ]);
+    }
+
+    if (
+      this.isBereichsleiter(user) ||
+      this.hasAnyRole(user, [Role.Filialleiter, Role.Restaurantleiter])
+    ) {
       return directIds;
     }
 
-    const scopedIds = await this.findLocationIds(scopedFilter);
-
-    return this.unique([...directIds, ...scopedIds]);
+    return this.unique(user.locationIds ?? []);
   }
 
   async getManageableLocationIds(user: AuthenticatedUser): Promise<string[]> {
-    if (this.isPlatformAdmin(user) || this.isCompanyAdmin(user)) {
+    if (
+      this.isPlatformAdmin(user) ||
+      this.isCompanyAdmin(user) ||
+      this.isRegionAdmin(user) ||
+      this.hasAnyRole(user, [Role.Regionalleiter])
+    ) {
       return this.getReadableLocationIds(user);
     }
 
@@ -89,7 +127,10 @@ export class AccessPolicyService {
       return managedLocationIds;
     }
 
-    if (this.hasAnyRole(user, [Role.Filialleiter, Role.Restaurantleiter])) {
+    if (
+      this.isBereichsleiter(user) ||
+      this.hasAnyRole(user, [Role.Filialleiter, Role.Restaurantleiter])
+    ) {
       return this.unique(user.locationIds ?? []);
     }
 
@@ -133,30 +174,28 @@ export class AccessPolicyService {
       return {};
     }
 
-    const clauses: Record<string, unknown>[] = [];
-
-    if (user.companyId) {
-      clauses.push({ companyId: user.companyId });
+    if (this.isCompanyAdmin(user)) {
+      return user.companyId ? { companyId: user.companyId } : { _id: { $in: [] } };
     }
 
-    if (user.regionIds?.length) {
-      clauses.push({ regionIds: { $in: user.regionIds } });
+    if (this.isRegionAdmin(user) || this.hasAnyRole(user, [Role.Regionalleiter])) {
+      return user.regionIds?.length
+        ? { regionIds: { $in: user.regionIds } }
+        : { _id: { $in: [] } };
     }
 
     const locationIds = await this.getReadableLocationIds(user);
     if (locationIds.length) {
-      clauses.push(
-        { locationId: { $in: locationIds } },
-        { locationIds: { $in: locationIds } },
-        { managedLocationIds: { $in: locationIds } },
-      );
+      return {
+        $or: [
+          { locationId: { $in: locationIds } },
+          { locationIds: { $in: locationIds } },
+          { managedLocationIds: { $in: locationIds } },
+        ],
+      };
     }
 
-    if (!clauses.length) {
-      return { _id: { $in: [] } };
-    }
-
-    return { $or: clauses };
+    return { _id: { $in: [] } };
   }
 
   async canAccessCompany(
@@ -167,7 +206,7 @@ export class AccessPolicyService {
       return true;
     }
 
-    return user.companyId === companyId;
+    return Boolean(user.companyId) && user.companyId === companyId;
   }
 
   async canAccessRegion(
@@ -182,7 +221,7 @@ export class AccessPolicyService {
       return true;
     }
 
-    if (!user.companyId) {
+    if (!this.isCompanyAdmin(user) || !user.companyId) {
       return false;
     }
 
@@ -224,12 +263,37 @@ export class AccessPolicyService {
     return this.canManageLocation(user, locationId);
   }
 
+  async canAssignDepartment(
+    user: AuthenticatedUser,
+    departmentId?: string,
+  ): Promise<boolean> {
+    if (!departmentId || this.isPlatformAdmin(user)) {
+      return true;
+    }
+
+    const department = await this.departmentModel
+      .findById(departmentId)
+      .select('companyId locationId')
+      .exec();
+
+    if (!department) {
+      return false;
+    }
+
+    return (
+      (await this.canAccessCompany(user, department.companyId)) &&
+      (await this.canAssignLocation(user, department.locationId))
+    );
+  }
+
   canAssignRole(user: AuthenticatedUser, role: string): boolean {
+    const normalizedRole = normalizeRoles([role])[0];
+
     if (this.isPlatformAdmin(user)) {
       return true;
     }
 
-    if (this.platformRoles().includes(role)) {
+    if (this.platformRoles().includes(normalizedRole)) {
       return false;
     }
 
@@ -237,18 +301,39 @@ export class AccessPolicyService {
       return true;
     }
 
+    if (this.isRegionAdmin(user)) {
+      return [
+        Role.Regionalleiter,
+        Role.Bereichsleiter,
+        Role.Filialleiter,
+        Role.Restaurantleiter,
+        Role.Schichtleiter,
+        ...this.operationalRoles(),
+      ].includes(normalizedRole as Role);
+    }
+
     if (this.hasAnyRole(user, [Role.Regionalleiter])) {
+      return [
+        Role.Bereichsleiter,
+        Role.Filialleiter,
+        Role.Restaurantleiter,
+        Role.Schichtleiter,
+        ...this.operationalRoles(),
+      ].includes(normalizedRole as Role);
+    }
+
+    if (this.isBereichsleiter(user)) {
       return [
         Role.Filialleiter,
         Role.Restaurantleiter,
         Role.Schichtleiter,
         ...this.operationalRoles(),
-      ].includes(role as Role);
+      ].includes(normalizedRole as Role);
     }
 
     if (this.hasAnyRole(user, [Role.Filialleiter, Role.Restaurantleiter])) {
       return [Role.Schichtleiter, ...this.operationalRoles()].includes(
-        role as Role,
+        normalizedRole as Role,
       );
     }
 
@@ -266,16 +351,26 @@ export class AccessPolicyService {
       return true;
     }
 
-    if (normalizeRoles(target.roles ?? []).some((role) => this.platformRoles().includes(role))) {
+    const targetRoles = normalizeRoles(target.roles ?? []);
+    if (
+      targetRoles.some((role) => this.platformRoles().includes(role)) ||
+      !targetRoles.every((role) => this.canAssignRole(actor, role))
+    ) {
       return false;
     }
 
     const targetLocationIds = this.getScopeLocationIds(target);
     const readableLocationIds = await this.getReadableLocationIds(actor);
+    const manageableLocationIds = await this.getManageableLocationIds(actor);
     const sharesLocation =
       targetLocationIds.length > 0 &&
       targetLocationIds.every((locationId) =>
         readableLocationIds.includes(locationId),
+      );
+    const manageableLocation =
+      targetLocationIds.length > 0 &&
+      targetLocationIds.every((locationId) =>
+        manageableLocationIds.includes(locationId),
       );
     const sharesRegion =
       Boolean(actor.regionIds?.length) &&
@@ -287,33 +382,23 @@ export class AccessPolicyService {
       Boolean(actor.companyId) && target.companyId === actor.companyId;
 
     if (this.isCompanyAdmin(actor)) {
-      return sharesRegion || sharesLocation || sharesCompany;
+      return sharesCompany;
+    }
+
+    if (this.isRegionAdmin(actor)) {
+      return sharesRegion || sharesLocation;
     }
 
     if (this.hasAnyRole(actor, [Role.Regionalleiter])) {
-      return (
-        sharesLocation &&
-        !normalizeRoles(target.roles ?? []).some((role) =>
-          [
-            Role.PlatformAdmin,
-            Role.SuperAdmin,
-            Role.CompanyAdmin,
-            Role.Admin,
-            Role.Regionalleiter,
-          ].includes(role as Role),
-        )
-      );
+      return sharesRegion || sharesLocation;
+    }
+
+    if (this.isBereichsleiter(actor)) {
+      return manageableLocation;
     }
 
     if (this.hasAnyRole(actor, [Role.Filialleiter, Role.Restaurantleiter])) {
-      return (
-        sharesLocation &&
-        normalizeRoles(target.roles ?? []).every((role) =>
-          [Role.Schichtleiter, ...this.operationalRoles()].includes(
-            role as Role,
-          ),
-        )
-      );
+      return manageableLocation;
     }
 
     return false;
@@ -366,6 +451,12 @@ export class AccessPolicyService {
       }
     }
 
+    for (const departmentId of payload.departmentIds ?? []) {
+      if (!(await this.canAssignDepartment(actor, departmentId))) {
+        throw new ForbiddenException('Keine Berechtigung fuer dieses Department');
+      }
+    }
+
     for (const role of payload.roles ?? []) {
       if (!this.canAssignRole(actor, role)) {
         throw new ForbiddenException('Diese Rolle darf nicht vergeben werden');
@@ -403,27 +494,6 @@ export class AccessPolicyService {
     if (!region) {
       throw new BadRequestException('Region existiert nicht');
     }
-  }
-
-  private locationScopeFilter(
-    user: AuthenticatedUser,
-    directIds: string[],
-  ): Record<string, unknown> {
-    const clauses: Record<string, unknown>[] = [];
-
-    if (directIds.length) {
-      clauses.push({ _id: { $in: directIds } });
-    }
-
-    if (user.regionIds?.length) {
-      clauses.push({ regionId: { $in: user.regionIds } });
-    }
-
-    if (user.companyId) {
-      clauses.push({ companyId: user.companyId });
-    }
-
-    return clauses.length ? { $or: clauses } : {};
   }
 
   private async findLocationIds(

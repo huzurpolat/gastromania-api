@@ -27,28 +27,28 @@ export class MenuItemsController {
 
   @Post()
   @Permissions('menuItems.create')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   create(@Body() createMenuItemDto: CreateMenuItemDto, @CurrentUser() user: AuthenticatedUser) {
     return this.menuItemsService.create(createMenuItemDto, user);
   }
 
   @Get()
   @Permissions('menuItems.view')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter, Role.Service, Role.Kueche)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Kueche)
   findAll(@CurrentUser() user: AuthenticatedUser) {
     return this.menuItemsService.findAll(user);
   }
 
   @Get(':id')
   @Permissions('menuItems.view')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter, Role.Service, Role.Kueche)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Kueche)
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.menuItemsService.findOne(id, user);
   }
 
   @Patch(':id')
   @Permissions('menuItems.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   update(
     @Param('id') id: string,
     @Body() updateMenuItemDto: UpdateMenuItemDto,
@@ -59,7 +59,7 @@ export class MenuItemsController {
 
   @Delete(':id')
   @Permissions('menuItems.delete')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.menuItemsService.remove(id, user);
   }

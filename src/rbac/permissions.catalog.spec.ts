@@ -41,6 +41,8 @@ describe('permissions catalog', () => {
 
     expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).toContain('Küche');
     expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).toContain('Tellerwäscher');
+    expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).toContain('RegionAdmin');
+    expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).toContain('Bereichsleiter');
     expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).not.toContain('Kueche');
     expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).not.toContain('Tellerwaescher');
 

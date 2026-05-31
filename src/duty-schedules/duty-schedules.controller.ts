@@ -28,7 +28,7 @@ export class DutySchedulesController {
 
   @Post()
   @Permissions('employees.create')
-  @Roles(Role.Admin, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   create(
     @Body() createDutyShiftDto: CreateDutyShiftDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -38,7 +38,7 @@ export class DutySchedulesController {
 
   @Get()
   @Permissions('employees.view')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -50,7 +50,7 @@ export class DutySchedulesController {
 
   @Patch(':id')
   @Permissions('employees.update')
-  @Roles(Role.Admin, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   update(
     @Param('id') id: string,
     @Body() updateDutyShiftDto: UpdateDutyShiftDto,
@@ -61,7 +61,7 @@ export class DutySchedulesController {
 
   @Delete(':id')
   @Permissions('employees.delete')
-  @Roles(Role.Admin, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.dutySchedulesService.remove(id, user);
   }

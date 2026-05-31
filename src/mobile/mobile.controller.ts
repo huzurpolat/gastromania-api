@@ -25,8 +25,13 @@ import { UpdateMobileTaskDto } from './dto/update-mobile-task.dto';
 import { MobileService } from './mobile.service';
 
 const MOBILE_ROLES = [
+  Role.PlatformAdmin,
   Role.SuperAdmin,
+  Role.CompanyAdmin,
+  Role.RegionAdmin,
   Role.Admin,
+  Role.Regionalleiter,
+  Role.Bereichsleiter,
   Role.Filialleiter,
   Role.Restaurantleiter,
   Role.Schichtleiter,

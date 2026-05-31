@@ -27,7 +27,7 @@ import { UpdateChecklistDto } from './dto/update-checklist.dto';
 
 @Controller('checklists')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
-@Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
+@Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
 export class ChecklistsController {
   constructor(private readonly checklistsService: ChecklistsService) {}
 

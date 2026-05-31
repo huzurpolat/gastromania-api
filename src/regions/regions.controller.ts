@@ -17,8 +17,10 @@ import { RegionsService } from './regions.service';
   Role.PlatformAdmin,
   Role.SuperAdmin,
   Role.CompanyAdmin,
+  Role.RegionAdmin,
   Role.Admin,
   Role.Regionalleiter,
+  Role.Bereichsleiter,
   Role.Filialleiter,
 )
 export class RegionsController {

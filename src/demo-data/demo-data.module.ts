@@ -4,6 +4,10 @@ import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Checklist, ChecklistSchema } from '../checklists/schemas/checklist.schema';
 import { Company, CompanySchema } from '../companies/schemas/company.schema';
 import {
+  Department,
+  DepartmentSchema,
+} from '../departments/schemas/department.schema';
+import {
   DutyShift,
   DutyShiftSchema,
 } from '../duty-schedules/schemas/duty-shift.schema';
@@ -44,6 +48,7 @@ import { DemoDataService } from './demo-data.service';
     MongooseModule.forFeature([
       { name: Location.name, schema: LocationSchema },
       { name: Company.name, schema: CompanySchema },
+      { name: Department.name, schema: DepartmentSchema },
       { name: Region.name, schema: RegionSchema },
       { name: RestaurantTable.name, schema: RestaurantTableSchema },
       { name: MenuItem.name, schema: MenuItemSchema },

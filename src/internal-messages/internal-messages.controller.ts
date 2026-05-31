@@ -30,7 +30,7 @@ export class InternalMessagesController {
 
   @Post()
   @Permissions('internalMessages.create')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service)
   create(
     @Body() payload: CreateInternalMessageDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -40,7 +40,7 @@ export class InternalMessagesController {
 
   @Get()
   @Permissions('internalMessages.view')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -50,7 +50,7 @@ export class InternalMessagesController {
 
   @Sse('stream')
   @Permissions('internalMessages.view')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
   stream(
     @CurrentUser() user: AuthenticatedUser,
   ): Observable<MessageEvent> {

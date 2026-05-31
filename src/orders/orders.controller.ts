@@ -28,7 +28,7 @@ export class OrdersController {
 
   @Post()
   @Permissions('orders.create')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter, Role.Service, Role.Theke)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Theke)
   create(@Body() createOrderDto: CreateOrderDto, @CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.create(createOrderDto, user);
   }
@@ -36,11 +36,13 @@ export class OrdersController {
   @Get()
   @Permissions('orders.view')
   @Roles(
-    Role.Admin,
     Role.PlatformAdmin,
     Role.SuperAdmin,
     Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
     Role.Regionalleiter,
+    Role.Bereichsleiter,
     Role.Filialleiter,
     Role.Service,
     Role.Kueche,
@@ -59,11 +61,13 @@ export class OrdersController {
   @Get(':id')
   @Permissions('orders.view')
   @Roles(
-    Role.Admin,
     Role.PlatformAdmin,
     Role.SuperAdmin,
     Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
     Role.Regionalleiter,
+    Role.Bereichsleiter,
     Role.Filialleiter,
     Role.Service,
     Role.Kueche,
@@ -77,11 +81,13 @@ export class OrdersController {
   @Patch(':id')
   @Permissions('orders.update')
   @Roles(
-    Role.Admin,
     Role.PlatformAdmin,
     Role.SuperAdmin,
     Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
     Role.Regionalleiter,
+    Role.Bereichsleiter,
     Role.Filialleiter,
     Role.Service,
     Role.Kueche,
@@ -98,7 +104,7 @@ export class OrdersController {
 
   @Delete(':id')
   @Permissions('orders.cancel')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin, Role.Regionalleiter, Role.Filialleiter)
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.remove(id, user);
   }
