@@ -52,4 +52,64 @@ describe('permissions catalog', () => {
 
     expect(invalidPermissions).toEqual([]);
   });
+
+  it('keeps hierarchy permissions scoped to each management level', () => {
+    expect(DEFAULT_ROLE_PERMISSIONS.RegionAdmin).toEqual(
+      expect.arrayContaining([
+        'locations.view',
+        'locations.update',
+        'users.view',
+        'users.create',
+        'users.update',
+      ]),
+    );
+    expect(DEFAULT_ROLE_PERMISSIONS.RegionAdmin).toEqual(
+      expect.not.arrayContaining([
+        'companies.create',
+        'companies.update',
+        'regions.create',
+        'regions.update',
+        'roles.update',
+        'settings.update',
+        'audit.view',
+      ]),
+    );
+
+    expect(DEFAULT_ROLE_PERMISSIONS.Regionalleiter).toEqual(
+      expect.not.arrayContaining([
+        'companies.view',
+        'companies.update',
+        'regions.update',
+        'roles.view',
+        'settings.view',
+        'audit.view',
+      ]),
+    );
+
+    expect(DEFAULT_ROLE_PERMISSIONS.Bereichsleiter).toEqual(
+      expect.not.arrayContaining([
+        'companies.view',
+        'regions.update',
+        'roles.view',
+        'locations.create',
+        'locations.delete',
+        'settings.view',
+      ]),
+    );
+
+    expect(DEFAULT_ROLE_PERMISSIONS.Filialleiter).toEqual(
+      expect.not.arrayContaining([
+        'companies.view',
+        'regions.view',
+        'roles.view',
+        'locations.create',
+        'locations.delete',
+        'settings.view',
+      ]),
+    );
+
+    expect(DEFAULT_ROLE_PERMISSIONS.Schichtleiter).toEqual(
+      expect.not.arrayContaining(['users.create', 'users.update', 'roles.view']),
+    );
+  });
 });

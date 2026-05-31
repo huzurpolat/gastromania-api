@@ -64,43 +64,66 @@ export const ALL_PERMISSIONS = PERMISSION_DEFINITIONS.map(
   (permission) => permission.key,
 );
 
+const withoutPermissions = (...deniedPrefixes: string[]): string[] =>
+  ALL_PERMISSIONS.filter(
+    (permission) =>
+      !deniedPrefixes.some((prefix) => permission.startsWith(prefix)),
+  );
+
+const companyAdminPermissions = withoutPermissions('settings.update');
+
+const regionAdminPermissions = withoutPermissions(
+  'audit.view',
+  'companies.create',
+  'companies.update',
+  'regions.create',
+  'regions.update',
+  'roles.create',
+  'roles.update',
+  'roles.delete',
+  'roles.permissions.update',
+  'settings.update',
+);
+
+const regionalleiterPermissions = withoutPermissions(
+  'audit.view',
+  'companies.',
+  'regions.create',
+  'regions.update',
+  'roles.',
+  'settings.',
+);
+
+const bereichsleiterPermissions = withoutPermissions(
+  'audit.view',
+  'companies.',
+  'regions.create',
+  'regions.update',
+  'roles.',
+  'settings.',
+  'locations.create',
+  'locations.delete',
+);
+
+const filialleiterPermissions = withoutPermissions(
+  'audit.view',
+  'companies.',
+  'regions.',
+  'roles.',
+  'settings.',
+  'locations.create',
+  'locations.delete',
+);
+
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   PlatformAdmin: ['*'],
   'Super Admin': ['*'],
-  CompanyAdmin: ALL_PERMISSIONS.filter(
-    (permission) => !permission.startsWith('settings.update'),
-  ),
-  RegionAdmin: ALL_PERMISSIONS.filter(
-    (permission) =>
-      !permission.startsWith('settings.update') &&
-      !permission.startsWith('audit.view') &&
-      !permission.startsWith('companies.create') &&
-      !permission.startsWith('companies.update'),
-  ),
-  Admin: ALL_PERMISSIONS.filter(
-    (permission) => !permission.startsWith('settings.update'),
-  ),
-  Regionalleiter: ALL_PERMISSIONS.filter(
-    (permission) =>
-      !permission.startsWith('roles.delete') &&
-      !permission.startsWith('roles.permissions.update') &&
-      !permission.startsWith('settings.update') &&
-      !permission.startsWith('audit.view'),
-  ),
-  Filialleiter: ALL_PERMISSIONS.filter(
-    (permission) =>
-      !permission.startsWith('roles.delete') &&
-      !permission.startsWith('settings.update'),
-  ),
-  Bereichsleiter: ALL_PERMISSIONS.filter(
-    (permission) =>
-      !permission.startsWith('roles.delete') &&
-      !permission.startsWith('roles.permissions.update') &&
-      !permission.startsWith('settings.update') &&
-      !permission.startsWith('audit.view') &&
-      !permission.startsWith('companies.') &&
-      !permission.startsWith('regions.'),
-  ),
+  CompanyAdmin: companyAdminPermissions,
+  RegionAdmin: regionAdminPermissions,
+  Admin: companyAdminPermissions,
+  Regionalleiter: regionalleiterPermissions,
+  Bereichsleiter: bereichsleiterPermissions,
+  Filialleiter: filialleiterPermissions,
   Restaurantleiter: [
     'dashboard.view',
     'users.view',

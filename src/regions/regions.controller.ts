@@ -27,6 +27,7 @@ export class RegionsController {
   constructor(private readonly regionsService: RegionsService) {}
 
   @Post()
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin)
   @Permissions('regions.create')
   create(@Body() dto: CreateRegionDto, @CurrentUser() user: AuthenticatedUser) {
     return this.regionsService.create(dto, user);
@@ -45,6 +46,7 @@ export class RegionsController {
   }
 
   @Patch(':id')
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin)
   @Permissions('regions.update')
   update(
     @Param('id') id: string,
