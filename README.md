@@ -12,8 +12,8 @@ npm install
 npm run start:dev
 ```
 
-- API: `http://localhost:3003`
-- Healthcheck: `http://localhost:3003/health`
+- API: `http://localhost:3003/api`
+- Healthcheck: `http://localhost:3003/api/health`
 
 ## Umgebung
 
@@ -25,7 +25,7 @@ Mindestens erforderlich:
 
 ```env
 PORT=3003
-FRONTEND_ORIGIN=http://localhost:4202,http://localhost:8083
+FRONTEND_ORIGIN=http://localhost:4202,http://127.0.0.1:4202,http://localhost:8083,http://127.0.0.1:8083,https://gastromania.gastrowerk24.de
 MONGODB_URI=mongodb+srv://USER:PASSWORD@CLUSTER.mongodb.net/gastromania
 JWT_SECRET=replace-with-a-long-random-secret
 UPLOAD_DIR=/app/uploads
@@ -63,6 +63,6 @@ npm run test:e2e
 ```bash
 docker compose ps
 docker compose logs -f gastromania-api
-curl http://localhost:3003/health
+curl http://localhost:3003/api/health
 curl http://localhost:8083/api/health
 ```

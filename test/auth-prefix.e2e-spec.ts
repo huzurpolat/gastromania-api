@@ -4,6 +4,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AuthController } from '../src/auth/auth.controller';
 import { AuthService } from '../src/auth/auth.service';
+import { JwtAuthGuard } from '../src/auth/guards/jwt-auth.guard';
 
 describe('Auth API prefix (e2e)', () => {
   let app: INestApplication<App>;
@@ -22,7 +23,10 @@ describe('Auth API prefix (e2e)', () => {
           useValue: authService,
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
