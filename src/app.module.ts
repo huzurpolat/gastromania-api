@@ -12,6 +12,7 @@ import { MenuItemsModule } from './menu-items/menu-items.module';
 import { MobileModule } from './mobile/mobile.module';
 import { OrdersModule } from './orders/orders.module';
 import { ReservationsModule } from './reservations/reservations.module';
+import { RecipesModule } from './recipes/recipes.module';
 import { RbacModule } from './rbac/rbac.module';
 import { KdsModule } from './kds/kds.module';
 import { RealtimeModule } from './realtime/realtime.module';
@@ -45,6 +46,7 @@ import { HealthController } from './health.controller';
     LocationsModule,
     TablesModule,
     ReservationsModule,
+    RecipesModule,
     RealtimeModule,
     KdsModule,
     RbacModule,

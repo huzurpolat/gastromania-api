@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
@@ -30,6 +31,7 @@ export class OrdersService {
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
     private readonly realtimeService: RealtimeService,
+    private readonly recipeInventoryService: RecipeInventoryService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<OrderDocument> {
@@ -64,6 +66,16 @@ export class OrdersService {
       })),
       total: this.calculateTotal(createOrderDto.items),
     });
+
+    try {
+      await this.recipeInventoryService.consumeOrder(
+        order,
+        createOrderDto.employeeId ?? 'system',
+      );
+    } catch (error) {
+      await order.deleteOne();
+      throw error;
+    }
 
     this.realtimeService.publish('order.created', order);
 
