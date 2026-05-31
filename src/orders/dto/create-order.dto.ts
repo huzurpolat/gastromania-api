@@ -8,7 +8,11 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
-import { OrderStatus } from '../schemas/order.schema';
+import {
+  OrderPriority,
+  OrderStatus,
+  PaymentStatus,
+} from '../schemas/order.schema';
 import { OrderItemDto } from './order-item.dto';
 
 const trimString = (value: unknown): unknown =>
@@ -26,14 +30,27 @@ export class CreateOrderDto {
   @IsNotEmpty()
   locationId!: string;
 
-  @Transform(({ value }) => trimString(value))
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  tableId!: string;
+  tableId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  customerNumber?: string;
 
   @IsOptional()
   @IsEnum(OrderStatus)
   status?: OrderStatus;
+
+  @IsOptional()
+  @IsEnum(OrderPriority)
+  priority?: OrderPriority;
+
+  @IsOptional()
+  @IsEnum(PaymentStatus)
+  paymentStatus?: PaymentStatus;
 
   @IsArray()
   @ArrayNotEmpty()
@@ -45,4 +62,19 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  employeeId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  employeeName?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  comment?: string;
 }

@@ -23,13 +23,20 @@ export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service)
+  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Theke)
   create(@Body() createOrderDto: CreateOrderDto) {
     return this.ordersService.create(createOrderDto);
   }
 
   @Get()
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche)
+  @Roles(
+    Role.Admin,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Kueche,
+    Role.Bar,
+    Role.Theke,
+  )
   findAll(
     @Query('locationId') locationId?: string,
     @Query('tableId') tableId?: string,
@@ -39,13 +46,27 @@ export class OrdersController {
   }
 
   @Get(':id')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche)
+  @Roles(
+    Role.Admin,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Kueche,
+    Role.Bar,
+    Role.Theke,
+  )
   findOne(@Param('id') id: string) {
     return this.ordersService.findOne(id);
   }
 
   @Patch(':id')
-  @Roles(Role.Admin, Role.Filialleiter, Role.Service, Role.Kueche)
+  @Roles(
+    Role.Admin,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Kueche,
+    Role.Bar,
+    Role.Theke,
+  )
   update(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto) {
     return this.ordersService.update(id, updateOrderDto);
   }

@@ -20,11 +20,12 @@ export class HealthController {
   @Get()
   async getHealth(): Promise<HealthResponse> {
     const database =
-      this.connection.readyState === 1 ? 'connected' : 'disconnected';
+      Number(this.connection.readyState) === 1 ? 'connected' : 'disconnected';
     const uploads = await this.getUploadStatus();
 
     return {
-      status: database === 'connected' && uploads === 'writable' ? 'ok' : 'degraded',
+      status:
+        database === 'connected' && uploads === 'writable' ? 'ok' : 'degraded',
       database,
       uploads,
       uptimeSeconds: Math.round(process.uptime()),

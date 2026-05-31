@@ -281,7 +281,11 @@ export class StockService {
       locationId: { $in: locationIds },
       status: InventorySessionStatus.Open,
     });
-    const topUsage = await this.movementModel.aggregate([
+    const topUsage = await this.movementModel.aggregate<{
+      _id: string;
+      name: string;
+      quantity: number;
+    }>([
       {
         $match: {
           locationId: { $in: locationIds },

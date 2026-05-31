@@ -5,9 +5,18 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { RealtimeService } from '../realtime/realtime.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
-import { Order, OrderDocument, OrderItem } from './schemas/order.schema';
+import {
+  CourseType,
+  Order,
+  OrderDocument,
+  OrderItem,
+  OrderItemStatus,
+  OrderStatus,
+  ProductionArea,
+} from './schemas/order.schema';
 
 export interface OrderFilters {
   locationId?: string;
@@ -20,16 +29,45 @@ export class OrdersService {
   constructor(
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<OrderDocument> {
     this.validateObjectId(createOrderDto.locationId, 'Standort-ID');
-    this.validateObjectId(createOrderDto.tableId, 'Tisch-ID');
+    if (createOrderDto.tableId) {
+      this.validateObjectId(createOrderDto.tableId, 'Tisch-ID');
+    }
 
-    return this.orderModel.create({
+    const status = createOrderDto.status ?? OrderStatus.New;
+    const order = await this.orderModel.create({
       ...createOrderDto,
+      orderNumber: await this.nextOrderNumber(createOrderDto.locationId),
+      pickupNumber:
+        createOrderDto.tableId || createOrderDto.customerNumber
+          ? createOrderDto.customerNumber
+          : await this.nextPickupNumber(createOrderDto.locationId),
+      status,
+      statusTimestamps: {
+        [status]: new Date(),
+      },
+      items: createOrderDto.items.map((item) => ({
+        ...item,
+        status: item.status ?? OrderItemStatus.Open,
+        productionArea:
+          item.productionArea ??
+          (item.isKitchenItem === false
+            ? ProductionArea.Bar
+            : ProductionArea.Kitchen),
+        courseType: item.courseType ?? CourseType.Main,
+        specialRequests: item.specialRequests ?? [],
+        allergens: item.allergens ?? [],
+      })),
       total: this.calculateTotal(createOrderDto.items),
     });
+
+    this.realtimeService.publish('order.created', order);
+
+    return order;
   }
 
   async findAll(filters: OrderFilters = {}): Promise<OrderDocument[]> {
@@ -85,16 +123,35 @@ export class OrdersService {
         : {}),
     };
 
+    const currentOrder = await this.findOne(id);
+    const statusChanged =
+      updateOrderDto.status && updateOrderDto.status !== currentOrder.status;
+    const statusTimestamps = statusChanged
+      ? {
+          ...(currentOrder.statusTimestamps ?? {}),
+          [updateOrderDto.status as string]: new Date(),
+        }
+      : currentOrder.statusTimestamps;
+
     const updatedOrder = await this.orderModel
-      .findByIdAndUpdate(id, updatePayload, {
-        new: true,
-        runValidators: true,
-      })
+      .findByIdAndUpdate(
+        id,
+        { ...updatePayload, statusTimestamps },
+        {
+          new: true,
+          runValidators: true,
+        },
+      )
       .exec();
 
     if (!updatedOrder) {
       throw new NotFoundException('Bestellung nicht gefunden');
     }
+
+    this.realtimeService.publish(
+      statusChanged ? 'order.statusChanged' : 'order.updated',
+      updatedOrder,
+    );
 
     return updatedOrder;
   }
@@ -107,6 +164,8 @@ export class OrdersService {
     if (!deletedOrder) {
       throw new NotFoundException('Bestellung nicht gefunden');
     }
+
+    this.realtimeService.publish('order.cancelled', deletedOrder);
 
     return deletedOrder;
   }
@@ -121,5 +180,35 @@ export class OrdersService {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException(`Ungueltige ${label}`);
     }
+  }
+
+  private async nextOrderNumber(locationId: string): Promise<string> {
+    const sequence = await this.countToday(locationId);
+
+    return `B${String(sequence + 1).padStart(4, '0')}`;
+  }
+
+  private async nextPickupNumber(locationId: string): Promise<string> {
+    const sequence = await this.countToday(locationId);
+
+    return `A${String(sequence + 1).padStart(3, '0')}`;
+  }
+
+  private async countToday(locationId: string): Promise<number> {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+
+    return this.orderModel
+      .countDocuments({
+        locationId,
+        createdAt: {
+          $gte: start,
+          $lt: end,
+        },
+      })
+      .exec();
   }
 }

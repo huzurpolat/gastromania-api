@@ -21,8 +21,15 @@ import {
   Location,
   LocationDocument,
 } from '../locations/schemas/location.schema';
-import { MenuItem, MenuItemDocument } from '../menu-items/schemas/menu-item.schema';
-import { Order, OrderDocument, OrderStatus } from '../orders/schemas/order.schema';
+import {
+  MenuItem,
+  MenuItemDocument,
+} from '../menu-items/schemas/menu-item.schema';
+import {
+  Order,
+  OrderDocument,
+  OrderStatus,
+} from '../orders/schemas/order.schema';
 import {
   Reservation,
   ReservationDocument,
@@ -34,13 +41,19 @@ import {
   TableShape,
   TableStatus,
 } from '../tables/schemas/table.schema';
-import { StockItem, StockItemDocument } from '../stock/schemas/stock-item.schema';
+import {
+  StockItem,
+  StockItemDocument,
+} from '../stock/schemas/stock-item.schema';
 import {
   StockMovement,
   StockMovementDocument,
   StockMovementType,
 } from '../stock/schemas/stock-movement.schema';
-import { Supplier, SupplierDocument } from '../suppliers/schemas/supplier.schema';
+import {
+  Supplier,
+  SupplierDocument,
+} from '../suppliers/schemas/supplier.schema';
 import {
   TimeEntry,
   TimeEntryDocument,
@@ -112,7 +125,9 @@ export class DemoDataService {
     });
     const locationId = location._id.toString();
     const users = await this.createUsers(locationId);
-    const manager = users.find((user) => user.roles.includes(Role.Filialleiter));
+    const manager = users.find((user) =>
+      user.roles.includes(Role.Filialleiter),
+    );
     if (manager) {
       location.managerId = manager._id.toString();
       await location.save();
@@ -124,10 +139,17 @@ export class DemoDataService {
     const dutyShifts = await this.createDutyShifts(locationId, users);
     const timeEntries = await this.createTimeEntries(locationId, users);
     const weeklyMenus = await this.createWeeklyMenu(locationId, menuItems);
-    const internalMessages = await this.createInternalMessages(locationId, actor);
+    const internalMessages = await this.createInternalMessages(
+      locationId,
+      actor,
+    );
     const suppliers = await this.createSuppliers(locationId);
     const stockItems = await this.createStockItems(locationId, suppliers);
-    const stockMovements = await this.createStockMovements(locationId, stockItems, actor);
+    const stockMovements = await this.createStockMovements(
+      locationId,
+      stockItems,
+      actor,
+    );
     const checklists = await this.createChecklists(locationId);
 
     return {
@@ -161,27 +183,45 @@ export class DemoDataService {
       .find({ name: new RegExp(`^\\${this.demoPrefix}`) })
       .select('_id')
       .exec();
-    const locationIds = demoLocations.map((location) => location._id.toString());
+    const locationIds = demoLocations.map((location) =>
+      location._id.toString(),
+    );
 
     await Promise.all([
       this.orderModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
-      this.reservationModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
+      this.reservationModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
       this.tableModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
-      this.dutyShiftModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
-      this.timeEntryModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
-      this.weeklyMenuModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
-      this.internalMessageModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
-      this.stockItemModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
-      this.stockMovementModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
-      this.supplierModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
-      this.checklistModel.deleteMany({ locationId: { $in: locationIds } }).exec(),
+      this.dutyShiftModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
+      this.timeEntryModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
+      this.weeklyMenuModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
+      this.internalMessageModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
+      this.stockItemModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
+      this.stockMovementModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
+      this.supplierModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
+      this.checklistModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
       this.locationModel.deleteMany({ _id: { $in: locationIds } }).exec(),
       this.menuItemModel
         .deleteMany({ name: new RegExp(`^\\${this.demoPrefix}`) })
         .exec(),
-      this.userModel
-        .deleteMany({ email: /@demo\.gastromania\.local$/ })
-        .exec(),
+      this.userModel.deleteMany({ email: /@demo\.gastromania\.local$/ }).exec(),
     ]);
   }
 
@@ -438,32 +478,60 @@ export class DemoDataService {
     const baseOrders = [
       {
         locationId,
+        orderNumber: 'B0001',
         tableId: tables[0]._id.toString(),
-        status: OrderStatus.InProgress,
+        status: OrderStatus.Preparing,
         items: [
-          { name: `${this.demoPrefix} Rinderburger`, quantity: 2, price: 15.5, isKitchenItem: true },
-          { name: `${this.demoPrefix} Hauslimonade`, quantity: 2, price: 4.5, isKitchenItem: false },
+          {
+            name: `${this.demoPrefix} Rinderburger`,
+            quantity: 2,
+            price: 15.5,
+            isKitchenItem: true,
+          },
+          {
+            name: `${this.demoPrefix} Hauslimonade`,
+            quantity: 2,
+            price: 4.5,
+            isKitchenItem: false,
+          },
         ],
         total: 40,
         notes: 'Demo-Bestellung für Küchenboard',
       },
       {
         locationId,
+        orderNumber: 'B0002',
         tableId: tables[4]._id.toString(),
         status: OrderStatus.Ready,
         items: [
-          { name: `${this.demoPrefix} Kürbissuppe`, quantity: 1, price: 7.2, isKitchenItem: true },
-          { name: `${this.demoPrefix} Tiramisu`, quantity: 1, price: 6.8, isKitchenItem: false },
+          {
+            name: `${this.demoPrefix} Kürbissuppe`,
+            quantity: 1,
+            price: 7.2,
+            isKitchenItem: true,
+          },
+          {
+            name: `${this.demoPrefix} Tiramisu`,
+            quantity: 1,
+            price: 6.8,
+            isKitchenItem: false,
+          },
         ],
         total: 14,
         notes: 'Kann serviert werden',
       },
       {
         locationId,
+        orderNumber: 'B0003',
         tableId: tables[1]._id.toString(),
-        status: OrderStatus.Open,
+        status: OrderStatus.New,
         items: [
-          { name: `${this.demoPrefix} Avocado Bowl`, quantity: 3, price: 12.9, isKitchenItem: true },
+          {
+            name: `${this.demoPrefix} Avocado Bowl`,
+            quantity: 3,
+            price: 12.9,
+            isKitchenItem: true,
+          },
         ],
         total: 38.7,
       },
@@ -481,18 +549,34 @@ export class DemoDataService {
     count: number,
   ) {
     const menuItems = [
-      { name: `${this.demoPrefix} Avocado Bowl`, price: 12.9, isKitchenItem: true },
-      { name: `${this.demoPrefix} Rinderburger`, price: 15.5, isKitchenItem: true },
-      { name: `${this.demoPrefix} Kürbissuppe`, price: 7.2, isKitchenItem: true },
+      {
+        name: `${this.demoPrefix} Avocado Bowl`,
+        price: 12.9,
+        isKitchenItem: true,
+      },
+      {
+        name: `${this.demoPrefix} Rinderburger`,
+        price: 15.5,
+        isKitchenItem: true,
+      },
+      {
+        name: `${this.demoPrefix} Kürbissuppe`,
+        price: 7.2,
+        isKitchenItem: true,
+      },
       { name: `${this.demoPrefix} Tiramisu`, price: 6.8, isKitchenItem: false },
-      { name: `${this.demoPrefix} Hauslimonade`, price: 4.5, isKitchenItem: false },
+      {
+        name: `${this.demoPrefix} Hauslimonade`,
+        price: 4.5,
+        isKitchenItem: false,
+      },
     ];
     const statuses = [
-      OrderStatus.Open,
-      OrderStatus.InProgress,
+      OrderStatus.New,
+      OrderStatus.Preparing,
       OrderStatus.Ready,
-      OrderStatus.Completed,
-      OrderStatus.Completed,
+      OrderStatus.Served,
+      OrderStatus.Served,
       OrderStatus.Cancelled,
     ];
     const notes = [
@@ -543,6 +627,7 @@ export class DemoDataService {
 
       return {
         locationId,
+        orderNumber: `B${String(index + 4).padStart(4, '0')}`,
         tableId: tables[index % tables.length]._id.toString(),
         status: statuses[index % statuses.length],
         items,
@@ -629,7 +714,13 @@ export class DemoDataService {
     };
 
     for (let day = 0; day < 7; day += 1) {
-      addShift(Role.Service, day, day < 5 ? 10 : 11, day < 5 ? 16 : 17, 'Service Mittag');
+      addShift(
+        Role.Service,
+        day,
+        day < 5 ? 10 : 11,
+        day < 5 ? 16 : 17,
+        'Service Mittag',
+      );
       addShift(Role.Kueche, day, 8, day < 5 ? 15 : 16, 'Küche Vorbereitung');
 
       if (day < 5) {
@@ -641,7 +732,13 @@ export class DemoDataService {
       }
 
       if (day >= 1) {
-        addShift(Role.Tellerwaescher, day, day < 5 ? 12 : 11, day < 5 ? 20 : 19, 'Spülküche');
+        addShift(
+          Role.Tellerwaescher,
+          day,
+          day < 5 ? 12 : 11,
+          day < 5 ? 20 : 19,
+          'Spülküche',
+        );
       }
     }
 
@@ -739,14 +836,14 @@ export class DemoDataService {
 
       const dailyMenuItems = selectedItems.map((item, itemIndex) => ({
         menuItemId: item._id.toString(),
-        price: this.roundPrice(Math.max(item.price - (itemIndex === 0 ? 1.5 : 0.7), 1)),
+        price: this.roundPrice(
+          Math.max(item.price - (itemIndex === 0 ? 1.5 : 0.7), 1),
+        ),
       }));
       const price = this.roundPrice(
         dailyMenuItems.reduce((sum, item) => sum + item.price, 0),
       );
-      const menuType = (index % 2 === 0 ? 'Tagesmenü' : 'Mittagsmenü') as
-        | 'Tagesmenü'
-        | 'Mittagsmenü';
+      const menuType = index % 2 === 0 ? 'Tagesmenü' : 'Mittagsmenü';
 
       return {
         date,
@@ -953,8 +1050,12 @@ export class DemoDataService {
     locationId: string,
     suppliers: SupplierDocument[],
   ): Promise<StockItemDocument[]> {
-    const wholesale = suppliers.find((supplier) => supplier.name === 'Demo Großhandel');
-    const freshMarket = suppliers.find((supplier) => supplier.name === 'Frischemarkt Demo');
+    const wholesale = suppliers.find(
+      (supplier) => supplier.name === 'Demo Großhandel',
+    );
+    const freshMarket = suppliers.find(
+      (supplier) => supplier.name === 'Frischemarkt Demo',
+    );
 
     return this.stockItemModel.insertMany([
       {
@@ -1024,7 +1125,8 @@ export class DemoDataService {
         locationId,
         stockItemId: item._id.toString(),
         stockItemName: item.name,
-        type: index % 2 === 0 ? StockMovementType.Receipt : StockMovementType.Usage,
+        type:
+          index % 2 === 0 ? StockMovementType.Receipt : StockMovementType.Usage,
         quantityChange: index % 2 === 0 ? 5 : -2,
         quantityAfter: item.quantity,
         note: `${this.demoPrefix} Startbewegung`,
@@ -1081,8 +1183,14 @@ export class DemoDataService {
         area: 'Spülküche',
         roles: [Role.Tellerwaescher, Role.Filialleiter],
         tasks: [
-          { title: 'Spülmaschine auf Funktion und Chemie prüfen', isDone: false },
-          { title: 'Sauberes Geschirr, Besteck und Gläser sortieren', isDone: false },
+          {
+            title: 'Spülmaschine auf Funktion und Chemie prüfen',
+            isDone: false,
+          },
+          {
+            title: 'Sauberes Geschirr, Besteck und Gläser sortieren',
+            isDone: false,
+          },
           { title: 'Spülbereich reinigen und Müll trennen', isDone: false },
         ],
       },

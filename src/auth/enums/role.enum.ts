@@ -3,6 +3,8 @@ export enum Role {
   Filialleiter = 'Filialleiter',
   Service = 'Service',
   Kueche = 'Küche',
+  Bar = 'Bar',
+  Theke = 'Theke',
   Lager = 'Lager',
   Einkauf = 'Einkauf',
   Tellerwaescher = 'Tellerwäscher',
