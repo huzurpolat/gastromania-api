@@ -5,12 +5,16 @@ import { AppModule } from './app.module';
 import helmet from 'helmet';
 import { join, resolve } from 'path';
 
+const API_PREFIX = 'api';
+const LOCAL_DEVELOPMENT_PORTS = ['4202', '8083'];
+
 function isAllowedLocalOrigin(origin: string): boolean {
   const configuredOrigins = [
     'http://localhost:4202',
     'http://127.0.0.1:4202',
     'http://localhost:8083',
     'http://127.0.0.1:8083',
+    'https://gastromania.gastrowerk24.de',
     ...(process.env.FRONTEND_ORIGIN ?? '')
       .split(',')
       .map((value) => value.trim())
@@ -24,7 +28,7 @@ function isAllowedLocalOrigin(origin: string): boolean {
   try {
     const url = new URL(origin);
 
-    if (url.port !== '4202') {
+    if (!LOCAL_DEVELOPMENT_PORTS.includes(url.port)) {
       return false;
     }
 
@@ -47,6 +51,7 @@ async function bootstrap() {
   app.useStaticAssets(resolve(process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')), {
     prefix: '/uploads/',
   });
+  app.setGlobalPrefix(API_PREFIX);
 
   app.use(
     helmet({

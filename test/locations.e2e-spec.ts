@@ -35,6 +35,7 @@ describe('LocationsController (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -52,7 +53,7 @@ describe('LocationsController (e2e)', () => {
     }
   });
 
-  it('POST /locations creates a location', async () => {
+  it('POST /api/locations creates a location', async () => {
     const responseBody = {
       _id: '6627d9a2c6f2d8f3e2b1a001',
       name: 'Gastromania Mitte',
@@ -65,7 +66,7 @@ describe('LocationsController (e2e)', () => {
     locationsService.create.mockResolvedValue(responseBody);
 
     await request(app.getHttpServer())
-      .post('/locations')
+      .post('/api/locations')
       .send({
         name: ' Gastromania Mitte ',
         street: ' Hauptstrasse 1 ',
@@ -83,9 +84,9 @@ describe('LocationsController (e2e)', () => {
     });
   });
 
-  it('POST /locations rejects unknown properties', async () => {
+  it('POST /api/locations rejects unknown properties', async () => {
     await request(app.getHttpServer())
-      .post('/locations')
+      .post('/api/locations')
       .send({
         name: 'Gastromania Mitte',
         street: 'Hauptstrasse 1',

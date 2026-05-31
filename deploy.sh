@@ -37,7 +37,7 @@ docker compose up -d --build gastromania-api
 
 if command -v curl >/dev/null 2>&1; then
   echo "=== Smoke Check API ==="
-  curl -fsS "http://127.0.0.1:${API_HOST_PORT}/health" >/dev/null
+  curl -fsS "http://127.0.0.1:${API_HOST_PORT}/api/health" >/dev/null
 fi
 
-echo "=== API Deployment fertig: http://localhost:${API_HOST_PORT}/health ==="
+echo "=== API Deployment fertig: http://localhost:${API_HOST_PORT}/api/health ==="
