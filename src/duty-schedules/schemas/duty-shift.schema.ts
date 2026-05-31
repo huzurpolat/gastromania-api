@@ -12,7 +12,12 @@ export class DutyShift {
   @Prop({ required: true, trim: true, index: true })
   employeeId!: string;
 
-  @Prop({ required: true, enum: Object.values(Role), index: true })
+  @Prop({
+    required: true,
+    type: String,
+    enum: Object.values(Role),
+    index: true,
+  })
   role!: Role;
 
   @Prop({ required: true, index: true })

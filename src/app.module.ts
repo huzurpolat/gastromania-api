@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { ChecklistsModule } from './checklists/checklists.module';
 import { DemoDataModule } from './demo-data/demo-data.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { DutySchedulesModule } from './duty-schedules/duty-schedules.module';
 import { InternalMessagesModule } from './internal-messages/internal-messages.module';
 import { LocationsModule } from './locations/locations.module';
@@ -54,6 +55,7 @@ import { HealthController } from './health.controller';
     WeeklyMenusModule,
     InternalMessagesModule,
     DemoDataModule,
+    DashboardModule,
     StockModule,
     SuppliersModule,
     ChecklistsModule,
