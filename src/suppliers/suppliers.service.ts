@@ -20,12 +20,14 @@ export interface SupplierResponse {
   street?: string;
   zip?: string;
   city?: string;
+  country?: string;
   deliveryDays?: string;
   orderDeadline?: string;
   minimumOrderValue?: string;
   customerNumber?: string;
   note?: string;
   isActive: boolean;
+  isArchived: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -117,12 +119,14 @@ export class SuppliersService {
       street: supplier.street,
       zip: supplier.zip,
       city: supplier.city,
+      country: supplier.country,
       deliveryDays: supplier.deliveryDays,
       orderDeadline: supplier.orderDeadline,
       minimumOrderValue: supplier.minimumOrderValue,
       customerNumber: supplier.customerNumber,
       note: supplier.note,
       isActive: supplier.isActive,
+      isArchived: supplier.isArchived ?? false,
       createdAt: timestamped.createdAt?.toISOString(),
       updatedAt: timestamped.updatedAt?.toISOString(),
     };

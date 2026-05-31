@@ -10,6 +10,11 @@ import {
 } from 'class-validator';
 
 export class CreateStockItemDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  articleNumber?: string;
+
   @IsMongoId()
   locationId!: string;
 
@@ -17,6 +22,11 @@ export class CreateStockItemDto {
   @MinLength(2)
   @MaxLength(120)
   name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
 
   @IsString()
   @MinLength(2)
@@ -52,6 +62,31 @@ export class CreateStockItemDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(60)
+  ean?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  purchasePriceNet?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  purchasePriceGross?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  salePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  vatRate?: number;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   storageLocation?: string;
 
@@ -63,4 +98,8 @@ export class CreateStockItemDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isArchived?: boolean;
 }

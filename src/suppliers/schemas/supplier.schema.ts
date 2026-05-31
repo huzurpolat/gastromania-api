@@ -32,6 +32,9 @@ export class Supplier {
   @Prop({ trim: true })
   city?: string;
 
+  @Prop({ trim: true, default: 'Deutschland' })
+  country?: string;
+
   @Prop({ trim: true })
   deliveryDays?: string;
 
@@ -49,6 +52,9 @@ export class Supplier {
 
   @Prop({ default: true })
   isActive!: boolean;
+
+  @Prop({ default: false, index: true })
+  isArchived!: boolean;
 }
 
 export const SupplierSchema = SchemaFactory.createForClass(Supplier);

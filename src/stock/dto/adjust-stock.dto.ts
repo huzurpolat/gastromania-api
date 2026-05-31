@@ -12,4 +12,17 @@ export class AdjustStockDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+
+  @IsOptional()
+  @IsString()
+  supplierId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  supplierName?: string;
+
+  @IsOptional()
+  @IsNumber()
+  unitPriceNet?: number;
 }

@@ -4,5 +4,6 @@ export enum Role {
   Service = 'Service',
   Kueche = 'Küche',
   Lager = 'Lager',
+  Einkauf = 'Einkauf',
   Tellerwaescher = 'Tellerwäscher',
 }

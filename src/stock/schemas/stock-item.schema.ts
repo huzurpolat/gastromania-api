@@ -5,11 +5,17 @@ export type StockItemDocument = HydratedDocument<StockItem>;
 
 @Schema({ timestamps: true, versionKey: false })
 export class StockItem {
+  @Prop({ trim: true, index: true })
+  articleNumber?: string;
+
   @Prop({ required: true, trim: true, index: true })
   locationId!: string;
 
   @Prop({ required: true, trim: true, index: true })
   name!: string;
+
+  @Prop({ trim: true })
+  description?: string;
 
   @Prop({ required: true, trim: true, index: true })
   category!: string;
@@ -33,6 +39,21 @@ export class StockItem {
   supplierName?: string;
 
   @Prop({ trim: true })
+  ean?: string;
+
+  @Prop({ min: 0, default: 0 })
+  purchasePriceNet!: number;
+
+  @Prop({ min: 0, default: 0 })
+  purchasePriceGross!: number;
+
+  @Prop({ min: 0, default: 0 })
+  salePrice!: number;
+
+  @Prop({ min: 0, default: 19 })
+  vatRate!: number;
+
+  @Prop({ trim: true })
   storageLocation?: string;
 
   @Prop({ trim: true })
@@ -40,8 +61,12 @@ export class StockItem {
 
   @Prop({ default: true })
   isActive!: boolean;
+
+  @Prop({ default: false, index: true })
+  isArchived!: boolean;
 }
 
 export const StockItemSchema = SchemaFactory.createForClass(StockItem);
 
 StockItemSchema.index({ locationId: 1, name: 1 }, { unique: true });
+StockItemSchema.index({ locationId: 1, articleNumber: 1 });

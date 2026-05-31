@@ -5,9 +5,15 @@ export type StockMovementDocument = HydratedDocument<StockMovement>;
 
 export enum StockMovementType {
   Receipt = 'Wareneingang',
+  Issue = 'Warenausgang',
   Usage = 'Verbrauch',
+  Shrinkage = 'Schwund',
+  Breakage = 'Bruch',
+  Spoilage = 'Verderb',
+  Loss = 'Verlust',
   Correction = 'Korrektur',
-  Waste = 'Bruch/Verderb',
+  Inventory = 'Inventur',
+  Transfer = 'Umbuchung',
 }
 
 @Schema({ timestamps: true, versionKey: false })
@@ -27,8 +33,23 @@ export class StockMovement {
   @Prop({ required: true })
   quantityChange!: number;
 
+  @Prop({ required: true, min: 0, default: 0 })
+  quantityBefore!: number;
+
   @Prop({ required: true, min: 0 })
   quantityAfter!: number;
+
+  @Prop({ trim: true })
+  supplierId?: string;
+
+  @Prop({ trim: true })
+  supplierName?: string;
+
+  @Prop({ min: 0, default: 0 })
+  unitPriceNet!: number;
+
+  @Prop({ min: 0, default: 0 })
+  valueNet!: number;
 
   @Prop({ trim: true })
   note?: string;

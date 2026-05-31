@@ -54,6 +54,11 @@ export class CreateSupplierDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
+  country?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(160)
   deliveryDays?: string;
 
@@ -80,4 +85,8 @@ export class CreateSupplierDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isArchived?: boolean;
 }

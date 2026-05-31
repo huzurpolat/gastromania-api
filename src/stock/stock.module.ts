@@ -5,6 +5,23 @@ import { Location, LocationSchema } from '../locations/schemas/location.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { StockItem, StockItemSchema } from './schemas/stock-item.schema';
 import {
+  InventoryCategory,
+  InventoryCategorySchema,
+} from './schemas/inventory-category.schema';
+import {
+  InventoryCount,
+  InventoryCountSchema,
+} from './schemas/inventory-count.schema';
+import {
+  InventoryLocation,
+  InventoryLocationSchema,
+} from './schemas/inventory-location.schema';
+import {
+  InventorySession,
+  InventorySessionSchema,
+} from './schemas/inventory-session.schema';
+import { StockAlert, StockAlertSchema } from './schemas/stock-alert.schema';
+import {
   StockMovement,
   StockMovementSchema,
 } from './schemas/stock-movement.schema';
@@ -17,6 +34,11 @@ import { StockService } from './stock.service';
     MongooseModule.forFeature([
       { name: StockItem.name, schema: StockItemSchema },
       { name: StockMovement.name, schema: StockMovementSchema },
+      { name: InventoryLocation.name, schema: InventoryLocationSchema },
+      { name: InventoryCategory.name, schema: InventoryCategorySchema },
+      { name: StockAlert.name, schema: StockAlertSchema },
+      { name: InventorySession.name, schema: InventorySessionSchema },
+      { name: InventoryCount.name, schema: InventoryCountSchema },
       { name: User.name, schema: UserSchema },
       { name: Location.name, schema: LocationSchema },
     ]),
