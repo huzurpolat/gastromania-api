@@ -7,6 +7,7 @@ export type UserDocument = HydratedDocument<User>;
 export interface UserResponse {
   _id: string;
   email: string;
+  name: string;
   firstName?: string;
   lastName?: string;
   phone?: string;
@@ -18,6 +19,7 @@ export interface UserResponse {
   department?: string;
   profileImageUrl?: string;
   lastLoginAt?: Date;
+  role: string;
   roles: string[];
   permissions?: string[];
   isActive: boolean;
@@ -118,29 +120,42 @@ export class User {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-export const toUserResponse = (user: UserDocument): UserResponse => ({
-  _id: user._id.toString(),
-  email: user.email,
-  firstName: user.firstName,
-  lastName: user.lastName,
-  phone: user.phone,
-  mobile: user.mobile,
-  taxNumber: user.taxNumber,
-  vatId: user.vatId,
-  taxOffice: user.taxOffice,
-  employeeNumber: user.employeeNumber,
-  department: user.department,
-  profileImageUrl: user.profileImageUrl,
-  lastLoginAt: user.lastLoginAt,
-  roles: user.roles,
-  isActive: user.isActive,
-  companyId: user.companyId,
-  regionIds: user.regionIds,
-  locationId: user.locationId,
-  locationIds: user.locationIds,
-  managedLocationIds: user.managedLocationIds,
-  departmentIds: user.departmentIds,
-  responsibilities: user.responsibilities,
-  createdAt: user.createdAt,
-  updatedAt: user.updatedAt,
-});
+export const toUserResponse = (user: UserDocument): UserResponse => {
+  const roles = user.roles?.length ? user.roles : [Role.Service];
+  const name =
+    [user.firstName, user.lastName]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(' ') ||
+    user.email.split('@')[0] ||
+    user.email;
+
+  return {
+    _id: user._id.toString(),
+    email: user.email,
+    name,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    phone: user.phone,
+    mobile: user.mobile,
+    taxNumber: user.taxNumber,
+    vatId: user.vatId,
+    taxOffice: user.taxOffice,
+    employeeNumber: user.employeeNumber,
+    department: user.department,
+    profileImageUrl: user.profileImageUrl,
+    lastLoginAt: user.lastLoginAt,
+    role: roles[0],
+    roles,
+    isActive: user.isActive,
+    companyId: user.companyId,
+    regionIds: user.regionIds,
+    locationId: user.locationId,
+    locationIds: user.locationIds,
+    managedLocationIds: user.managedLocationIds,
+    departmentIds: user.departmentIds,
+    responsibilities: user.responsibilities,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+};
