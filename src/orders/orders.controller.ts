@@ -18,6 +18,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { OrdersService } from './orders.service';
 
@@ -56,6 +57,52 @@ export class OrdersController {
     @Query('status') status?: string,
   ) {
     return this.ordersService.findAll(user, { locationId, tableId, status });
+  }
+
+  @Get('today')
+  @Permissions('orders.view')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Kueche,
+    Role.Bar,
+    Role.Theke,
+  )
+  findToday(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+  ) {
+    return this.ordersService.findToday(user, locationId);
+  }
+
+  @Get('location/:locationId')
+  @Permissions('orders.view')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Kueche,
+    Role.Bar,
+    Role.Theke,
+  )
+  findByLocation(
+    @Param('locationId') locationId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.ordersService.findByLocation(user, locationId);
   }
 
   @Get(':id')
@@ -100,6 +147,32 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.ordersService.update(id, updateOrderDto, user);
+  }
+
+  @Patch(':orderId/items/:itemId/status')
+  @Permissions('orders.update')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Schichtleiter,
+    Role.Service,
+    Role.Kueche,
+    Role.Bar,
+    Role.Theke,
+  )
+  updateItemStatus(
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateOrderItemStatusDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.ordersService.updateItemStatus(orderId, itemId, dto, user);
   }
 
   @Post(':id/send-to-kitchen')

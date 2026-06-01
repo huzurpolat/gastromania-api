@@ -39,6 +39,11 @@ export class OrderItemDto {
   @IsString()
   productId?: string;
 
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  menuItemId?: string;
+
   @Transform(({ value }) => trimString(value))
   @IsString()
   name!: string;

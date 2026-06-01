@@ -10,6 +10,7 @@ import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
   Order,
   OrderDocument,
+  OrderItem,
   OrderItemStatus,
   OrderStatus,
   ProductionArea,
@@ -189,19 +190,61 @@ export class KdsService {
     }
 
     const previousStatus = item.status;
+    const changedAt = new Date();
     item.status = dto.status;
-    item.changedAt = new Date();
+    item.changedAt = changedAt;
+    this.applyItemStatusAuditFields(item, dto.status, actor.sub, changedAt);
+    const previousOrderStatus = order.status;
+    order.status = this.aggregateOrderStatus(order);
+    order.statusTimestamps = {
+      ...(order.statusTimestamps ?? {}),
+      [order.status]: changedAt,
+    };
 
     const saved = await order.save();
-    await this.writeLog(saved, 'order.itemUpdated', actor, {
+    await this.syncTableStatus(saved);
+    await this.writeLog(saved, 'order.item.status.changed', actor, {
       itemId,
       fromStatus: previousStatus,
       toStatus: dto.status,
-      comment: dto.comment,
+      comment: dto.note ?? dto.comment,
       employeeName: dto.employeeName,
     });
 
+    const payload = {
+      companyId: saved.companyId ?? actor.companyId,
+      locationId: saved.locationId,
+      orderId: saved._id.toString(),
+      orderNumber: saved.orderNumber,
+      itemId,
+      itemName: item.name,
+      previousStatus,
+      newStatus: dto.status,
+      changedBy: actor.sub,
+      changedByRole: actor.roles?.[0] ?? 'unknown',
+      changedAt: changedAt.toISOString(),
+      orderStatus: saved.status,
+      order: saved,
+      channels: this.eventChannels(saved.companyId ?? actor.companyId, saved.locationId),
+    };
+
+    this.realtimeService.publish('order.item.status.changed', payload);
     this.realtimeService.publish('order.itemUpdated', saved);
+
+    if (previousOrderStatus !== saved.status) {
+      this.realtimeService.publish('order.status.changed', {
+        companyId: saved.companyId ?? actor.companyId,
+        locationId: saved.locationId,
+        orderId: saved._id.toString(),
+        previousStatus: previousOrderStatus,
+        newStatus: saved.status,
+        changedBy: actor.sub,
+        changedByRole: actor.roles?.[0] ?? 'unknown',
+        changedAt: changedAt.toISOString(),
+        order: saved,
+        channels: this.eventChannels(saved.companyId ?? actor.companyId, saved.locationId),
+      });
+    }
 
     return saved;
   }
@@ -357,6 +400,70 @@ export class KdsService {
     });
   }
 
+  private aggregateOrderStatus(order: OrderDocument): OrderStatus {
+    const statuses = order.items.map((item) => item.status ?? OrderItemStatus.Open);
+
+    if (!statuses.length) {
+      return order.status;
+    }
+
+    const activeStatuses = statuses.filter((status) => status !== OrderItemStatus.Cancelled);
+
+    if (!activeStatuses.length) {
+      return OrderStatus.Cancelled;
+    }
+
+    if (activeStatuses.every((status) => status === OrderItemStatus.Served)) {
+      return OrderStatus.Served;
+    }
+
+    if (
+      activeStatuses.every((status) =>
+        [OrderItemStatus.Ready, OrderItemStatus.Served].includes(status),
+      )
+    ) {
+      return OrderStatus.Ready;
+    }
+
+    if (activeStatuses.some((status) => status === OrderItemStatus.Preparing)) {
+      return OrderStatus.Preparing;
+    }
+
+    if (activeStatuses.some((status) => status === OrderItemStatus.Started)) {
+      return OrderStatus.Accepted;
+    }
+
+    return OrderStatus.New;
+  }
+
+  private applyItemStatusAuditFields(
+    item: OrderItem,
+    status: OrderItemStatus,
+    actorId: string,
+    changedAt: Date,
+  ): void {
+    if (status === OrderItemStatus.Started) {
+      item.startedAt = changedAt;
+      item.startedBy = actorId;
+    }
+    if (status === OrderItemStatus.Preparing) {
+      item.inPreparationAt = changedAt;
+      item.inPreparationBy = actorId;
+    }
+    if (status === OrderItemStatus.Ready) {
+      item.readyAt = changedAt;
+      item.readyBy = actorId;
+    }
+    if (status === OrderItemStatus.Served) {
+      item.servedAt = changedAt;
+      item.servedBy = actorId;
+    }
+    if (status === OrderItemStatus.Cancelled) {
+      item.cancelledAt = changedAt;
+      item.cancelledBy = actorId;
+    }
+  }
+
   private async syncTableStatus(order: OrderDocument): Promise<void> {
     if (!order.tableId) {
       return;
@@ -391,6 +498,7 @@ export class KdsService {
     } = {},
   ): Promise<void> {
     await this.logModel.create({
+      companyId: order.companyId ?? actor.companyId,
       locationId: order.locationId,
       orderId: order._id.toString(),
       itemId: options.itemId,
@@ -399,8 +507,18 @@ export class KdsService {
       toStatus: options.toStatus,
       employeeId: actor.sub,
       employeeName: options.employeeName ?? actor.email,
+      employeeRole: actor.roles?.[0],
       comment: options.comment,
     });
+  }
+
+  private eventChannels(companyId: string | undefined, locationId: string): string[] {
+    return [
+      ...(companyId ? [`company:${companyId}`] : []),
+      `location:${locationId}`,
+      `kitchen:${locationId}`,
+      `service:${locationId}`,
+    ];
   }
 
   private validateObjectId(id: string, label: string): void {

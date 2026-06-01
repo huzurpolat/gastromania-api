@@ -15,6 +15,15 @@ export class AdjustStockDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(240)
+  reason?: string;
+
+  @IsOptional()
+  @IsString()
+  batchId?: string;
+
+  @IsOptional()
+  @IsString()
   supplierId?: string;
 
   @IsOptional()

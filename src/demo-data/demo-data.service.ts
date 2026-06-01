@@ -58,6 +58,15 @@ import {
   StockMovementType,
 } from '../stock/schemas/stock-movement.schema';
 import {
+  InventoryBatch,
+  InventoryBatchDocument,
+} from '../stock/schemas/inventory-batch.schema';
+import {
+  PurchaseOrder,
+  PurchaseOrderDocument,
+  PurchaseOrderStatus,
+} from '../stock/schemas/purchase-order.schema';
+import {
   Supplier,
   SupplierDocument,
 } from '../suppliers/schemas/supplier.schema';
@@ -190,6 +199,10 @@ export class DemoDataService {
     private readonly stockItemModel: Model<StockItemDocument>,
     @InjectModel(StockMovement.name)
     private readonly stockMovementModel: Model<StockMovementDocument>,
+    @InjectModel(InventoryBatch.name)
+    private readonly inventoryBatchModel: Model<InventoryBatchDocument>,
+    @InjectModel(PurchaseOrder.name)
+    private readonly purchaseOrderModel: Model<PurchaseOrderDocument>,
     @InjectModel(Supplier.name)
     private readonly supplierModel: Model<SupplierDocument>,
     @InjectModel(Checklist.name)
@@ -243,6 +256,13 @@ export class DemoDataService {
       stockItems,
       actor,
     );
+    const inventoryBatches = await this.createInventoryBatches(stockItems);
+    const purchaseOrders = await this.createPurchaseOrders(
+      locationId,
+      stockItems,
+      suppliers,
+      actor,
+    );
     const checklists = await this.createChecklists(locationId);
 
     return {
@@ -263,6 +283,8 @@ export class DemoDataService {
         internalMessages: internalMessages.length,
         stockItems: stockItems.length,
         stockMovements: stockMovements.length,
+        inventoryBatches: inventoryBatches.length,
+        purchaseOrders: purchaseOrders.length,
         suppliers: suppliers.length,
         checklists: checklists.length,
       },
@@ -322,6 +344,12 @@ export class DemoDataService {
         .deleteMany({ locationId: { $in: locationIds } })
         .exec(),
       this.stockMovementModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
+      this.inventoryBatchModel
+        .deleteMany({ locationId: { $in: locationIds } })
+        .exec(),
+      this.purchaseOrderModel
         .deleteMany({ locationId: { $in: locationIds } })
         .exec(),
       this.supplierModel
@@ -1672,6 +1700,98 @@ export class DemoDataService {
         actorId: actor.sub,
       })),
     );
+  }
+
+  private createInventoryBatches(
+    stockItems: StockItemDocument[],
+  ): Promise<InventoryBatchDocument[]> {
+    const today = new Date();
+    const expiresSoon = new Date(today);
+    expiresSoon.setDate(today.getDate() + 3);
+    const expiresLater = new Date(today);
+    expiresLater.setDate(today.getDate() + 21);
+
+    return this.inventoryBatchModel.insertMany(
+      stockItems.map((item, index) => ({
+        locationId: item.locationId,
+        stockItemId: item._id.toString(),
+        stockItemName: item.name,
+        unit: item.unit,
+        batchNumber: `DEMO-${String(index + 1).padStart(3, '0')}`,
+        initialQuantity: item.quantity,
+        remainingQuantity: item.quantity,
+        unitPriceNet: item.purchasePriceNet ?? 0,
+        supplierId: item.supplierId,
+        supplierName: item.supplierName,
+        storageLocation: item.storageLocation,
+        receivedAt: today,
+        expiresAt: index === 1 ? expiresSoon : index % 2 === 0 ? expiresLater : undefined,
+        note: `${this.demoPrefix} FIFO/MHD Startcharge`,
+        isActive: true,
+      })),
+    );
+  }
+
+  private async createPurchaseOrders(
+    locationId: string,
+    stockItems: StockItemDocument[],
+    suppliers: SupplierDocument[],
+    actor: AuthenticatedUser,
+  ): Promise<PurchaseOrderDocument[]> {
+    const lowStockItems = stockItems.filter((item) => item.quantity <= item.minQuantity);
+    if (!lowStockItems.length) {
+      return [];
+    }
+
+    const bySupplier = new Map<string, StockItemDocument[]>();
+    for (const item of lowStockItems) {
+      const supplierId = item.supplierId ?? 'unassigned';
+      bySupplier.set(supplierId, [...(bySupplier.get(supplierId) ?? []), item]);
+    }
+
+    const orders: Array<{
+      locationId: string;
+      supplierId: string;
+      supplierName: string;
+      orderNumber: string;
+      status: PurchaseOrderStatus;
+      lines: PurchaseOrder['lines'];
+      totalNet: number;
+      note: string;
+      createdBy: string;
+    }> = [];
+    let index = 1;
+    for (const [supplierId, items] of bySupplier) {
+      const supplier = suppliers.find((entry) => entry._id.toString() === supplierId);
+      const lines = items.map((item) => {
+        const targetQuantity = item.targetQuantity ?? Math.max(item.minQuantity * 2, item.minQuantity + 1);
+        const quantity = Math.max(1, targetQuantity - item.quantity);
+        const unitPriceNet = item.purchasePriceNet ?? 0;
+        return {
+          stockItemId: item._id.toString(),
+          stockItemName: item.name,
+          quantity,
+          unit: item.unit,
+          unitPriceNet,
+          totalNet: quantity * unitPriceNet,
+        };
+      });
+
+      orders.push({
+        locationId,
+        supplierId,
+        supplierName: supplier?.name ?? items[0].supplierName ?? 'Ohne Lieferant',
+        orderNumber: `DEMO-PO-${String(index).padStart(3, '0')}`,
+        status: PurchaseOrderStatus.Draft,
+        lines,
+        totalNet: lines.reduce((sum, line) => sum + line.totalNet, 0),
+        note: `${this.demoPrefix} Automatischer Nachbestellvorschlag`,
+        createdBy: actor.sub,
+      });
+      index += 1;
+    }
+
+    return this.purchaseOrderModel.insertMany(orders);
   }
 
   private createChecklists(locationId: string): Promise<ChecklistDocument[]> {

@@ -16,12 +16,19 @@ import { User, UserDocument } from '../users/schemas/user.schema';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { CreateInventoryCategoryDto } from './dto/create-inventory-category.dto';
 import { CreateInventoryLocationDto } from './dto/create-inventory-location.dto';
+import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
 import {
   CompleteInventorySessionDto,
   StartInventorySessionDto,
 } from './dto/inventory-session.dto';
+import { ReceiveStockDto } from './dto/receive-stock.dto';
+import { ReportWasteDto } from './dto/report-waste.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
+import {
+  InventoryBatch,
+  InventoryBatchDocument,
+} from './schemas/inventory-batch.schema';
 import {
   InventoryCategory,
   InventoryCategoryDocument,
@@ -44,7 +51,13 @@ import { StockItem, StockItemDocument } from './schemas/stock-item.schema';
 import {
   StockMovement,
   StockMovementDocument,
+  StockMovementType,
 } from './schemas/stock-movement.schema';
+import {
+  PurchaseOrder,
+  PurchaseOrderDocument,
+  PurchaseOrderStatus,
+} from './schemas/purchase-order.schema';
 
 export interface StockItemResponse {
   _id: string;
@@ -56,6 +69,7 @@ export interface StockItemResponse {
   unit: string;
   quantity: number;
   minQuantity: number;
+  criticalQuantity: number;
   targetQuantity?: number;
   supplierId?: string;
   supplierName?: string;
@@ -65,11 +79,15 @@ export interface StockItemResponse {
   salePrice: number;
   vatRate: number;
   storageLocation?: string;
+  requiresExpiryDate: boolean;
+  ingredientCategory?: string;
   note?: string;
   isActive: boolean;
   isArchived: boolean;
   lowStock: boolean;
   stockValueNet: number;
+  criticalStock: boolean;
+  negativeStock: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -78,18 +96,42 @@ export interface StockMovementResponse {
   _id: string;
   locationId: string;
   stockItemId: string;
+  batchId?: string;
+  orderId?: string;
   stockItemName: string;
   type: string;
   quantityChange: number;
   quantityBefore: number;
   quantityAfter: number;
   note?: string;
+  reason?: string;
   supplierId?: string;
   supplierName?: string;
   unitPriceNet: number;
   valueNet: number;
   actorId: string;
   createdAt?: string;
+}
+
+export interface InventoryBatchResponse {
+  _id: string;
+  locationId: string;
+  stockItemId: string;
+  stockItemName: string;
+  unit: string;
+  batchNumber?: string;
+  initialQuantity: number;
+  remainingQuantity: number;
+  unitPriceNet: number;
+  supplierId?: string;
+  supplierName?: string;
+  storageLocation?: string;
+  receivedAt?: string;
+  expiresAt?: string;
+  note?: string;
+  isActive: boolean;
+  daysUntilExpiry?: number;
+  expiringSoon: boolean;
 }
 
 export interface InventoryDashboardResponse {
@@ -100,6 +142,8 @@ export interface InventoryDashboardResponse {
   receiptsToday: number;
   issuesToday: number;
   shrinkageToday: number;
+  expiringSoonCount: number;
+  negativeStockCount: number;
   topUsageItems: Array<{ stockItemId: string; name: string; quantity: number }>;
 }
 
@@ -116,6 +160,10 @@ export class StockService {
   constructor(
     @InjectModel(StockItem.name)
     private readonly stockItemModel: Model<StockItemDocument>,
+    @InjectModel(InventoryBatch.name)
+    private readonly batchModel: Model<InventoryBatchDocument>,
+    @InjectModel(PurchaseOrder.name)
+    private readonly purchaseOrderModel: Model<PurchaseOrderDocument>,
     @InjectModel(StockMovement.name)
     private readonly movementModel: Model<StockMovementDocument>,
     @InjectModel(InventoryLocation.name)
@@ -190,6 +238,221 @@ export class StockService {
       .exec();
 
     return movements.map((movement) => this.toMovementResponse(movement));
+  }
+
+  async findBatches(
+    actor: AuthenticatedUser,
+    locationId?: string,
+  ): Promise<InventoryBatchResponse[]> {
+    const locationIds = locationId
+      ? [locationId]
+      : await this.getReadableLocationIds(actor);
+
+    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
+
+    const batches = await this.batchModel
+      .find({ locationId: { $in: locationIds }, isActive: true, remainingQuantity: { $gt: 0 } })
+      .sort({ expiresAt: 1, receivedAt: 1 })
+      .exec();
+
+    return batches.map((batch) => this.toBatchResponse(batch));
+  }
+
+  async receiveStock(
+    payload: ReceiveStockDto,
+    actor: AuthenticatedUser,
+  ): Promise<StockEvent & { batch: InventoryBatchResponse }> {
+    const item = await this.stockItemModel.findById(payload.stockItemId).exec();
+
+    if (!item) {
+      throw new NotFoundException('Lagerartikel nicht gefunden');
+    }
+
+    await this.assertCanUseLocation(actor, item.locationId);
+
+    if (item.requiresExpiryDate && !payload.expiresAt) {
+      throw new BadRequestException('MHD ist fuer diese Zutat erforderlich');
+    }
+
+    const receivedAt = payload.receivedAt ? new Date(payload.receivedAt) : new Date();
+    const unitPriceNet = payload.unitPriceNet ?? item.purchasePriceNet ?? 0;
+    const quantityBefore = item.quantity;
+    item.quantity = quantityBefore + payload.quantity;
+    item.purchasePriceNet = unitPriceNet || item.purchasePriceNet;
+    item.supplierId = payload.supplierId ?? item.supplierId;
+    item.supplierName = payload.supplierName ?? item.supplierName;
+    item.storageLocation = payload.storageLocation ?? item.storageLocation;
+    const saved = await item.save();
+
+    const batch = await this.batchModel.create({
+      locationId: saved.locationId,
+      stockItemId: saved._id.toString(),
+      stockItemName: saved.name,
+      unit: saved.unit,
+      batchNumber: payload.batchNumber,
+      initialQuantity: payload.quantity,
+      remainingQuantity: payload.quantity,
+      unitPriceNet,
+      supplierId: payload.supplierId ?? saved.supplierId,
+      supplierName: payload.supplierName ?? saved.supplierName,
+      storageLocation: payload.storageLocation ?? saved.storageLocation,
+      receivedAt,
+      expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : undefined,
+      note: payload.note,
+      isActive: true,
+    });
+
+    const movement = await this.movementModel.create({
+      locationId: saved.locationId,
+      stockItemId: saved._id.toString(),
+      batchId: batch._id.toString(),
+      stockItemName: saved.name,
+      type: StockMovementType.Receipt,
+      quantityChange: payload.quantity,
+      quantityBefore,
+      quantityAfter: saved.quantity,
+      note: payload.note,
+      supplierId: payload.supplierId ?? saved.supplierId,
+      supplierName: payload.supplierName ?? saved.supplierName,
+      unitPriceNet,
+      valueNet: payload.quantity * unitPriceNet,
+      actorId: actor.sub,
+    });
+
+    await this.syncLowStockAlert(saved);
+    await this.syncExpiryAlert(batch);
+    const event = {
+      type: 'adjusted' as const,
+      item: this.toItemResponse(saved),
+      movement: this.toMovementResponse(movement),
+      batch: this.toBatchResponse(batch),
+    };
+    this.stockEvents$.next(event);
+    return event;
+  }
+
+  async reportWaste(
+    payload: ReportWasteDto,
+    actor: AuthenticatedUser,
+  ): Promise<StockEvent> {
+    const allowed = [
+      StockMovementType.Shrinkage,
+      StockMovementType.Spoilage,
+      StockMovementType.Breakage,
+      StockMovementType.Loss,
+    ];
+
+    if (!allowed.includes(payload.type)) {
+      throw new BadRequestException('Nur Schwund, Verderb, Bruch oder Verlust sind erlaubt');
+    }
+
+    if (!payload.reason?.trim()) {
+      throw new BadRequestException('Grund ist erforderlich');
+    }
+
+    return this.adjust(payload.stockItemId, {
+      quantityChange: -Math.abs(payload.quantity),
+      type: payload.type,
+      reason: payload.reason,
+      note: payload.note,
+      batchId: payload.batchId,
+    }, actor);
+  }
+
+  async reorderSuggestions(actor: AuthenticatedUser, locationId?: string) {
+    const items = await this.findAll(actor, locationId);
+    const lowItems = items.filter((item) => item.isActive && !item.isArchived && item.quantity <= item.minQuantity);
+    const grouped = new Map<string, {
+      supplierId: string;
+      supplierName: string;
+      lines: Array<{
+        stockItemId: string;
+        stockItemName: string;
+        quantity: number;
+        unit: string;
+        unitPriceNet: number;
+        totalNet: number;
+        currentQuantity: number;
+        minQuantity: number;
+        targetQuantity: number;
+      }>;
+      totalNet: number;
+    }>();
+
+    for (const item of lowItems) {
+      const targetQuantity = item.targetQuantity ?? Math.max(item.minQuantity * 2, item.minQuantity + 1);
+      const quantity = Math.max(0, targetQuantity - item.quantity);
+      const supplierId = item.supplierId ?? 'unassigned';
+      const supplierName = item.supplierName ?? 'Ohne Lieferant';
+      const group = grouped.get(supplierId) ?? { supplierId, supplierName, lines: [], totalNet: 0 };
+      const totalNet = quantity * item.purchasePriceNet;
+      group.lines.push({
+        stockItemId: item._id,
+        stockItemName: item.name,
+        quantity,
+        unit: item.unit,
+        unitPriceNet: item.purchasePriceNet,
+        totalNet,
+        currentQuantity: item.quantity,
+        minQuantity: item.minQuantity,
+        targetQuantity,
+      });
+      group.totalNet += totalNet;
+      grouped.set(supplierId, group);
+    }
+
+    return Array.from(grouped.values()).sort((a, b) => a.supplierName.localeCompare(b.supplierName));
+  }
+
+  async listPurchaseOrders(actor: AuthenticatedUser, locationId?: string) {
+    const locationIds = locationId ? [locationId] : await this.getReadableLocationIds(actor);
+    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
+
+    return this.purchaseOrderModel
+      .find({ locationId: { $in: locationIds } })
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  async createPurchaseOrder(payload: CreatePurchaseOrderDto, actor: AuthenticatedUser) {
+    await this.assertCanUseLocation(actor, payload.locationId);
+
+    if (!payload.lines.length) {
+      throw new BadRequestException('Bestellung benoetigt mindestens eine Position');
+    }
+
+    const lines = [];
+    for (const line of payload.lines) {
+      const item = await this.stockItemModel.findById(line.stockItemId).exec();
+      if (!item || item.locationId !== payload.locationId) {
+        throw new NotFoundException('Nachbestellartikel nicht gefunden');
+      }
+      const unitPriceNet = item.purchasePriceNet ?? 0;
+      lines.push({
+        stockItemId: item._id.toString(),
+        stockItemName: item.name,
+        quantity: line.quantity,
+        unit: item.unit,
+        unitPriceNet,
+        totalNet: line.quantity * unitPriceNet,
+      });
+    }
+
+    const totalNet = lines.reduce((sum, line) => sum + line.totalNet, 0);
+    const order = await this.purchaseOrderModel.create({
+      companyId: actor.companyId,
+      locationId: payload.locationId,
+      supplierId: payload.supplierId,
+      supplierName: payload.supplierName ?? 'Lieferant',
+      orderNumber: await this.nextPurchaseOrderNumber(payload.locationId),
+      status: PurchaseOrderStatus.Draft,
+      lines,
+      totalNet,
+      note: payload.note,
+      createdBy: actor.sub,
+    });
+
+    return order;
   }
 
   async findLocations(actor: AuthenticatedUser, locationId?: string) {
@@ -276,6 +539,12 @@ export class StockService {
     await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
     await this.refreshAlerts(actor, locationId);
     const items = await this.stockItemModel.find({ locationId: { $in: locationIds }, isArchived: { $ne: true } }).exec();
+    const expiringSoonCount = await this.batchModel.countDocuments({
+      locationId: { $in: locationIds },
+      isActive: true,
+      remainingQuantity: { $gt: 0 },
+      expiresAt: { $lte: this.daysFromNow(7) },
+    });
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const movements = await this.movementModel.find({ locationId: { $in: locationIds }, createdAt: { $gte: today } }).exec();
@@ -312,6 +581,8 @@ export class StockService {
       receiptsToday: sumMovement(['Wareneingang']),
       issuesToday: sumMovement(['Warenausgang', 'Verbrauch']),
       shrinkageToday: sumMovement(['Schwund', 'Bruch', 'Verderb', 'Verlust', 'Bruch/Verderb']),
+      expiringSoonCount,
+      negativeStockCount: items.filter((item) => item.quantity < 0).length,
       topUsageItems: topUsage.map((entry) => ({
         stockItemId: entry._id,
         name: entry.name,
@@ -353,6 +624,9 @@ export class StockService {
       await this.assertCanUseLocation(actor, item.locationId);
       const quantityBefore = item.quantity;
       const difference = line.countedQuantity - quantityBefore;
+      if (difference !== 0 && !payload.note?.trim()) {
+        throw new BadRequestException('Inventurabweichungen benoetigen eine Pflichtnotiz');
+      }
       item.quantity = line.countedQuantity;
       await item.save();
       const unitPriceNet = item.purchasePriceNet ?? 0;
@@ -379,6 +653,7 @@ export class StockService {
         quantityBefore,
         quantityAfter: item.quantity,
         note: payload.note,
+        reason: difference !== 0 ? 'Inventurdifferenz' : undefined,
         unitPriceNet,
         valueNet: Math.abs(difference) * unitPriceNet,
         actorId: actor.sub,
@@ -448,22 +723,40 @@ export class StockService {
     const quantityBefore = item.quantity;
     const nextQuantity = item.quantity + payload.quantityChange;
 
-    if (nextQuantity < 0) {
-      throw new BadRequestException('Bestand darf nicht negativ werden');
+    if (
+      payload.quantityChange < 0 &&
+      [
+        StockMovementType.Shrinkage,
+        StockMovementType.Spoilage,
+        StockMovementType.Breakage,
+        StockMovementType.Loss,
+      ].includes(payload.type) &&
+      !payload.reason?.trim()
+    ) {
+      throw new BadRequestException('Grund ist fuer Schwund, Verderb, Bruch und Verlust erforderlich');
     }
 
     item.quantity = nextQuantity;
     const saved = await item.save();
     const unitPriceNet = payload.unitPriceNet ?? saved.purchasePriceNet ?? 0;
+    const batchIds = payload.quantityChange < 0
+      ? await this.consumeBatches(
+          saved._id.toString(),
+          Math.abs(payload.quantityChange),
+          payload.batchId,
+        )
+      : [];
     const movement = await this.movementModel.create({
       locationId: saved.locationId,
       stockItemId: saved._id.toString(),
+      batchId: batchIds.join(',') || payload.batchId,
       stockItemName: saved.name,
       type: payload.type,
       quantityChange: payload.quantityChange,
       quantityBefore,
       quantityAfter: saved.quantity,
       note: payload.note,
+      reason: payload.reason,
       supplierId: payload.supplierId ?? saved.supplierId,
       supplierName: payload.supplierName ?? saved.supplierName,
       unitPriceNet,
@@ -533,6 +826,10 @@ export class StockService {
       .find({ locationId: { $in: locationIds }, isArchived: { $ne: true } })
       .exec();
     await Promise.all(items.map((item) => this.syncLowStockAlert(item)));
+    const batches = await this.batchModel
+      .find({ locationId: { $in: locationIds }, isActive: true, remainingQuantity: { $gt: 0 } })
+      .exec();
+    await Promise.all(batches.map((batch) => this.syncExpiryAlert(batch)));
   }
 
   private async syncLowStockAlert(item: StockItemDocument): Promise<void> {
@@ -546,7 +843,7 @@ export class StockService {
           stockItemName: item.name,
           type: 'Mindestbestand',
           message: `${item.name} liegt mit ${item.quantity} ${item.unit} am oder unter dem Mindestbestand von ${item.minQuantity} ${item.unit}.`,
-          severity: item.quantity <= 0 ? 'critical' : 'warning',
+          severity: item.quantity <= (item.criticalQuantity ?? 0) || item.quantity < 0 ? 'critical' : 'warning',
           isResolved: false,
         },
         { upsert: true, new: true },
@@ -560,6 +857,98 @@ export class StockService {
         { isResolved: true },
       )
       .exec();
+  }
+
+  private async syncExpiryAlert(batch: InventoryBatchDocument): Promise<void> {
+    const batchId = batch._id.toString();
+    const daysUntilExpiry = this.daysUntil(batch.expiresAt);
+
+    if (
+      batch.isActive &&
+      batch.remainingQuantity > 0 &&
+      daysUntilExpiry !== undefined &&
+      daysUntilExpiry <= 7
+    ) {
+      await this.stockAlertModel.findOneAndUpdate(
+        { stockItemId: batch.stockItemId, type: `MHD:${batchId}`, isResolved: false },
+        {
+          locationId: batch.locationId,
+          stockItemId: batch.stockItemId,
+          stockItemName: batch.stockItemName,
+          type: `MHD:${batchId}`,
+          message: `${batch.stockItemName} Charge ${batch.batchNumber ?? batchId} laeuft in ${daysUntilExpiry} Tagen ab.`,
+          severity: daysUntilExpiry <= 2 ? 'critical' : 'warning',
+          isResolved: false,
+        },
+        { upsert: true, new: true },
+      );
+      return;
+    }
+
+    await this.stockAlertModel
+      .updateMany(
+        { stockItemId: batch.stockItemId, type: `MHD:${batchId}`, isResolved: false },
+        { isResolved: true },
+      )
+      .exec();
+  }
+
+  private async consumeBatches(
+    stockItemId: string,
+    quantity: number,
+    preferredBatchId?: string,
+  ): Promise<string[]> {
+    let remaining = quantity;
+    const usedBatchIds: string[] = [];
+    const query = {
+      stockItemId,
+      isActive: true,
+      remainingQuantity: { $gt: 0 },
+      ...(preferredBatchId ? { _id: preferredBatchId } : {}),
+    };
+    const batches = await this.batchModel
+      .find(query)
+      .sort({ expiresAt: 1, receivedAt: 1 })
+      .exec();
+
+    for (const batch of batches) {
+      if (remaining <= 0) break;
+      const consumed = Math.min(batch.remainingQuantity, remaining);
+      batch.remainingQuantity -= consumed;
+      batch.isActive = batch.remainingQuantity > 0;
+      await batch.save();
+      await this.syncExpiryAlert(batch);
+      usedBatchIds.push(batch._id.toString());
+      remaining -= consumed;
+    }
+
+    if (remaining > 0 && preferredBatchId) {
+      return usedBatchIds;
+    }
+
+    if (remaining > 0 && !preferredBatchId) {
+      return usedBatchIds;
+    }
+
+    return usedBatchIds;
+  }
+
+  private daysFromNow(days: number): Date {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date;
+  }
+
+  private daysUntil(value?: Date): number | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    return Math.ceil((date.getTime() - now.getTime()) / 86_400_000);
   }
 
   private toItemResponse(item: StockItemDocument): StockItemResponse {
@@ -578,6 +967,7 @@ export class StockService {
       unit: item.unit,
       quantity: item.quantity,
       minQuantity: item.minQuantity,
+      criticalQuantity: item.criticalQuantity ?? 0,
       targetQuantity: item.targetQuantity,
       supplierId: item.supplierId,
       supplierName: item.supplierName,
@@ -587,11 +977,15 @@ export class StockService {
       salePrice: item.salePrice ?? 0,
       vatRate: item.vatRate ?? 19,
       storageLocation: item.storageLocation,
+      requiresExpiryDate: item.requiresExpiryDate ?? false,
+      ingredientCategory: item.ingredientCategory,
       note: item.note,
       isActive: item.isActive,
       isArchived: item.isArchived ?? false,
       lowStock: item.isActive && !item.isArchived && item.quantity <= item.minQuantity,
       stockValueNet: item.quantity * (item.purchasePriceNet ?? 0),
+      criticalStock: item.isActive && !item.isArchived && item.quantity <= (item.criticalQuantity ?? 0),
+      negativeStock: item.quantity < 0,
       createdAt: timestamped.createdAt?.toISOString(),
       updatedAt: timestamped.updatedAt?.toISOString(),
     };
@@ -606,12 +1000,15 @@ export class StockService {
       _id: movement._id.toString(),
       locationId: movement.locationId,
       stockItemId: movement.stockItemId,
+      batchId: movement.batchId,
+      orderId: movement.orderId,
       stockItemName: movement.stockItemName,
       type: movement.type,
       quantityChange: movement.quantityChange,
       quantityBefore: movement.quantityBefore ?? Math.max(0, movement.quantityAfter - movement.quantityChange),
       quantityAfter: movement.quantityAfter,
       note: movement.note,
+      reason: movement.reason,
       supplierId: movement.supplierId,
       supplierName: movement.supplierName,
       unitPriceNet: movement.unitPriceNet ?? 0,
@@ -691,5 +1088,35 @@ export class StockService {
       difference: count.difference,
       differenceValue: count.differenceValue,
     };
+  }
+
+  private toBatchResponse(batch: InventoryBatchDocument): InventoryBatchResponse {
+    const timestamped = batch as InventoryBatchDocument & { createdAt?: Date; updatedAt?: Date };
+    const daysUntilExpiry = this.daysUntil(batch.expiresAt);
+    return {
+      _id: batch._id.toString(),
+      locationId: batch.locationId,
+      stockItemId: batch.stockItemId,
+      stockItemName: batch.stockItemName,
+      unit: batch.unit,
+      batchNumber: batch.batchNumber,
+      initialQuantity: batch.initialQuantity,
+      remainingQuantity: batch.remainingQuantity,
+      unitPriceNet: batch.unitPriceNet ?? 0,
+      supplierId: batch.supplierId,
+      supplierName: batch.supplierName,
+      storageLocation: batch.storageLocation,
+      receivedAt: batch.receivedAt?.toISOString() ?? timestamped.createdAt?.toISOString(),
+      expiresAt: batch.expiresAt?.toISOString(),
+      note: batch.note,
+      isActive: batch.isActive,
+      daysUntilExpiry,
+      expiringSoon: daysUntilExpiry !== undefined && daysUntilExpiry <= 7,
+    };
+  }
+
+  private async nextPurchaseOrderNumber(locationId: string): Promise<string> {
+    const count = await this.purchaseOrderModel.countDocuments({ locationId }).exec();
+    return `PO-${String(count + 1).padStart(5, '0')}`;
   }
 }

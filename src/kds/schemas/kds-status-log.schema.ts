@@ -5,6 +5,9 @@ export type KdsStatusLogDocument = HydratedDocument<KdsStatusLog>;
 
 @Schema({ timestamps: true, versionKey: false })
 export class KdsStatusLog {
+  @Prop({ trim: true, index: true })
+  companyId?: string;
+
   @Prop({ required: true, trim: true, index: true })
   locationId!: string;
 
@@ -28,6 +31,9 @@ export class KdsStatusLog {
 
   @Prop({ trim: true })
   employeeName?: string;
+
+  @Prop({ trim: true })
+  employeeRole?: string;
 
   @Prop({ trim: true })
   comment?: string;

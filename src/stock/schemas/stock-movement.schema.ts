@@ -24,6 +24,12 @@ export class StockMovement {
   @Prop({ required: true, trim: true, index: true })
   stockItemId!: string;
 
+  @Prop({ trim: true, index: true })
+  batchId?: string;
+
+  @Prop({ trim: true, index: true })
+  orderId?: string;
+
   @Prop({ required: true, trim: true })
   stockItemName!: string;
 
@@ -36,7 +42,7 @@ export class StockMovement {
   @Prop({ required: true, min: 0, default: 0 })
   quantityBefore!: number;
 
-  @Prop({ required: true, min: 0 })
+  @Prop({ required: true })
   quantityAfter!: number;
 
   @Prop({ trim: true })
@@ -53,6 +59,9 @@ export class StockMovement {
 
   @Prop({ trim: true })
   note?: string;
+
+  @Prop({ trim: true })
+  reason?: string;
 
   @Prop({ required: true, trim: true })
   actorId!: string;

@@ -16,6 +16,7 @@ export enum OrderStatus {
 
 export enum OrderItemStatus {
   Open = 'Offen',
+  Started = 'Gestartet',
   Preparing = 'In Zubereitung',
   Ready = 'Fertig',
   Served = 'Ausgegeben',
@@ -58,6 +59,9 @@ export class OrderItem {
 
   @Prop({ trim: true, index: true })
   productId?: string;
+
+  @Prop({ trim: true, index: true })
+  menuItemId?: string;
 
   @Prop({ required: true, trim: true })
   name!: string;
@@ -111,6 +115,36 @@ export class OrderItem {
 
   @Prop()
   changedAt?: Date;
+
+  @Prop()
+  startedAt?: Date;
+
+  @Prop({ trim: true })
+  startedBy?: string;
+
+  @Prop()
+  inPreparationAt?: Date;
+
+  @Prop({ trim: true })
+  inPreparationBy?: string;
+
+  @Prop()
+  readyAt?: Date;
+
+  @Prop({ trim: true })
+  readyBy?: string;
+
+  @Prop()
+  servedAt?: Date;
+
+  @Prop({ trim: true })
+  servedBy?: string;
+
+  @Prop()
+  cancelledAt?: Date;
+
+  @Prop({ trim: true })
+  cancelledBy?: string;
 }
 
 export const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
@@ -202,6 +236,12 @@ export class Order {
 
   @Prop()
   cancelledAt?: Date;
+
+  @Prop({ index: true })
+  inventoryConsumedAt?: Date;
+
+  @Prop({ index: true })
+  inventoryReversedAt?: Date;
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);

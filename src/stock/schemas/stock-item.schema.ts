@@ -23,11 +23,14 @@ export class StockItem {
   @Prop({ required: true, trim: true })
   unit!: string;
 
-  @Prop({ required: true, min: 0, default: 0 })
+  @Prop({ required: true, default: 0 })
   quantity!: number;
 
   @Prop({ required: true, min: 0, default: 0 })
   minQuantity!: number;
+
+  @Prop({ min: 0, default: 0 })
+  criticalQuantity!: number;
 
   @Prop({ min: 0 })
   targetQuantity?: number;
@@ -55,6 +58,12 @@ export class StockItem {
 
   @Prop({ trim: true })
   storageLocation?: string;
+
+  @Prop({ default: false, index: true })
+  requiresExpiryDate!: boolean;
+
+  @Prop({ trim: true })
+  ingredientCategory?: string;
 
   @Prop({ trim: true })
   note?: string;

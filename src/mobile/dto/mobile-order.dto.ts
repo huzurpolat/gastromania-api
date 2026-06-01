@@ -17,6 +17,14 @@ import {
 } from '../../orders/schemas/order.schema';
 
 export class MobileOrderItemDto {
+  @IsOptional()
+  @IsString()
+  productId?: string;
+
+  @IsOptional()
+  @IsString()
+  menuItemId?: string;
+
   @IsString()
   name!: string;
 

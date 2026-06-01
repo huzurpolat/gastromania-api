@@ -1,11 +1,13 @@
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
+import { Role } from '../auth/enums/role.enum';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RestaurantTable, TableStatus } from '../tables/schemas/table.schema';
+import { KdsStatusLog } from '../kds/schemas/kds-status-log.schema';
 import { OrdersService } from './orders.service';
-import { Order, OrderStatus } from './schemas/order.schema';
+import { Order, OrderItemStatus, OrderStatus } from './schemas/order.schema';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -14,6 +16,10 @@ describe('OrdersService', () => {
   const orderModel = {
     create: jest.fn(),
     countDocuments: jest.fn(),
+    findById: jest.fn(),
+  };
+  const logModel = {
+    create: jest.fn(),
   };
   const tableModel = {
     findByIdAndUpdate: jest.fn(),
@@ -26,6 +32,7 @@ describe('OrdersService', () => {
   };
   const accessPolicy = {
     assertCanAccessLocation: jest.fn(),
+    canAccessLocation: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -36,6 +43,7 @@ describe('OrdersService', () => {
     orderModel.create.mockImplementation(async (payload: Record<string, unknown>) => ({
       _id: { toString: () => '507f1f77bcf86cd799439014' },
       ...payload,
+      save: jest.fn().mockResolvedValue(undefined),
       deleteOne: jest.fn(),
     }));
     tableModel.findByIdAndUpdate.mockReturnValue({
@@ -43,12 +51,15 @@ describe('OrdersService', () => {
     });
     recipeInventoryService.consumeOrder.mockResolvedValue(undefined);
     accessPolicy.assertCanAccessLocation.mockResolvedValue(undefined);
+    accessPolicy.canAccessLocation.mockResolvedValue(true);
+    logModel.create.mockResolvedValue({});
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         OrdersService,
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(RestaurantTable.name), useValue: tableModel },
+        { provide: getModelToken(KdsStatusLog.name), useValue: logModel },
         { provide: RealtimeService, useValue: realtimeService },
         { provide: RecipeInventoryService, useValue: recipeInventoryService },
         { provide: AccessPolicyService, useValue: accessPolicy },
@@ -95,5 +106,76 @@ describe('OrdersService', () => {
       { new: true },
     );
     expect(realtimeService.publish).toHaveBeenCalledWith('order.created', order);
+  });
+
+  it('aggregates order status from item status changes and writes an audit log', async () => {
+    const order = {
+      _id: { toString: () => '507f1f77bcf86cd799439014' },
+      companyId: 'company-1',
+      locationId,
+      tableId,
+      orderNumber: 'B0001',
+      status: OrderStatus.Preparing,
+      statusTimestamps: {},
+      items: [
+        {
+          _id: { toString: () => '507f1f77bcf86cd799439015' },
+          name: 'Burger',
+          quantity: 1,
+          price: 12,
+          status: OrderItemStatus.Ready,
+        },
+        {
+          _id: { toString: () => '507f1f77bcf86cd799439016' },
+          name: 'Pommes',
+          quantity: 1,
+          price: 5,
+          status: OrderItemStatus.Preparing,
+        },
+      ],
+      save: jest.fn(),
+    };
+    order.save.mockResolvedValue(order);
+    orderModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(order),
+    });
+
+    const updated = await service.updateItemStatus(
+      '507f1f77bcf86cd799439014',
+      '507f1f77bcf86cd799439016',
+      { status: OrderItemStatus.Ready, note: 'fertig' },
+      {
+        sub: 'kitchen-1',
+        email: 'kueche@test.local',
+        roles: [Role.Kueche],
+        companyId: 'company-1',
+      },
+    );
+
+    expect(updated.status).toBe(OrderStatus.Ready);
+    expect(order.items[1]).toEqual(
+      expect.objectContaining({
+        status: OrderItemStatus.Ready,
+        readyBy: 'kitchen-1',
+      }),
+    );
+    expect(logModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'order.item.status.changed',
+        itemId: '507f1f77bcf86cd799439016',
+        fromStatus: OrderItemStatus.Preparing,
+        toStatus: OrderItemStatus.Ready,
+        comment: 'fertig',
+      }),
+    );
+    expect(realtimeService.publish).toHaveBeenCalledWith(
+      'order.item.status.changed',
+      expect.objectContaining({
+        locationId,
+        itemName: 'Pommes',
+        newStatus: OrderItemStatus.Ready,
+        orderStatus: OrderStatus.Ready,
+      }),
+    );
   });
 });

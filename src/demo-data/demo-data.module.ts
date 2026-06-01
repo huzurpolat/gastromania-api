@@ -36,6 +36,14 @@ import {
   StockMovementSchema,
 } from '../stock/schemas/stock-movement.schema';
 import { Supplier, SupplierSchema } from '../suppliers/schemas/supplier.schema';
+import {
+  InventoryBatch,
+  InventoryBatchSchema,
+} from '../stock/schemas/inventory-batch.schema';
+import {
+  PurchaseOrder,
+  PurchaseOrderSchema,
+} from '../stock/schemas/purchase-order.schema';
 import { TimeEntry, TimeEntrySchema } from '../time-tracking/schemas/time-entry.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { WeeklyMenu, WeeklyMenuSchema } from '../weekly-menus/schemas/weekly-menu.schema';
@@ -61,6 +69,8 @@ import { DemoDataService } from './demo-data.service';
       { name: InternalMessage.name, schema: InternalMessageSchema },
       { name: StockItem.name, schema: StockItemSchema },
       { name: StockMovement.name, schema: StockMovementSchema },
+      { name: InventoryBatch.name, schema: InventoryBatchSchema },
+      { name: PurchaseOrder.name, schema: PurchaseOrderSchema },
       { name: Supplier.name, schema: SupplierSchema },
       { name: Checklist.name, schema: ChecklistSchema },
     ]),

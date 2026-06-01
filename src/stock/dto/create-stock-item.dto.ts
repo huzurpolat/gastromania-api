@@ -49,6 +49,11 @@ export class CreateStockItemDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  criticalQuantity?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   targetQuantity?: number;
 
   @IsOptional()
@@ -89,6 +94,15 @@ export class CreateStockItemDto {
   @IsString()
   @MaxLength(120)
   storageLocation?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  requiresExpiryDate?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  ingredientCategory?: string;
 
   @IsOptional()
   @IsString()

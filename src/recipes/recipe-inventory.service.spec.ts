@@ -8,6 +8,9 @@ describe('RecipeInventoryService', () => {
   const stockItemModel = {
     findById: jest.fn(),
   };
+  const batchModel = {
+    find: jest.fn(),
+  };
   const movementModel = {
     create: jest.fn(),
   };
@@ -18,8 +21,14 @@ describe('RecipeInventoryService', () => {
     service = new RecipeInventoryService(
       recipeModel as never,
       stockItemModel as never,
+      batchModel as never,
       movementModel as never,
     );
+    batchModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([]),
+      }),
+    });
   });
 
   it('subtracts ingredient quantities when an order item matches a recipe', async () => {
@@ -104,5 +113,61 @@ describe('RecipeInventoryService', () => {
         'user-1',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('matches recipes by menu item id before falling back to the item name', async () => {
+    const recipe = {
+      name: 'Cheeseburger Rezept',
+      ingredients: [
+        {
+          stockItemId: 'stock-bun',
+          stockItemName: 'Burger Bun',
+          quantity: 1,
+          unit: 'Stueck',
+          purchasePriceNet: 0.4,
+        },
+      ],
+    };
+    const item = {
+      _id: { toString: () => 'stock-bun' },
+      locationId: 'loc-1',
+      name: 'Burger Bun',
+      quantity: 5,
+      purchasePriceNet: 0.4,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    recipeModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(recipe),
+    });
+    stockItemModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(item),
+    });
+    movementModel.create.mockResolvedValue({});
+
+    await service.consumeOrder(
+      {
+        _id: 'order-2',
+        locationId: 'loc-1',
+        items: [{ menuItemId: 'menu-cheeseburger', productId: 'legacy-id', name: 'Cheeseburger', quantity: 2 }],
+      } as never,
+      'user-1',
+    );
+
+    expect(recipeModel.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        $or: expect.arrayContaining([
+          { menuItemId: 'menu-cheeseburger' },
+          { name: 'Cheeseburger' },
+        ]),
+      }),
+    );
+    expect(item.quantity).toBe(3);
+    expect(movementModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-2',
+        quantityChange: -2,
+        quantityAfter: 3,
+      }),
+    );
   });
 });

@@ -13,6 +13,10 @@ import {
   InventoryCountSchema,
 } from './schemas/inventory-count.schema';
 import {
+  InventoryBatch,
+  InventoryBatchSchema,
+} from './schemas/inventory-batch.schema';
+import {
   InventoryLocation,
   InventoryLocationSchema,
 } from './schemas/inventory-location.schema';
@@ -21,6 +25,10 @@ import {
   InventorySessionSchema,
 } from './schemas/inventory-session.schema';
 import { StockAlert, StockAlertSchema } from './schemas/stock-alert.schema';
+import {
+  PurchaseOrder,
+  PurchaseOrderSchema,
+} from './schemas/purchase-order.schema';
 import {
   StockMovement,
   StockMovementSchema,
@@ -33,6 +41,8 @@ import { StockService } from './stock.service';
     AuthJwtModule,
     MongooseModule.forFeature([
       { name: StockItem.name, schema: StockItemSchema },
+      { name: InventoryBatch.name, schema: InventoryBatchSchema },
+      { name: PurchaseOrder.name, schema: PurchaseOrderSchema },
       { name: StockMovement.name, schema: StockMovementSchema },
       { name: InventoryLocation.name, schema: InventoryLocationSchema },
       { name: InventoryCategory.name, schema: InventoryCategorySchema },

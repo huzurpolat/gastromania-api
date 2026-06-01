@@ -23,11 +23,14 @@ import type { AuthenticatedUser } from '../auth/types/authenticated-request.type
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { CreateInventoryCategoryDto } from './dto/create-inventory-category.dto';
 import { CreateInventoryLocationDto } from './dto/create-inventory-location.dto';
+import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
 import {
   CompleteInventorySessionDto,
   StartInventorySessionDto,
 } from './dto/inventory-session.dto';
+import { ReceiveStockDto } from './dto/receive-stock.dto';
+import { ReportWasteDto } from './dto/report-waste.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
 import { StockService } from './stock.service';
 
@@ -187,6 +190,63 @@ export class StockController {
     @Query('locationId') locationId?: string,
   ) {
     return this.stockService.findMovements(user, locationId);
+  }
+
+  @Get('batches')
+  @Permissions('inventory.view')
+  findBatches(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+  ) {
+    return this.stockService.findBatches(user, locationId);
+  }
+
+  @Post('receive')
+  @Permissions('inventory.stock.adjust')
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Lager, Role.Einkauf)
+  receiveStock(
+    @Body() payload: ReceiveStockDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.receiveStock(payload, user);
+  }
+
+  @Post('waste')
+  @Permissions('inventory.stock.adjust')
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Lager, Role.Kueche)
+  reportWaste(
+    @Body() payload: ReportWasteDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.reportWaste(payload, user);
+  }
+
+  @Get('reorder-suggestions')
+  @Permissions('inventory.view')
+  reorderSuggestions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+  ) {
+    return this.stockService.reorderSuggestions(user, locationId);
+  }
+
+  @Get('purchase-orders')
+  @Permissions('inventory.view')
+  listPurchaseOrders(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+  ) {
+    return this.stockService.listPurchaseOrders(user, locationId);
+  }
+
+  @Post('purchase-orders')
+  @Permissions('inventory.create')
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Lager, Role.Einkauf)
+  createPurchaseOrder(
+    @Body() payload: CreatePurchaseOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.createPurchaseOrder(payload, user);
   }
 
   @Patch(':id')

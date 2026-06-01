@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
+import { AccessPolicyService } from '../access/access-policy.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -51,6 +52,7 @@ export class KdsController {
   constructor(
     private readonly kdsService: KdsService,
     private readonly realtimeService: RealtimeService,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   @Get('orders')
@@ -171,7 +173,33 @@ export class KdsController {
 
   @Sse('events')
   @Permissions('kds.view')
-  events(): Observable<MessageEvent> {
-    return this.realtimeService.stream();
+  async events(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<Observable<MessageEvent>> {
+    if (this.accessPolicy.isPlatformAdmin(user)) {
+      return this.realtimeService.stream();
+    }
+
+    const locationIds = await this.accessPolicy.getReadableLocationIds(user);
+
+    return this.realtimeService.streamWhere((event) =>
+      this.isEventInScope(event, locationIds),
+    );
+  }
+
+  private isEventInScope(event: MessageEvent, locationIds: string[]): boolean {
+    const data = event.data as {
+      payload?: {
+        locationId?: string;
+        order?: { locationId?: string };
+        settings?: { locationId?: string };
+      };
+    };
+    const locationId =
+      data.payload?.locationId ??
+      data.payload?.order?.locationId ??
+      data.payload?.settings?.locationId;
+
+    return Boolean(locationId && locationIds.includes(locationId));
   }
 }

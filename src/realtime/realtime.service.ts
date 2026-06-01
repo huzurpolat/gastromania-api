@@ -1,5 +1,5 @@
 import { Injectable, MessageEvent } from '@nestjs/common';
-import { Observable, Subject } from 'rxjs';
+import { filter, Observable, Subject } from 'rxjs';
 
 export interface RealtimePayload<T = unknown> {
   event: string;
@@ -13,6 +13,10 @@ export class RealtimeService {
 
   stream(): Observable<MessageEvent> {
     return this.events.asObservable();
+  }
+
+  streamWhere(predicate: (event: MessageEvent) => boolean): Observable<MessageEvent> {
+    return this.events.asObservable().pipe(filter(predicate));
   }
 
   publish<T>(event: string, payload: T): void {

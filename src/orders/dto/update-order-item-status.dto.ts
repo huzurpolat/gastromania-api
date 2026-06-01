@@ -1,9 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
-import {
-  OrderItemStatus,
-  OrderStatus,
-} from '../../orders/schemas/order.schema';
+import { OrderItemStatus } from '../schemas/order.schema';
 
 const STATUS_ALIASES: Record<string, OrderItemStatus> = {
   open: OrderItemStatus.Open,
@@ -20,7 +17,7 @@ const optionalTrimString = (value: unknown): unknown => {
   return trimmedValue === '' ? undefined : trimmedValue;
 };
 
-const normalizeItemStatus = (value: unknown): unknown => {
+const normalizeStatus = (value: unknown): unknown => {
   const trimmedValue = optionalTrimString(value);
 
   if (typeof trimmedValue !== 'string') {
@@ -30,23 +27,8 @@ const normalizeItemStatus = (value: unknown): unknown => {
   return STATUS_ALIASES[trimmedValue] ?? trimmedValue;
 };
 
-export class UpdateOrderStatusDto {
-  @IsEnum(OrderStatus)
-  status!: OrderStatus;
-
-  @Transform(({ value }) => optionalTrimString(value))
-  @IsOptional()
-  @IsString()
-  employeeName?: string;
-
-  @Transform(({ value }) => optionalTrimString(value))
-  @IsOptional()
-  @IsString()
-  comment?: string;
-}
-
 export class UpdateOrderItemStatusDto {
-  @Transform(({ value }) => normalizeItemStatus(value))
+  @Transform(({ value }) => normalizeStatus(value))
   @IsEnum(OrderItemStatus)
   status!: OrderItemStatus;
 
@@ -64,16 +46,4 @@ export class UpdateOrderItemStatusDto {
   @IsOptional()
   @IsString()
   note?: string;
-}
-
-export class KdsActionDto {
-  @Transform(({ value }) => optionalTrimString(value))
-  @IsOptional()
-  @IsString()
-  employeeName?: string;
-
-  @Transform(({ value }) => optionalTrimString(value))
-  @IsOptional()
-  @IsString()
-  comment?: string;
 }

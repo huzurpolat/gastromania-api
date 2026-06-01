@@ -13,6 +13,14 @@ import {
   StockMovement,
   StockMovementSchema,
 } from '../stock/schemas/stock-movement.schema';
+import {
+  InventoryBatch,
+  InventoryBatchSchema,
+} from '../stock/schemas/inventory-batch.schema';
+import {
+  KdsStatusLog,
+  KdsStatusLogSchema,
+} from '../kds/schemas/kds-status-log.schema';
 import { Order, OrderSchema } from './schemas/order.schema';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
@@ -26,7 +34,9 @@ import { OrdersService } from './orders.service';
       { name: Recipe.name, schema: RecipeSchema },
       { name: StockItem.name, schema: StockItemSchema },
       { name: StockMovement.name, schema: StockMovementSchema },
+      { name: InventoryBatch.name, schema: InventoryBatchSchema },
       { name: RestaurantTable.name, schema: RestaurantTableSchema },
+      { name: KdsStatusLog.name, schema: KdsStatusLogSchema },
     ]),
   ],
   controllers: [OrdersController],
