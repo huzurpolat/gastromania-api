@@ -13,6 +13,7 @@ const modules = {
   companies: ['view', 'create', 'update'],
   regions: ['view', 'create', 'update'],
   locations: ['view', 'create', 'update', 'delete'],
+  tables: ['view', 'create', 'update', 'delete'],
   orders: ['view', 'create', 'update', 'cancel'],
   kds: ['view', 'manage'],
   reservations: ['view', 'create', 'update', 'delete'],
@@ -83,6 +84,7 @@ const regionAdminPermissions = withoutPermissions(
   'roles.delete',
   'roles.permissions.update',
   'settings.update',
+  'tables.delete',
 );
 
 const regionalleiterPermissions = withoutPermissions(
@@ -92,6 +94,7 @@ const regionalleiterPermissions = withoutPermissions(
   'regions.update',
   'roles.',
   'settings.',
+  'tables.delete',
 );
 
 const bereichsleiterPermissions = withoutPermissions(
@@ -103,6 +106,7 @@ const bereichsleiterPermissions = withoutPermissions(
   'settings.',
   'locations.create',
   'locations.delete',
+  'tables.delete',
 );
 
 const filialleiterPermissions = withoutPermissions(
@@ -113,6 +117,7 @@ const filialleiterPermissions = withoutPermissions(
   'settings.',
   'locations.create',
   'locations.delete',
+  'tables.delete',
 );
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {

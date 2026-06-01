@@ -58,6 +58,9 @@ describe('permissions catalog', () => {
       expect.arrayContaining([
         'locations.view',
         'locations.update',
+        'tables.view',
+        'tables.create',
+        'tables.update',
         'users.view',
         'users.create',
         'users.update',
@@ -71,6 +74,7 @@ describe('permissions catalog', () => {
         'regions.update',
         'roles.update',
         'settings.update',
+        'tables.delete',
         'audit.view',
       ]),
     );
@@ -82,6 +86,7 @@ describe('permissions catalog', () => {
         'regions.update',
         'roles.view',
         'settings.view',
+        'tables.delete',
         'audit.view',
       ]),
     );
@@ -93,7 +98,18 @@ describe('permissions catalog', () => {
         'roles.view',
         'locations.create',
         'locations.delete',
+        'tables.delete',
         'settings.view',
+      ]),
+    );
+
+    expect(DEFAULT_ROLE_PERMISSIONS.Filialleiter).toEqual(
+      expect.arrayContaining([
+        'locations.view',
+        'locations.update',
+        'tables.view',
+        'tables.create',
+        'tables.update',
       ]),
     );
 
@@ -104,6 +120,7 @@ describe('permissions catalog', () => {
         'roles.view',
         'locations.create',
         'locations.delete',
+        'tables.delete',
         'settings.view',
       ]),
     );

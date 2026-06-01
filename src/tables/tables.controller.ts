@@ -27,28 +27,28 @@ export class TablesController {
   constructor(private readonly tablesService: TablesService) {}
 
   @Post()
-  @Permissions('locations.create')
+  @Permissions('tables.create')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   create(@Body() createTableDto: CreateTableDto, @CurrentUser() user: AuthenticatedUser) {
     return this.tablesService.create(createTableDto, user);
   }
 
   @Get()
-  @Permissions('locations.view')
+  @Permissions('tables.view')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service)
   findAll(@CurrentUser() user: AuthenticatedUser, @Query('locationId') locationId?: string) {
     return this.tablesService.findAll(user, locationId);
   }
 
   @Get(':id')
-  @Permissions('locations.view')
+  @Permissions('tables.view')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service)
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.tablesService.findOne(id, user);
   }
 
   @Patch(':id')
-  @Permissions('locations.update')
+  @Permissions('tables.update')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
   update(
     @Param('id') id: string,
@@ -59,7 +59,7 @@ export class TablesController {
   }
 
   @Delete(':id')
-  @Permissions('locations.delete')
+  @Permissions('tables.delete')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.tablesService.remove(id, user);
