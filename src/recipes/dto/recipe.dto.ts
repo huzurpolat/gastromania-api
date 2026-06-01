@@ -136,6 +136,14 @@ export class RecipeStepDto {
 export class CreateRecipeDto {
   @IsOptional()
   @IsString()
+  companyId?: string;
+
+  @IsOptional()
+  @IsString()
+  locationId?: string;
+
+  @IsOptional()
+  @IsString()
   recipeNumber?: string;
 
   @IsOptional()

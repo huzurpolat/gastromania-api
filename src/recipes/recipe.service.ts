@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +8,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { StockItem, StockItemDocument } from '../stock/schemas/stock-item.schema';
 import { CreateRecipeDto, UpdateRecipeDto } from './dto/recipe.dto';
 import { RecipeCalculationService } from './recipe-calculation.service';
 import { RecipeInventoryService } from './recipe-inventory.service';
@@ -17,6 +19,8 @@ export class RecipeService {
   constructor(
     @InjectModel(Recipe.name)
     private readonly recipeModel: Model<RecipeDocument>,
+    @InjectModel(StockItem.name)
+    private readonly stockItemModel: Model<StockItemDocument>,
     private readonly calculationService: RecipeCalculationService,
     private readonly inventoryService: RecipeInventoryService,
     private readonly accessPolicy: AccessPolicyService,
@@ -42,22 +46,28 @@ export class RecipeService {
     if (filters.productionArea) query.productionArea = filters.productionArea;
     if (filters.active !== undefined)
       query.isActive = filters.active === 'true';
-    const recipes = await this.recipeModel.find(query).sort({ name: 1 }).lean();
-    return recipes.map((recipe) => ({
-      ...recipe,
-      costing: this.calculationService.calculate(recipe as Recipe),
+    const recipes = await this.recipeModel.find(query).sort({ name: 1 }).exec();
+    const scopedRecipes = await this.filterReadableRecipes(recipes, _actor);
+    return scopedRecipes.map((recipe) => ({
+      ...recipe.toObject(),
+      costing: this.calculationService.calculate(recipe),
     }));
   }
 
-  async findOne(id: string, _actor?: AuthenticatedUser): Promise<RecipeDocument> {
+  async findOne(id: string, actor?: AuthenticatedUser): Promise<RecipeDocument> {
     const recipe = await this.recipeModel.findById(id).exec();
-    if (!recipe) throw new NotFoundException('Rezept nicht gefunden');
+    if (!recipe || (actor && !(await this.canReadRecipe(recipe, actor)))) {
+      throw new NotFoundException('Rezept nicht gefunden');
+    }
     return recipe;
   }
 
   async create(payload: CreateRecipeDto, actor: AuthenticatedUser) {
+    const scope = await this.resolveRecipeScope(payload, actor);
     const recipe = await this.recipeModel.create({
       ...payload,
+      companyId: scope.companyId,
+      locationId: scope.locationId,
       recipeNumber: payload.recipeNumber ?? (await this.nextRecipeNumber()),
       isActive: payload.isActive ?? true,
       visibleInSales: payload.visibleInSales ?? true,
@@ -69,7 +79,19 @@ export class RecipeService {
 
   async update(id: string, payload: UpdateRecipeDto, actor: AuthenticatedUser) {
     const recipe = await this.findOne(id, actor);
-    recipe.set(payload);
+    const scope = await this.resolveRecipeScope(
+      {
+        ...recipe.toObject(),
+        ...payload,
+        ingredients: payload.ingredients ?? recipe.ingredients,
+      } as CreateRecipeDto,
+      actor,
+    );
+    recipe.set({
+      ...payload,
+      companyId: scope.companyId,
+      locationId: scope.locationId,
+    });
     this.addVersion(recipe, actor.sub);
     return recipe.save();
   }
@@ -81,6 +103,8 @@ export class RecipeService {
     clone.recipeNumber = await this.nextRecipeNumber();
     clone.name = `${recipe.name} Kopie`;
     clone.versions = [];
+    clone.companyId = recipe.companyId ?? actor.companyId;
+    clone.locationId = recipe.locationId;
     const copied = await this.recipeModel.create(clone);
     this.addVersion(copied, actor.sub);
     return copied.save();
@@ -156,12 +180,13 @@ export class RecipeService {
     };
   }
 
-  async report(_actor: AuthenticatedUser) {
+  async report(actor: AuthenticatedUser) {
     const recipes = await this.recipeModel
       .find({ isArchived: { $ne: true } })
       .sort({ category: 1, name: 1 })
       .exec();
-    return recipes.map((recipe) => ({
+    const scopedRecipes = await this.filterReadableRecipes(recipes, actor);
+    return scopedRecipes.map((recipe) => ({
       _id: recipe._id.toString(),
       recipeNumber: recipe.recipeNumber,
       name: recipe.name,
@@ -185,5 +210,86 @@ export class RecipeService {
       changedBy: actorId,
       snapshot: recipe.toObject() as unknown as Record<string, unknown>,
     });
+  }
+
+  private async resolveRecipeScope(
+    payload: Pick<CreateRecipeDto, 'companyId' | 'locationId' | 'ingredients'>,
+    actor: AuthenticatedUser,
+  ): Promise<{ companyId?: string; locationId?: string }> {
+    let locationId = payload.locationId;
+
+    if (!locationId && payload.ingredients?.length) {
+      const firstIngredient = await this.stockItemModel
+        .findById(payload.ingredients[0].stockItemId)
+        .select('locationId')
+        .exec();
+      locationId = firstIngredient?.locationId;
+    }
+
+    if (locationId) {
+      await this.accessPolicy.assertCanAccessLocation(actor, locationId);
+      await this.assertIngredientsInLocation(payload.ingredients ?? [], locationId);
+    }
+
+    if (payload.companyId && !(await this.accessPolicy.canAccessCompany(actor, payload.companyId))) {
+      throw new ForbiddenException('Keine Berechtigung fuer dieses Unternehmen');
+    }
+
+    return {
+      companyId: payload.companyId ?? actor.companyId,
+      locationId,
+    };
+  }
+
+  private async assertIngredientsInLocation(
+    ingredients: CreateRecipeDto['ingredients'],
+    locationId: string,
+  ): Promise<void> {
+    for (const ingredient of ingredients) {
+      const item = await this.stockItemModel
+        .findById(ingredient.stockItemId)
+        .select('locationId')
+        .exec();
+      if (!item || item.locationId !== locationId) {
+        throw new BadRequestException('Alle Rezeptzutaten muessen zum Rezeptstandort gehoeren');
+      }
+    }
+  }
+
+  private async filterReadableRecipes(
+    recipes: RecipeDocument[],
+    actor: AuthenticatedUser,
+  ): Promise<RecipeDocument[]> {
+    const result: RecipeDocument[] = [];
+    for (const recipe of recipes) {
+      if (await this.canReadRecipe(recipe, actor)) {
+        result.push(recipe);
+      }
+    }
+    return result;
+  }
+
+  private async canReadRecipe(
+    recipe: RecipeDocument,
+    actor: AuthenticatedUser,
+  ): Promise<boolean> {
+    if (
+      !(await this.accessPolicy.canAccessCompany(actor, recipe.companyId)) ||
+      !(await this.accessPolicy.canAccessLocation(actor, recipe.locationId))
+    ) {
+      return false;
+    }
+
+    if (recipe.locationId || !recipe.ingredients.length) {
+      return true;
+    }
+
+    const readableLocationIds = await this.accessPolicy.getReadableLocationIds(actor);
+    const stockItems = await this.stockItemModel
+      .find({ _id: { $in: recipe.ingredients.map((ingredient) => ingredient.stockItemId) } })
+      .select('locationId')
+      .exec();
+
+    return stockItems.every((item) => readableLocationIds.includes(item.locationId));
   }
 }

@@ -166,6 +166,12 @@ export const RecipeVersionSchema = SchemaFactory.createForClass(RecipeVersion);
 
 @Schema({ timestamps: true, versionKey: false })
 export class Recipe {
+  @Prop({ trim: true, index: true })
+  companyId?: string;
+
+  @Prop({ trim: true, index: true })
+  locationId?: string;
+
   @Prop({ required: true, unique: true, trim: true, index: true })
   recipeNumber!: string;
 
@@ -251,3 +257,4 @@ export const RecipeSchema = SchemaFactory.createForClass(Recipe);
 
 RecipeSchema.index({ name: 1, category: 1 });
 RecipeSchema.index({ menuItemId: 1 });
+RecipeSchema.index({ companyId: 1, locationId: 1 });
