@@ -3,7 +3,7 @@ name: Deploy Gastromania API
 on:
   push:
     branches:
-      - main
+      - return
 
 jobs:
   deploy:
@@ -20,7 +20,7 @@ jobs:
             cd /opt/apps/gastromania/api
 
             git fetch origin
-            git reset --hard origin/main
+            git reset --hard origin/return
 
             npm install
             npm run build
