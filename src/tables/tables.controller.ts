@@ -18,6 +18,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateTableDto } from './dto/create-table.dto';
+import { UpdateTableStatusDto } from './dto/update-table-status.dto';
 import { UpdateTableDto } from './dto/update-table.dto';
 import { TablesService } from './tables.service';
 
@@ -77,6 +78,29 @@ export class TablesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.tablesService.update(id, updateTableDto, user);
+  }
+
+  @Patch(':id/status')
+  @Permissions('tables.status.update')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Schichtleiter,
+    Role.Service,
+    Role.Theke,
+  )
+  updateStatus(
+    @Param('id') id: string,
+    @Body() updateTableStatusDto: UpdateTableStatusDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.tablesService.updateStatus(id, updateTableStatusDto, user);
   }
 
   @Delete(':id')

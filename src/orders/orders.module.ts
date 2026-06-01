@@ -10,6 +10,10 @@ import {
   RestaurantTableSchema,
 } from '../tables/schemas/table.schema';
 import {
+  TableStatusLog,
+  TableStatusLogSchema,
+} from '../tables/schemas/table-status-log.schema';
+import {
   StockMovement,
   StockMovementSchema,
 } from '../stock/schemas/stock-movement.schema';
@@ -36,6 +40,7 @@ import { OrdersService } from './orders.service';
       { name: StockMovement.name, schema: StockMovementSchema },
       { name: InventoryBatch.name, schema: InventoryBatchSchema },
       { name: RestaurantTable.name, schema: RestaurantTableSchema },
+      { name: TableStatusLog.name, schema: TableStatusLogSchema },
       { name: KdsStatusLog.name, schema: KdsStatusLogSchema },
     ]),
   ],

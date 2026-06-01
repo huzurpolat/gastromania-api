@@ -7,6 +7,10 @@ export enum TableStatus {
   Free = 'FREE',
   OccupiedState = 'OCCUPIED',
   Ordering = 'ORDERING',
+  OrderSent = 'ORDER_SENT',
+  InPreparation = 'IN_PREPARATION',
+  ReadyToServe = 'READY_TO_SERVE',
+  Served = 'SERVED',
   InProgress = 'IN_PROGRESS',
   ReadyToPay = 'READY_TO_PAY',
   Paid = 'PAID',
@@ -28,6 +32,18 @@ export enum TableShape {
 
 @Schema({ timestamps: true, versionKey: false })
 export class RestaurantTable {
+  @Prop({ trim: true, index: true })
+  companyId?: string;
+
+  @Prop({ trim: true, index: true })
+  regionId?: string;
+
+  @Prop({ trim: true, index: true })
+  tableNumber?: string;
+
+  @Prop({ trim: true })
+  tableName?: string;
+
   @Prop({ required: true, trim: true, index: true })
   name!: string;
 
@@ -52,6 +68,30 @@ export class RestaurantTable {
 
   @Prop({ default: true })
   isActive!: boolean;
+
+  @Prop({ min: 0, default: 0 })
+  guestCount!: number;
+
+  @Prop({ type: [String], default: [], index: true })
+  activeOrderIds!: string[];
+
+  @Prop({ min: 0, default: 0 })
+  currentTotal!: number;
+
+  @Prop()
+  waitingSince?: Date;
+
+  @Prop()
+  lastStatusChange?: Date;
+
+  @Prop({ trim: true, index: true })
+  assignedWaiterId?: string;
+
+  @Prop({ trim: true, index: true })
+  reservationId?: string;
+
+  @Prop({ trim: true })
+  notes?: string;
 
   @Prop({ min: 0, max: 100 })
   planX?: number;
@@ -83,3 +123,5 @@ export const RestaurantTableSchema =
   SchemaFactory.createForClass(RestaurantTable);
 
 RestaurantTableSchema.index({ locationId: 1, name: 1 }, { unique: true });
+RestaurantTableSchema.index({ companyId: 1, regionId: 1, locationId: 1 });
+RestaurantTableSchema.index({ locationId: 1, status: 1 });

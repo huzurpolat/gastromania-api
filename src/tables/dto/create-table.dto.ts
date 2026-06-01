@@ -23,6 +23,28 @@ const optionalTrimString = (value: unknown): unknown => {
 };
 
 export class CreateTableDto {
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  companyId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  regionId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  tableNumber?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  tableName?: string;
+
   @Transform(({ value }) => trimString(value))
   @IsString()
   @IsNotEmpty()
@@ -55,6 +77,27 @@ export class CreateTableDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  guestCount?: number;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  assignedWaiterId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  reservationId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
 
   @IsOptional()
   @IsNumber()

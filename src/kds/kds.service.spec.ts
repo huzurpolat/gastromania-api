@@ -8,6 +8,7 @@ import { Order, OrderStatus } from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { RestaurantTable, TableStatus } from '../tables/schemas/table.schema';
+import { TableStatusLog } from '../tables/schemas/table-status-log.schema';
 
 describe('KdsService', () => {
   let service: KdsService;
@@ -28,7 +29,11 @@ describe('KdsService', () => {
     create: jest.fn(),
     find: jest.fn(),
   };
+  const tableStatusLogModel = {
+    create: jest.fn(),
+  };
   const tableModel = {
+    findById: jest.fn(),
     findByIdAndUpdate: jest.fn(),
   };
   const settingsModel = {
@@ -51,9 +56,31 @@ describe('KdsService', () => {
     orderModel.findById.mockReturnValue({
       exec: jest.fn().mockResolvedValue(order),
     });
+    orderModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([order]),
+      }),
+    });
     logModel.create.mockResolvedValue({});
+    tableStatusLogModel.create.mockResolvedValue({});
+    tableModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => order.tableId },
+        name: 'Fenster 01',
+        locationId: order.locationId,
+        status: TableStatus.Free,
+      }),
+    });
     tableModel.findByIdAndUpdate.mockReturnValue({
-      exec: jest.fn().mockResolvedValue({}),
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => order.tableId },
+        name: 'Fenster 01',
+        locationId: order.locationId,
+        status: TableStatus.OrderSent,
+        activeOrderIds: [order._id.toString()],
+        currentTotal: 0,
+        guestCount: 0,
+      }),
     });
     accessPolicy.canAccessLocation.mockResolvedValue(true);
     accessPolicy.assertCanManageLocation.mockResolvedValue(undefined);
@@ -64,6 +91,7 @@ describe('KdsService', () => {
         KdsService,
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(RestaurantTable.name), useValue: tableModel },
+        { provide: getModelToken(TableStatusLog.name), useValue: tableStatusLogModel },
         { provide: getModelToken(KdsStatusLog.name), useValue: logModel },
         { provide: getModelToken(KdsSettings.name), useValue: settingsModel },
         { provide: RealtimeService, useValue: realtimeService },
@@ -97,7 +125,7 @@ describe('KdsService', () => {
     );
     expect(tableModel.findByIdAndUpdate).toHaveBeenCalledWith(
       order.tableId,
-      { status: TableStatus.InProgress },
+      expect.objectContaining({ status: TableStatus.OrderSent }),
       { new: true },
     );
   });

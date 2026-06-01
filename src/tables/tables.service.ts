@@ -14,13 +14,19 @@ import {
   OrderItemStatus,
   OrderStatus,
 } from '../orders/schemas/order.schema';
+import { RealtimeService } from '../realtime/realtime.service';
 import { CreateTableDto } from './dto/create-table.dto';
+import { UpdateTableStatusDto } from './dto/update-table-status.dto';
 import { UpdateTableDto } from './dto/update-table.dto';
 import {
   RestaurantTable,
   RestaurantTableDocument,
   TableStatus,
 } from './schemas/table.schema';
+import {
+  TableStatusLog,
+  TableStatusLogDocument,
+} from './schemas/table-status-log.schema';
 
 type WaitingState = 'none' | 'normal' | 'warning' | 'critical' | 'done';
 
@@ -35,6 +41,25 @@ interface TableOverviewOrder {
   waitingMinutes: number;
   waitingState: WaitingState;
 }
+
+const TABLE_STATUS_TRANSITIONS = new Map<TableStatus, TableStatus[]>([
+  [TableStatus.Free, [TableStatus.OccupiedState, TableStatus.ReservedState, TableStatus.Dirty]],
+  [TableStatus.OccupiedState, [TableStatus.Ordering, TableStatus.ReadyToPay, TableStatus.Dirty, TableStatus.Free]],
+  [TableStatus.Ordering, [TableStatus.OrderSent, TableStatus.InPreparation, TableStatus.ReadyToPay, TableStatus.Dirty]],
+  [TableStatus.OrderSent, [TableStatus.InPreparation, TableStatus.ReadyToServe, TableStatus.ReadyToPay, TableStatus.Dirty]],
+  [TableStatus.InPreparation, [TableStatus.ReadyToServe, TableStatus.ReadyToPay, TableStatus.Dirty]],
+  [TableStatus.ReadyToServe, [TableStatus.Served, TableStatus.ReadyToPay, TableStatus.Dirty]],
+  [TableStatus.Served, [TableStatus.ReadyToPay, TableStatus.Paid, TableStatus.Dirty]],
+  [TableStatus.ReadyToPay, [TableStatus.Paid, TableStatus.Dirty]],
+  [TableStatus.Paid, [TableStatus.Dirty, TableStatus.Free]],
+  [TableStatus.Dirty, [TableStatus.Free]],
+  [TableStatus.ReservedState, [TableStatus.OccupiedState, TableStatus.Free]],
+  [TableStatus.Available, [TableStatus.OccupiedState, TableStatus.ReservedState, TableStatus.Dirty]],
+  [TableStatus.Occupied, [TableStatus.Ordering, TableStatus.ReadyToPay, TableStatus.Dirty, TableStatus.Free]],
+  [TableStatus.Reserved, [TableStatus.OccupiedState, TableStatus.Free]],
+  [TableStatus.InProgress, [TableStatus.ReadyToServe, TableStatus.ReadyToPay, TableStatus.Dirty]],
+  [TableStatus.Inactive, []],
+]);
 
 export interface TableOverviewItem {
   tableId: string;
@@ -58,9 +83,12 @@ export class TablesService {
   constructor(
     @InjectModel(RestaurantTable.name)
     private readonly tableModel: Model<RestaurantTableDocument>,
+    @InjectModel(TableStatusLog.name)
+    private readonly tableStatusLogModel: Model<TableStatusLogDocument>,
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
     private readonly accessPolicy: AccessPolicyService,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async create(
@@ -214,6 +242,66 @@ export class TablesService {
     }
   }
 
+  async updateStatus(
+    id: string,
+    dto: UpdateTableStatusDto,
+    actor: AuthenticatedUser,
+  ): Promise<RestaurantTableDocument> {
+    this.validateObjectId(id, 'Tisch-ID');
+    const existing = await this.findOne(id, actor);
+    await this.accessPolicy.assertCanAccessLocation(actor, existing.locationId);
+    this.assertTableStatusTransition(existing.status, dto.status);
+
+    const changedAt = new Date();
+    const patch = {
+      status: dto.status,
+      guestCount: dto.guestCount ?? existing.guestCount ?? 0,
+      assignedWaiterId: dto.assignedWaiterId ?? existing.assignedWaiterId,
+      reservationId: dto.reservationId ?? existing.reservationId,
+      notes: dto.notes ?? existing.notes,
+      lastStatusChange: changedAt,
+      ...(this.isFreeOrDirty(dto.status)
+        ? {
+            activeOrderIds: [],
+            currentTotal: 0,
+            waitingSince: undefined,
+            guestCount: 0,
+            assignedWaiterId: undefined,
+            reservationId: undefined,
+          }
+        : {}),
+    };
+
+    const updatedTable = await this.tableModel
+      .findByIdAndUpdate(id, patch, { new: true, runValidators: true })
+      .exec();
+
+    if (!updatedTable) {
+      throw new NotFoundException('Tisch nicht gefunden');
+    }
+
+    await this.writeStatusLog(updatedTable, existing.status, dto.status, actor, {
+      reason: dto.reason,
+      reservationId: dto.reservationId ?? existing.reservationId,
+      changedAt,
+    });
+    this.publishTableEvent('table.status.changed', updatedTable, existing.status, dto.status, {
+      changedBy: actor.sub,
+      changedByRole: this.primaryRole(actor),
+      reason: dto.reason,
+      changedAt,
+    });
+
+    if (dto.status === TableStatus.Free) {
+      this.publishTableEvent('table.cleaned', updatedTable, existing.status, dto.status, {
+        changedBy: actor.sub,
+        changedAt,
+      });
+    }
+
+    return updatedTable;
+  }
+
   private toOverviewItem(
     table: RestaurantTableDocument,
     orders: OrderDocument[],
@@ -237,14 +325,14 @@ export class TablesService {
       tableName: table.name,
       locationId: table.locationId,
       status: this.getOverviewTableStatus(table, activeOrders, latestOrder),
-      guestCount: latestOrder?.guestCount ?? 0,
+      guestCount: latestOrder?.guestCount ?? table.guestCount ?? 0,
       activeOrderCount: activeOrders.length,
       openItemCount,
-      currentTotal: this.roundMoney(currentTotal),
+      currentTotal: this.roundMoney(currentTotal || table.currentTotal || 0),
       paidTotal: activeOrders
         .filter((order) => this.isPaidOrderStatus(order.status))
         .reduce((sum, order) => sum + order.total, 0),
-      waitingSince: waitingOrder?.waitingSince,
+      waitingSince: waitingOrder?.waitingSince ?? table.waitingSince,
       waitingMinutes: waitingOrder?.waitingMinutes ?? 0,
       waitingState: waitingOrder?.waitingState ?? 'none',
       latestOrderStatus: latestOrder?.status,
@@ -339,22 +427,136 @@ export class TablesService {
     }
 
     if (orders.some((order) => order.status === OrderStatus.Preparing)) {
-      return TableStatus.InProgress;
+      return TableStatus.InPreparation;
     }
 
     if (orders.some((order) => order.status === OrderStatus.Ready)) {
-      return TableStatus.ReadyToPay;
+      return TableStatus.ReadyToServe;
     }
 
-    if (orders.some((order) => [OrderStatus.Accepted, OrderStatus.New].includes(order.status))) {
+    if (orders.some((order) => order.status === OrderStatus.Accepted)) {
+      return TableStatus.OrderSent;
+    }
+
+    if (orders.some((order) => order.status === OrderStatus.New)) {
       return TableStatus.Ordering;
     }
 
     if (latestOrder?.status === OrderStatus.Served) {
-      return TableStatus.ReadyToPay;
+      return TableStatus.Served;
     }
 
     return table.status;
+  }
+
+  private assertTableStatusTransition(
+    currentStatus: TableStatus,
+    nextStatus: TableStatus,
+  ): void {
+    if (currentStatus === nextStatus) {
+      return;
+    }
+
+    const normalizedCurrent = this.normalizeTableStatus(currentStatus);
+    const normalizedNext = this.normalizeTableStatus(nextStatus);
+
+    if (normalizedCurrent === normalizedNext) {
+      return;
+    }
+
+    if (!TABLE_STATUS_TRANSITIONS.get(normalizedCurrent)?.includes(normalizedNext)) {
+      throw new BadRequestException(
+        `Statuswechsel von ${currentStatus} zu ${nextStatus} ist nicht erlaubt`,
+      );
+    }
+  }
+
+  private normalizeTableStatus(status: TableStatus): TableStatus {
+    if (status === TableStatus.Available) {
+      return TableStatus.Free;
+    }
+    if (status === TableStatus.Occupied) {
+      return TableStatus.OccupiedState;
+    }
+    if (status === TableStatus.Reserved) {
+      return TableStatus.ReservedState;
+    }
+    if (status === TableStatus.InProgress) {
+      return TableStatus.InPreparation;
+    }
+
+    return status;
+  }
+
+  private isFreeOrDirty(status: TableStatus): boolean {
+    return [TableStatus.Free, TableStatus.Available, TableStatus.Dirty].includes(status);
+  }
+
+  private async writeStatusLog(
+    table: RestaurantTableDocument,
+    previousStatus: TableStatus | undefined,
+    nextStatus: TableStatus,
+    actor: AuthenticatedUser,
+    options: {
+      orderId?: string;
+      reservationId?: string;
+      reason?: string;
+      changedAt?: Date;
+    } = {},
+  ): Promise<void> {
+    await this.tableStatusLogModel.create({
+      companyId: table.companyId ?? actor.companyId,
+      regionId: table.regionId,
+      locationId: table.locationId,
+      tableId: table._id.toString(),
+      tableName: table.tableName ?? table.name,
+      previousStatus,
+      nextStatus,
+      orderId: options.orderId,
+      reservationId: options.reservationId,
+      userId: actor.sub,
+      userRole: this.primaryRole(actor),
+      reason: options.reason,
+      changedAt: options.changedAt ?? new Date(),
+    });
+  }
+
+  private publishTableEvent(
+    event: string,
+    table: RestaurantTableDocument,
+    previousStatus?: TableStatus,
+    nextStatus?: TableStatus,
+    metadata: Record<string, unknown> = {},
+  ): void {
+    this.realtimeService.publish(event, {
+      tableId: table._id.toString(),
+      tableName: table.tableName ?? table.name,
+      locationId: table.locationId,
+      companyId: table.companyId,
+      regionId: table.regionId,
+      previousStatus,
+      status: nextStatus ?? table.status,
+      currentTotal: table.currentTotal ?? 0,
+      guestCount: table.guestCount ?? 0,
+      activeOrderIds: table.activeOrderIds ?? [],
+      waitingSince: table.waitingSince,
+      lastStatusChange: table.lastStatusChange,
+      channels: this.eventChannels(table.companyId, table.locationId),
+      ...metadata,
+    });
+  }
+
+  private eventChannels(companyId: string | undefined, locationId: string): string[] {
+    return [
+      ...(companyId ? [`company:${companyId}`] : []),
+      `location:${locationId}`,
+      `service:${locationId}`,
+      `kitchen:${locationId}`,
+    ];
+  }
+
+  private primaryRole(actor: AuthenticatedUser): string {
+    return actor.roles?.[0] ?? 'unknown';
   }
 
   private isPaidOrderStatus(status: OrderStatus): boolean {

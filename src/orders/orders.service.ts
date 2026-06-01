@@ -21,6 +21,10 @@ import {
   RestaurantTableDocument,
   TableStatus,
 } from '../tables/schemas/table.schema';
+import {
+  TableStatusLog,
+  TableStatusLogDocument,
+} from '../tables/schemas/table-status-log.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
@@ -49,6 +53,8 @@ export class OrdersService {
     private readonly orderModel: Model<OrderDocument>,
     @InjectModel(RestaurantTable.name)
     private readonly tableModel: Model<RestaurantTableDocument>,
+    @InjectModel(TableStatusLog.name)
+    private readonly tableStatusLogModel: Model<TableStatusLogDocument>,
     @InjectModel(KdsStatusLog.name)
     private readonly logModel: Model<KdsStatusLogDocument>,
     private readonly realtimeService: RealtimeService,
@@ -115,7 +121,7 @@ export class OrdersService {
     }
 
     this.realtimeService.publish('order.created', order);
-    await this.syncTableStatus(order);
+    await this.syncTableStatus(order, false, actor, 'table.order.created');
 
     return order;
   }
@@ -264,7 +270,16 @@ export class OrdersService {
       statusChanged ? 'order.statusChanged' : 'order.updated',
       updatedOrder,
     );
-    await this.syncTableStatus(updatedOrder);
+    await this.syncTableStatus(
+      updatedOrder,
+      false,
+      actor,
+      this.getPrimaryTableEventForOrderUpdate(
+        updatedOrder.status,
+        updatedOrder.paymentStatus,
+        Boolean(statusChanged),
+      ),
+    );
 
     return updatedOrder;
   }
@@ -310,13 +325,7 @@ export class OrdersService {
       actor,
     );
 
-    await this.tableModel
-      .findByIdAndUpdate(order.tableId, { status: TableStatus.Free }, { new: true })
-      .exec();
-    this.realtimeService.publish('table.released', {
-      tableId: order.tableId,
-      orderId: order._id.toString(),
-    });
+    await this.syncTableStatus(released, true, actor, 'table.cleaned');
 
     return released;
   }
@@ -365,7 +374,7 @@ export class OrdersService {
     }
 
     const saved = await order.save();
-    await this.syncTableStatus(saved);
+    await this.syncTableStatus(saved, false, actor, 'table.status.changed');
     await this.writeItemStatusLog(saved, itemId, previousStatus, dto.status, actor, note);
 
     const eventPayload = {
@@ -423,7 +432,7 @@ export class OrdersService {
     }
 
     this.realtimeService.publish('order.cancelled', deletedOrder);
-    await this.syncTableStatus(deletedOrder, true);
+    await this.syncTableStatus(deletedOrder, true, actor, 'table.status.changed');
 
     return deletedOrder;
   }
@@ -455,24 +464,110 @@ export class OrdersService {
   }
 
   private async syncTableStatus(
-    order: Pick<OrderDocument, 'tableId' | 'status' | 'paymentStatus'>,
+    order: Pick<
+      OrderDocument,
+      | '_id'
+      | 'tableId'
+      | 'status'
+      | 'paymentStatus'
+      | 'locationId'
+      | 'companyId'
+      | 'guestCount'
+      | 'total'
+      | 'assignedWaiterId'
+      | 'statusTimestamps'
+    >,
     removed = false,
+    actor?: AuthenticatedUser,
+    eventName = 'table.status.changed',
   ): Promise<void> {
     if (!order.tableId) {
       return;
     }
 
-    const status = removed
-      ? TableStatus.Free
-      : this.getTableStatusForOrder(order.status, order.paymentStatus);
+    const table = await this.tableModel.findById(order.tableId).exec();
 
-    await this.tableModel
-      .findByIdAndUpdate(order.tableId, { status }, { new: true })
+    if (!table) {
+      return;
+    }
+
+    const activeOrders = await this.getActiveOrdersForTable(order.tableId);
+    const status = this.getTableStatusForOrders(activeOrders, order, removed);
+    const activeOrderIds = activeOrders.map((activeOrder) => activeOrder._id.toString());
+    const currentTotal = activeOrders.reduce(
+      (sum, activeOrder) => sum + (activeOrder.total ?? 0),
+      0,
+    );
+    const guestCount = activeOrders.reduce(
+      (sum, activeOrder) => sum + (activeOrder.guestCount ?? 0),
+      0,
+    );
+    const waitingSince = this.getTableWaitingSince(activeOrders);
+    const assignedWaiterId =
+      activeOrders.find((activeOrder) => activeOrder.assignedWaiterId)?.assignedWaiterId ??
+      undefined;
+    const changedAt = new Date();
+
+    const updatedTable = await this.tableModel
+      .findByIdAndUpdate(
+        order.tableId,
+        {
+          status,
+          activeOrderIds,
+          currentTotal: this.roundMoney(currentTotal),
+          guestCount,
+          waitingSince,
+          assignedWaiterId,
+          lastStatusChange: changedAt,
+        },
+        { new: true },
+      )
       .exec();
-    this.realtimeService.publish('table.statusChanged', {
-      tableId: order.tableId,
-      status,
+
+    if (!updatedTable) {
+      return;
+    }
+
+    if (table.status !== status) {
+      await this.writeTableStatusLog(updatedTable, table.status, status, actor, {
+        orderId: order._id?.toString(),
+        reason: eventName,
+        changedAt,
+      });
+    }
+
+    this.publishTableStatusEvent(eventName, updatedTable, table.status, status, actor, {
+      orderId: order._id?.toString(),
+      orderStatus: order.status,
+      paymentStatus: order.paymentStatus,
+      changedAt,
     });
+
+    if (eventName !== 'table.status.changed') {
+      this.publishTableStatusEvent(
+        'table.status.changed',
+        updatedTable,
+        table.status,
+        status,
+        actor,
+        {
+          orderId: order._id?.toString(),
+          orderStatus: order.status,
+          paymentStatus: order.paymentStatus,
+          changedAt,
+        },
+      );
+    }
+
+    const mappedEvent = this.getTableEventForOrderStatus(order.status, order.paymentStatus);
+    if (mappedEvent && mappedEvent !== eventName) {
+      this.publishTableStatusEvent(mappedEvent, updatedTable, table.status, status, actor, {
+        orderId: order._id?.toString(),
+        orderStatus: order.status,
+        paymentStatus: order.paymentStatus,
+        changedAt,
+      });
+    }
   }
 
   private getTableStatusForOrder(
@@ -488,16 +583,165 @@ export class OrdersService {
       case OrderStatus.New:
         return TableStatus.Ordering;
       case OrderStatus.Accepted:
+        return TableStatus.OrderSent;
       case OrderStatus.Preparing:
+        return TableStatus.InPreparation;
       case OrderStatus.Ready:
-        return TableStatus.InProgress;
+        return TableStatus.ReadyToServe;
       case OrderStatus.Served:
-        return TableStatus.ReadyToPay;
+        return TableStatus.Served;
       case OrderStatus.Closed:
         return TableStatus.Paid;
       case OrderStatus.Cancelled:
         return TableStatus.Free;
     }
+  }
+
+  private async getActiveOrdersForTable(tableId: string): Promise<OrderDocument[]> {
+    return this.orderModel
+      .find({
+        tableId,
+        status: { $nin: [OrderStatus.Cancelled, OrderStatus.Closed] },
+      })
+      .sort({ createdAt: 1 })
+      .exec();
+  }
+
+  private getTableStatusForOrders(
+    activeOrders: OrderDocument[],
+    fallbackOrder: Pick<OrderDocument, 'status' | 'paymentStatus'>,
+    removed: boolean,
+  ): TableStatus {
+    if (removed || !activeOrders.length) {
+      if (removed) {
+        return TableStatus.Free;
+      }
+
+      return fallbackOrder.paymentStatus === PaymentStatus.Paid
+        ? TableStatus.Paid
+        : TableStatus.Free;
+    }
+
+    if (activeOrders.some((order) => order.paymentStatus === PaymentStatus.Paid)) {
+      return TableStatus.Paid;
+    }
+    if (activeOrders.some((order) => order.status === OrderStatus.Served)) {
+      return TableStatus.Served;
+    }
+    if (activeOrders.some((order) => order.status === OrderStatus.Ready)) {
+      return TableStatus.ReadyToServe;
+    }
+    if (activeOrders.some((order) => order.status === OrderStatus.Preparing)) {
+      return TableStatus.InPreparation;
+    }
+    if (activeOrders.some((order) => order.status === OrderStatus.Accepted)) {
+      return TableStatus.OrderSent;
+    }
+    if (activeOrders.some((order) => [OrderStatus.Draft, OrderStatus.New].includes(order.status))) {
+      return TableStatus.Ordering;
+    }
+
+    return this.getTableStatusForOrder(fallbackOrder.status, fallbackOrder.paymentStatus);
+  }
+
+  private getTableWaitingSince(activeOrders: OrderDocument[]): Date | undefined {
+    const timestamps = activeOrders
+      .map((order) =>
+        order.statusTimestamps?.[OrderStatus.Accepted] ??
+        order.statusTimestamps?.[OrderStatus.Preparing] ??
+        order.statusTimestamps?.[OrderStatus.New] ??
+        (order as OrderDocument & { createdAt?: Date }).createdAt,
+      )
+      .filter((value): value is Date => Boolean(value))
+      .sort((first, second) => first.getTime() - second.getTime());
+
+    return timestamps[0];
+  }
+
+  private getTableEventForOrderStatus(
+    status: OrderStatus,
+    paymentStatus?: PaymentStatus,
+  ): string | null {
+    if (paymentStatus === PaymentStatus.Paid || status === OrderStatus.Closed) {
+      return 'table.paid';
+    }
+
+    if (status === OrderStatus.Accepted) {
+      return 'table.order.sent';
+    }
+
+    if (status === OrderStatus.Ready) {
+      return 'table.order.ready';
+    }
+
+    if ([OrderStatus.Draft, OrderStatus.New].includes(status)) {
+      return 'table.order.created';
+    }
+
+    return null;
+  }
+
+  private getPrimaryTableEventForOrderUpdate(
+    status: OrderStatus,
+    paymentStatus: PaymentStatus | undefined,
+    statusChanged: boolean,
+  ): string {
+    if (!statusChanged) {
+      return 'table.status.changed';
+    }
+
+    return this.getTableEventForOrderStatus(status, paymentStatus) ?? 'table.status.changed';
+  }
+
+  private async writeTableStatusLog(
+    table: RestaurantTableDocument,
+    previousStatus: TableStatus,
+    nextStatus: TableStatus,
+    actor: AuthenticatedUser | undefined,
+    options: { orderId?: string; reason?: string; changedAt?: Date } = {},
+  ): Promise<void> {
+    await this.tableStatusLogModel.create({
+      companyId: table.companyId ?? actor?.companyId,
+      regionId: table.regionId,
+      locationId: table.locationId,
+      tableId: table._id.toString(),
+      tableName: table.tableName ?? table.name,
+      previousStatus,
+      nextStatus,
+      orderId: options.orderId,
+      userId: actor?.sub,
+      userRole: actor ? this.primaryRole(actor) : 'system',
+      reason: options.reason,
+      changedAt: options.changedAt ?? new Date(),
+    });
+  }
+
+  private publishTableStatusEvent(
+    event: string,
+    table: RestaurantTableDocument,
+    previousStatus: TableStatus,
+    status: TableStatus,
+    actor: AuthenticatedUser | undefined,
+    metadata: Record<string, unknown>,
+  ): void {
+    this.realtimeService.publish(event, {
+      tableId: table._id.toString(),
+      tableName: table.tableName ?? table.name,
+      locationId: table.locationId,
+      companyId: table.companyId ?? actor?.companyId,
+      regionId: table.regionId,
+      previousStatus,
+      status,
+      guestCount: table.guestCount ?? 0,
+      activeOrderIds: table.activeOrderIds ?? [],
+      currentTotal: table.currentTotal ?? 0,
+      waitingSince: table.waitingSince,
+      lastStatusChange: table.lastStatusChange,
+      changedBy: actor?.sub,
+      changedByRole: actor ? this.primaryRole(actor) : 'system',
+      channels: this.eventChannels(table.companyId ?? actor?.companyId, table.locationId),
+      ...metadata,
+    });
   }
 
   private aggregateOrderStatus(order: OrderDocument): OrderStatus {

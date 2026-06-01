@@ -22,6 +22,10 @@ import {
   TableStatus,
 } from '../tables/schemas/table.schema';
 import {
+  TableStatusLog,
+  TableStatusLogDocument,
+} from '../tables/schemas/table-status-log.schema';
+import {
   KdsActionDto,
   UpdateOrderItemStatusDto,
   UpdateOrderStatusDto,
@@ -65,6 +69,8 @@ export class KdsService {
     private readonly orderModel: Model<OrderDocument>,
     @InjectModel(RestaurantTable.name)
     private readonly tableModel: Model<RestaurantTableDocument>,
+    @InjectModel(TableStatusLog.name)
+    private readonly tableStatusLogModel: Model<TableStatusLogDocument>,
     @InjectModel(KdsStatusLog.name)
     private readonly logModel: Model<KdsStatusLogDocument>,
     @InjectModel(KdsSettings.name)
@@ -151,7 +157,7 @@ export class KdsService {
     }
 
     const saved = await order.save();
-    await this.syncTableStatus(saved);
+    await this.syncTableStatus(saved, actor, 'table.status.changed');
     await this.writeLog(saved, 'order.statusChanged', actor, {
       fromStatus: previousStatus,
       toStatus: dto.status,
@@ -202,7 +208,7 @@ export class KdsService {
     };
 
     const saved = await order.save();
-    await this.syncTableStatus(saved);
+    await this.syncTableStatus(saved, actor, 'table.status.changed');
     await this.writeLog(saved, 'order.item.status.changed', actor, {
       itemId,
       fromStatus: previousStatus,
@@ -464,25 +470,190 @@ export class KdsService {
     }
   }
 
-  private async syncTableStatus(order: OrderDocument): Promise<void> {
+  private async syncTableStatus(
+    order: OrderDocument,
+    actor: AuthenticatedUser,
+    eventName: string,
+  ): Promise<void> {
     if (!order.tableId) {
       return;
     }
 
-    const status =
-      order.status === OrderStatus.Served
-        ? TableStatus.ReadyToPay
-        : order.status === OrderStatus.Cancelled
-          ? TableStatus.Free
-          : TableStatus.InProgress;
+    const table = await this.tableModel.findById(order.tableId).exec();
 
-    await this.tableModel
-      .findByIdAndUpdate(order.tableId, { status }, { new: true })
+    if (!table) {
+      return;
+    }
+
+    const activeOrders = await this.orderModel
+      .find({
+        tableId: order.tableId,
+        status: { $nin: [OrderStatus.Cancelled, OrderStatus.Closed] },
+      })
+      .sort({ createdAt: 1 })
       .exec();
-    this.realtimeService.publish('table.statusChanged', {
-      tableId: order.tableId,
+    const status = this.getTableStatusForOrders(activeOrders, order);
+    const changedAt = new Date();
+
+    const updatedTable = await this.tableModel
+      .findByIdAndUpdate(
+        order.tableId,
+        {
+          status,
+          activeOrderIds: activeOrders.map((activeOrder) => activeOrder._id.toString()),
+          currentTotal: this.roundMoney(
+            activeOrders.reduce((sum, activeOrder) => sum + (activeOrder.total ?? 0), 0),
+          ),
+          guestCount: activeOrders.reduce(
+            (sum, activeOrder) => sum + (activeOrder.guestCount ?? 0),
+            0,
+          ),
+          waitingSince: this.getTableWaitingSince(activeOrders),
+          assignedWaiterId:
+            activeOrders.find((activeOrder) => activeOrder.assignedWaiterId)?.assignedWaiterId ??
+            undefined,
+          lastStatusChange: changedAt,
+        },
+        { new: true },
+      )
+      .exec();
+
+    if (!updatedTable) {
+      return;
+    }
+
+    if (table.status !== status) {
+      await this.tableStatusLogModel.create({
+        companyId: updatedTable.companyId ?? actor.companyId,
+        regionId: updatedTable.regionId,
+        locationId: updatedTable.locationId,
+        tableId: updatedTable._id.toString(),
+        tableName: updatedTable.tableName ?? updatedTable.name,
+        previousStatus: table.status,
+        nextStatus: status,
+        orderId: order._id.toString(),
+        userId: actor.sub,
+        userRole: actor.roles?.[0] ?? 'unknown',
+        reason: eventName,
+        changedAt,
+      });
+    }
+
+    this.publishTableStatusEvent(eventName, updatedTable, table.status, status, actor, order, changedAt);
+
+    if (eventName !== 'table.status.changed') {
+      this.publishTableStatusEvent(
+        'table.status.changed',
+        updatedTable,
+        table.status,
+        status,
+        actor,
+        order,
+        changedAt,
+      );
+    }
+
+    const mappedEvent = this.getTableEventForOrderStatus(order.status);
+    if (mappedEvent) {
+      this.publishTableStatusEvent(
+        mappedEvent,
+        updatedTable,
+        table.status,
+        status,
+        actor,
+        order,
+        changedAt,
+      );
+    }
+  }
+
+  private getTableStatusForOrders(
+    activeOrders: OrderDocument[],
+    fallbackOrder: OrderDocument,
+  ): TableStatus {
+    if (!activeOrders.length) {
+      return fallbackOrder.status === OrderStatus.Cancelled
+        ? TableStatus.Free
+        : TableStatus.Paid;
+    }
+
+    if (activeOrders.some((order) => order.status === OrderStatus.Served)) {
+      return TableStatus.Served;
+    }
+    if (activeOrders.some((order) => order.status === OrderStatus.Ready)) {
+      return TableStatus.ReadyToServe;
+    }
+    if (activeOrders.some((order) => order.status === OrderStatus.Preparing)) {
+      return TableStatus.InPreparation;
+    }
+    if (activeOrders.some((order) => order.status === OrderStatus.Accepted)) {
+      return TableStatus.OrderSent;
+    }
+
+    return TableStatus.Ordering;
+  }
+
+  private getTableWaitingSince(activeOrders: OrderDocument[]): Date | undefined {
+    const timestamps = activeOrders
+      .map((order) =>
+        order.statusTimestamps?.[OrderStatus.Accepted] ??
+        order.statusTimestamps?.[OrderStatus.Preparing] ??
+        order.statusTimestamps?.[OrderStatus.New] ??
+        (order as OrderDocument & { createdAt?: Date }).createdAt,
+      )
+      .filter((value): value is Date => Boolean(value))
+      .sort((first, second) => first.getTime() - second.getTime());
+
+    return timestamps[0];
+  }
+
+  private getTableEventForOrderStatus(status: OrderStatus): string | null {
+    if (status === OrderStatus.Accepted) {
+      return 'table.order.sent';
+    }
+    if (status === OrderStatus.Ready) {
+      return 'table.order.ready';
+    }
+    if (status === OrderStatus.Closed) {
+      return 'table.paid';
+    }
+
+    return null;
+  }
+
+  private publishTableStatusEvent(
+    event: string,
+    table: RestaurantTableDocument,
+    previousStatus: TableStatus,
+    status: TableStatus,
+    actor: AuthenticatedUser,
+    order: OrderDocument,
+    changedAt: Date,
+  ): void {
+    this.realtimeService.publish(event, {
+      tableId: table._id.toString(),
+      tableName: table.tableName ?? table.name,
+      locationId: table.locationId,
+      companyId: table.companyId ?? actor.companyId,
+      regionId: table.regionId,
+      previousStatus,
       status,
+      orderId: order._id.toString(),
+      orderStatus: order.status,
+      guestCount: table.guestCount ?? 0,
+      activeOrderIds: table.activeOrderIds ?? [],
+      currentTotal: table.currentTotal ?? 0,
+      waitingSince: table.waitingSince,
+      lastStatusChange: table.lastStatusChange,
+      changedBy: actor.sub,
+      changedByRole: actor.roles?.[0] ?? 'unknown',
+      changedAt,
+      channels: this.eventChannels(table.companyId ?? actor.companyId, table.locationId),
     });
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 
   private async writeLog(

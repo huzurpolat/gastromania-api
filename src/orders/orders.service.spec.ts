@@ -5,6 +5,7 @@ import { Role } from '../auth/enums/role.enum';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RestaurantTable, TableStatus } from '../tables/schemas/table.schema';
+import { TableStatusLog } from '../tables/schemas/table-status-log.schema';
 import { KdsStatusLog } from '../kds/schemas/kds-status-log.schema';
 import { OrdersService } from './orders.service';
 import { Order, OrderItemStatus, OrderStatus } from './schemas/order.schema';
@@ -17,11 +18,16 @@ describe('OrdersService', () => {
     create: jest.fn(),
     countDocuments: jest.fn(),
     findById: jest.fn(),
+    find: jest.fn(),
   };
   const logModel = {
     create: jest.fn(),
   };
+  const tableStatusLogModel = {
+    create: jest.fn(),
+  };
   const tableModel = {
+    findById: jest.fn(),
     findByIdAndUpdate: jest.fn(),
   };
   const realtimeService = {
@@ -46,19 +52,54 @@ describe('OrdersService', () => {
       save: jest.fn().mockResolvedValue(undefined),
       deleteOne: jest.fn(),
     }));
+    orderModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([
+          {
+            _id: { toString: () => '507f1f77bcf86cd799439014' },
+            locationId,
+            tableId,
+            status: OrderStatus.New,
+            paymentStatus: undefined,
+            total: 19,
+            guestCount: 4,
+            assignedWaiterId: 'waiter-1',
+            statusTimestamps: { [OrderStatus.New]: new Date('2026-01-01T10:00:00Z') },
+          },
+        ]),
+      }),
+    });
+    tableModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => tableId },
+        name: 'Fenster 01',
+        locationId,
+        status: TableStatus.Free,
+      }),
+    });
     tableModel.findByIdAndUpdate.mockReturnValue({
-      exec: jest.fn().mockResolvedValue({}),
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => tableId },
+        name: 'Fenster 01',
+        locationId,
+        status: TableStatus.Ordering,
+        activeOrderIds: ['507f1f77bcf86cd799439014'],
+        currentTotal: 19,
+        guestCount: 4,
+      }),
     });
     recipeInventoryService.consumeOrder.mockResolvedValue(undefined);
     accessPolicy.assertCanAccessLocation.mockResolvedValue(undefined);
     accessPolicy.canAccessLocation.mockResolvedValue(true);
     logModel.create.mockResolvedValue({});
+    tableStatusLogModel.create.mockResolvedValue({});
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         OrdersService,
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(RestaurantTable.name), useValue: tableModel },
+        { provide: getModelToken(TableStatusLog.name), useValue: tableStatusLogModel },
         { provide: getModelToken(KdsStatusLog.name), useValue: logModel },
         { provide: RealtimeService, useValue: realtimeService },
         { provide: RecipeInventoryService, useValue: recipeInventoryService },
@@ -102,7 +143,7 @@ describe('OrdersService', () => {
     expect(order.items[0]).toEqual(expect.objectContaining({ totalPrice: 7 }));
     expect(tableModel.findByIdAndUpdate).toHaveBeenCalledWith(
       tableId,
-      { status: TableStatus.Ordering },
+      expect.objectContaining({ status: TableStatus.Ordering }),
       { new: true },
     );
     expect(realtimeService.publish).toHaveBeenCalledWith('order.created', order);
@@ -138,6 +179,22 @@ describe('OrdersService', () => {
     order.save.mockResolvedValue(order);
     orderModel.findById.mockReturnValue({
       exec: jest.fn().mockResolvedValue(order),
+    });
+    orderModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([order]),
+      }),
+    });
+    tableModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: { toString: () => tableId },
+        name: 'Fenster 01',
+        locationId,
+        status: TableStatus.ReadyToServe,
+        activeOrderIds: ['507f1f77bcf86cd799439014'],
+        currentTotal: 17,
+        guestCount: 0,
+      }),
     });
 
     const updated = await service.updateItemStatus(
