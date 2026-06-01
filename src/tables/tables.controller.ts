@@ -40,6 +40,27 @@ export class TablesController {
     return this.tablesService.findAll(user, locationId);
   }
 
+  @Get('overview')
+  @Permissions('tables.view')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Schichtleiter,
+    Role.Service,
+    Role.Kueche,
+    Role.Bar,
+    Role.Theke,
+  )
+  overview(@CurrentUser() user: AuthenticatedUser, @Query('locationId') locationId?: string) {
+    return this.tablesService.overview(user, locationId);
+  }
+
   @Get(':id')
   @Permissions('tables.view')
   @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service)

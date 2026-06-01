@@ -145,6 +145,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   Schichtleiter: [
     'dashboard.view',
+    'tables.view',
     'orders.view',
     'orders.update',
     'kds.view',
@@ -154,6 +155,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   Service: [
     'dashboard.view',
     'locations.view',
+    'tables.view',
     'orders.view',
     'orders.create',
     'orders.update',
@@ -176,6 +178,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   Küche: [
     'dashboard.view',
     'locations.view',
+    'tables.view',
     'orders.view',
     'orders.update',
     'kds.view',
@@ -191,9 +194,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'recipes.view',
     'recipes.update',
   ],
-  Bar: ['dashboard.view', 'orders.view', 'orders.update', 'kds.view', 'kds.manage'],
+  Bar: ['dashboard.view', 'tables.view', 'orders.view', 'orders.update', 'kds.view', 'kds.manage'],
   Theke: [
     'dashboard.view',
+    'tables.view',
     'orders.view',
     'orders.create',
     'orders.update',

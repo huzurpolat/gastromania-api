@@ -8,18 +8,58 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import {
+  Order,
+  OrderDocument,
+  OrderItemStatus,
+  OrderStatus,
+} from '../orders/schemas/order.schema';
 import { CreateTableDto } from './dto/create-table.dto';
 import { UpdateTableDto } from './dto/update-table.dto';
 import {
   RestaurantTable,
   RestaurantTableDocument,
+  TableStatus,
 } from './schemas/table.schema';
+
+type WaitingState = 'none' | 'normal' | 'warning' | 'critical' | 'done';
+
+interface TableOverviewOrder {
+  orderId: string;
+  orderNumber?: string;
+  status: OrderStatus;
+  total: number;
+  itemCount: number;
+  openItemCount: number;
+  waitingSince?: Date;
+  waitingMinutes: number;
+  waitingState: WaitingState;
+}
+
+export interface TableOverviewItem {
+  tableId: string;
+  tableName: string;
+  locationId: string;
+  status: TableStatus;
+  guestCount: number;
+  activeOrderCount: number;
+  openItemCount: number;
+  currentTotal: number;
+  paidTotal: number;
+  waitingSince?: Date;
+  waitingMinutes: number;
+  waitingState: WaitingState;
+  latestOrderStatus?: OrderStatus;
+  activeOrders: TableOverviewOrder[];
+}
 
 @Injectable()
 export class TablesService {
   constructor(
     @InjectModel(RestaurantTable.name)
     private readonly tableModel: Model<RestaurantTableDocument>,
+    @InjectModel(Order.name)
+    private readonly orderModel: Model<OrderDocument>,
     private readonly accessPolicy: AccessPolicyService,
   ) {}
 
@@ -56,6 +96,43 @@ export class TablesService {
       .find(scopeFilter)
       .sort({ locationId: 1, name: 1 })
       .exec();
+  }
+
+  async overview(
+    actor: AuthenticatedUser,
+    locationId?: string,
+  ): Promise<TableOverviewItem[]> {
+    const tables = await this.findAll(actor, locationId);
+    const tableIds = tables.map((table) => table._id.toString());
+
+    if (!tableIds.length) {
+      return [];
+    }
+
+    const orders = await this.orderModel
+      .find({
+        tableId: { $in: tableIds },
+        status: { $nin: [OrderStatus.Cancelled, OrderStatus.Closed] },
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    const ordersByTable = new Map<string, OrderDocument[]>();
+
+    for (const order of orders) {
+      if (!order.tableId) {
+        continue;
+      }
+
+      ordersByTable.set(order.tableId, [
+        ...(ordersByTable.get(order.tableId) ?? []),
+        order,
+      ]);
+    }
+
+    return tables.map((table) =>
+      this.toOverviewItem(table, ordersByTable.get(table._id.toString()) ?? []),
+    );
   }
 
   async findOne(
@@ -135,6 +212,157 @@ export class TablesService {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException(`Ungueltige ${label}`);
     }
+  }
+
+  private toOverviewItem(
+    table: RestaurantTableDocument,
+    orders: OrderDocument[],
+  ): TableOverviewItem {
+    const activeOrders = orders.map((order) => this.toOverviewOrder(order));
+    const latestOrder = orders[0];
+    const openItemCount = activeOrders.reduce(
+      (sum, order) => sum + order.openItemCount,
+      0,
+    );
+    const currentTotal = activeOrders.reduce(
+      (sum, order) => sum + order.total,
+      0,
+    );
+    const waitingOrder = [...activeOrders]
+      .filter((order) => order.waitingState !== 'none')
+      .sort((first, second) => second.waitingMinutes - first.waitingMinutes)[0];
+
+    return {
+      tableId: table._id.toString(),
+      tableName: table.name,
+      locationId: table.locationId,
+      status: this.getOverviewTableStatus(table, activeOrders, latestOrder),
+      guestCount: latestOrder?.guestCount ?? 0,
+      activeOrderCount: activeOrders.length,
+      openItemCount,
+      currentTotal: this.roundMoney(currentTotal),
+      paidTotal: activeOrders
+        .filter((order) => this.isPaidOrderStatus(order.status))
+        .reduce((sum, order) => sum + order.total, 0),
+      waitingSince: waitingOrder?.waitingSince,
+      waitingMinutes: waitingOrder?.waitingMinutes ?? 0,
+      waitingState: waitingOrder?.waitingState ?? 'none',
+      latestOrderStatus: latestOrder?.status,
+      activeOrders,
+    };
+  }
+
+  private toOverviewOrder(order: OrderDocument): TableOverviewOrder {
+    const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+    const openItemCount = order.items
+      .filter(
+        (item) =>
+          ![OrderItemStatus.Served, OrderItemStatus.Cancelled].includes(
+            item.status ?? OrderItemStatus.Open,
+          ),
+      )
+      .reduce((sum, item) => sum + item.quantity, 0);
+    const waitingWindow = this.getWaitingWindow(order);
+
+    return {
+      orderId: order._id.toString(),
+      orderNumber: order.orderNumber,
+      status: order.status,
+      total: order.total ?? 0,
+      itemCount,
+      openItemCount,
+      waitingSince: waitingWindow.waitingSince,
+      waitingMinutes: waitingWindow.minutes,
+      waitingState: waitingWindow.state,
+    };
+  }
+
+  private getWaitingWindow(order: OrderDocument): {
+    waitingSince?: Date;
+    minutes: number;
+    state: WaitingState;
+  } {
+    const timestamps = order.statusTimestamps ?? {};
+    const waitingSince =
+      timestamps[OrderStatus.Accepted] ??
+      timestamps[OrderStatus.Preparing] ??
+      timestamps[OrderStatus.New] ??
+      (order as OrderDocument & { createdAt?: Date }).createdAt;
+
+    if (!waitingSince) {
+      return { minutes: 0, state: 'none' };
+    }
+
+    const readyAt = timestamps[OrderStatus.Ready];
+    const servedAt = timestamps[OrderStatus.Served];
+    const isFinished = Boolean(readyAt || servedAt || this.isPaidOrderStatus(order.status));
+    const endAt = readyAt ?? servedAt ?? new Date();
+    const minutes = Math.max(
+      0,
+      Math.floor((endAt.getTime() - waitingSince.getTime()) / 60000),
+    );
+
+    if (isFinished) {
+      return { waitingSince, minutes, state: 'done' };
+    }
+
+    return {
+      waitingSince,
+      minutes,
+      state: this.getWaitingState(minutes),
+    };
+  }
+
+  private getWaitingState(minutes: number): WaitingState {
+    if (minutes >= 20) {
+      return 'critical';
+    }
+
+    if (minutes >= 10) {
+      return 'warning';
+    }
+
+    return 'normal';
+  }
+
+  private getOverviewTableStatus(
+    table: RestaurantTableDocument,
+    orders: TableOverviewOrder[],
+    latestOrder?: OrderDocument,
+  ): TableStatus {
+    if (!table.isActive) {
+      return TableStatus.Inactive;
+    }
+
+    if (!orders.length) {
+      return table.status;
+    }
+
+    if (orders.some((order) => order.status === OrderStatus.Preparing)) {
+      return TableStatus.InProgress;
+    }
+
+    if (orders.some((order) => order.status === OrderStatus.Ready)) {
+      return TableStatus.ReadyToPay;
+    }
+
+    if (orders.some((order) => [OrderStatus.Accepted, OrderStatus.New].includes(order.status))) {
+      return TableStatus.Ordering;
+    }
+
+    if (latestOrder?.status === OrderStatus.Served) {
+      return TableStatus.ReadyToPay;
+    }
+
+    return table.status;
+  }
+
+  private isPaidOrderStatus(status: OrderStatus): boolean {
+    return [OrderStatus.Closed, OrderStatus.Served].includes(status);
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 
   private isDuplicateKeyError(error: unknown): boolean {
