@@ -4,11 +4,13 @@ import { HydratedDocument } from 'mongoose';
 export type OrderDocument = HydratedDocument<Order>;
 
 export enum OrderStatus {
+  Draft = 'Entwurf',
   New = 'Neu',
   Accepted = 'Angenommen',
   Preparing = 'In Zubereitung',
   Ready = 'Bereit zur Ausgabe',
   Served = 'Ausgegeben',
+  Closed = 'Geschlossen',
   Cancelled = 'Storniert',
 }
 
@@ -54,6 +56,9 @@ export enum CourseType {
 export class OrderItem {
   _id?: string;
 
+  @Prop({ trim: true, index: true })
+  productId?: string;
+
   @Prop({ required: true, trim: true })
   name!: string;
 
@@ -62,6 +67,9 @@ export class OrderItem {
 
   @Prop({ required: true, min: 0 })
   price!: number;
+
+  @Prop({ required: true, min: 0, default: 0 })
+  totalPrice?: number;
 
   @Prop({ trim: true })
   note?: string;
@@ -109,6 +117,9 @@ export const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
 
 @Schema({ timestamps: true, versionKey: false })
 export class Order {
+  @Prop({ trim: true, index: true })
+  companyId?: string;
+
   @Prop({ required: true, trim: true, index: true })
   locationId!: string;
 
@@ -123,6 +134,9 @@ export class Order {
 
   @Prop({ trim: true, index: true })
   pickupNumber?: string;
+
+  @Prop({ required: true, min: 1, default: 1 })
+  guestCount!: number;
 
   @Prop({
     type: String,
@@ -151,6 +165,12 @@ export class Order {
   items!: OrderItem[];
 
   @Prop({ required: true, min: 0, default: 0 })
+  subtotal!: number;
+
+  @Prop({ required: true, min: 0, default: 0 })
+  tax!: number;
+
+  @Prop({ required: true, min: 0, default: 0 })
   total!: number;
 
   @Prop({ trim: true })
@@ -161,6 +181,12 @@ export class Order {
 
   @Prop({ trim: true })
   employeeName?: string;
+
+  @Prop({ trim: true, index: true })
+  createdBy?: string;
+
+  @Prop({ trim: true, index: true })
+  assignedWaiterId?: string;
 
   @Prop({ trim: true })
   comment?: string;

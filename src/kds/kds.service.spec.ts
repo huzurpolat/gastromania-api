@@ -7,6 +7,7 @@ import { KdsStatusLog } from './schemas/kds-status-log.schema';
 import { Order, OrderStatus } from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
 import { AccessPolicyService } from '../access/access-policy.service';
+import { RestaurantTable, TableStatus } from '../tables/schemas/table.schema';
 
 describe('KdsService', () => {
   let service: KdsService;
@@ -14,6 +15,7 @@ describe('KdsService', () => {
     _id: { toString: () => '507f1f77bcf86cd799439011' },
     locationId: '507f1f77bcf86cd799439012',
     status: OrderStatus.New,
+    tableId: '507f1f77bcf86cd799439013',
     items: [],
     statusTimestamps: {},
     save: jest.fn(),
@@ -25,6 +27,9 @@ describe('KdsService', () => {
   const logModel = {
     create: jest.fn(),
     find: jest.fn(),
+  };
+  const tableModel = {
+    findByIdAndUpdate: jest.fn(),
   };
   const settingsModel = {
     findOneAndUpdate: jest.fn(),
@@ -47,6 +52,9 @@ describe('KdsService', () => {
       exec: jest.fn().mockResolvedValue(order),
     });
     logModel.create.mockResolvedValue({});
+    tableModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({}),
+    });
     accessPolicy.canAccessLocation.mockResolvedValue(true);
     accessPolicy.assertCanManageLocation.mockResolvedValue(undefined);
     accessPolicy.getScopedResourceFilter.mockResolvedValue({});
@@ -55,6 +63,7 @@ describe('KdsService', () => {
       providers: [
         KdsService,
         { provide: getModelToken(Order.name), useValue: orderModel },
+        { provide: getModelToken(RestaurantTable.name), useValue: tableModel },
         { provide: getModelToken(KdsStatusLog.name), useValue: logModel },
         { provide: getModelToken(KdsSettings.name), useValue: settingsModel },
         { provide: RealtimeService, useValue: realtimeService },
@@ -85,6 +94,11 @@ describe('KdsService', () => {
     expect(realtimeService.publish).toHaveBeenCalledWith(
       'order.statusChanged',
       order,
+    );
+    expect(tableModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      order.tableId,
+      { status: TableStatus.InProgress },
+      { new: true },
     );
   });
 

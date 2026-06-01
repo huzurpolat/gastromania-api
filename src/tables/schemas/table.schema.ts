@@ -4,6 +4,14 @@ import { HydratedDocument } from 'mongoose';
 export type RestaurantTableDocument = HydratedDocument<RestaurantTable>;
 
 export enum TableStatus {
+  Free = 'FREE',
+  OccupiedState = 'OCCUPIED',
+  Ordering = 'ORDERING',
+  InProgress = 'IN_PROGRESS',
+  ReadyToPay = 'READY_TO_PAY',
+  Paid = 'PAID',
+  Dirty = 'DIRTY',
+  ReservedState = 'RESERVED',
   Available = 'Available',
   Occupied = 'Occupied',
   Reserved = 'Reserved',
@@ -38,7 +46,7 @@ export class RestaurantTable {
   @Prop({
     type: String,
     enum: Object.values(TableStatus),
-    default: TableStatus.Available,
+    default: TableStatus.Free,
   })
   status!: TableStatus;
 

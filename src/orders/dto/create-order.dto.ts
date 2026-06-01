@@ -3,9 +3,11 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -40,6 +42,12 @@ export class CreateOrderDto {
   @IsString()
   customerNumber?: string;
 
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  guestCount?: number;
+
   @IsOptional()
   @IsEnum(OrderStatus)
   status?: OrderStatus;
@@ -72,6 +80,11 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   employeeName?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  assignedWaiterId?: string;
 
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()

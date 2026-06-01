@@ -9,6 +9,11 @@ import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import {
+  RestaurantTable,
+  RestaurantTableDocument,
+  TableStatus,
+} from '../tables/schemas/table.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import {
@@ -18,6 +23,7 @@ import {
   OrderItem,
   OrderItemStatus,
   OrderStatus,
+  PaymentStatus,
   ProductionArea,
 } from './schemas/order.schema';
 
@@ -32,6 +38,8 @@ export class OrdersService {
   constructor(
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(RestaurantTable.name)
+    private readonly tableModel: Model<RestaurantTableDocument>,
     private readonly realtimeService: RealtimeService,
     private readonly recipeInventoryService: RecipeInventoryService,
     private readonly accessPolicy: AccessPolicyService,
@@ -48,8 +56,14 @@ export class OrdersService {
     }
 
     const status = createOrderDto.status ?? OrderStatus.New;
+    const totals = this.calculateTotals(createOrderDto.items);
     const order = await this.orderModel.create({
       ...createOrderDto,
+      companyId: actor.companyId,
+      createdBy: actor.sub,
+      employeeId: createOrderDto.employeeId ?? actor.sub,
+      assignedWaiterId: createOrderDto.assignedWaiterId ?? actor.sub,
+      guestCount: createOrderDto.guestCount ?? 1,
       orderNumber: await this.nextOrderNumber(createOrderDto.locationId),
       pickupNumber:
         createOrderDto.tableId || createOrderDto.customerNumber
@@ -61,6 +75,7 @@ export class OrdersService {
       },
       items: createOrderDto.items.map((item) => ({
         ...item,
+        totalPrice: this.calculateItemTotal(item),
         status: item.status ?? OrderItemStatus.Open,
         productionArea:
           item.productionArea ??
@@ -71,7 +86,9 @@ export class OrdersService {
         specialRequests: item.specialRequests ?? [],
         allergens: item.allergens ?? [],
       })),
-      total: this.calculateTotal(createOrderDto.items),
+      subtotal: totals.subtotal,
+      tax: totals.tax,
+      total: totals.total,
     });
 
     try {
@@ -85,6 +102,7 @@ export class OrdersService {
     }
 
     this.realtimeService.publish('order.created', order);
+    await this.syncTableStatus(order);
 
     return order;
   }
@@ -147,10 +165,30 @@ export class OrdersService {
       this.validateObjectId(updateOrderDto.tableId, 'Tisch-ID');
     }
 
+    const totals = updateOrderDto.items
+      ? this.calculateTotals(updateOrderDto.items)
+      : undefined;
     const updatePayload = {
       ...updateOrderDto,
       ...(updateOrderDto.items
-        ? { total: this.calculateTotal(updateOrderDto.items) }
+        ? {
+            items: updateOrderDto.items.map((item) => ({
+              ...item,
+              totalPrice: this.calculateItemTotal(item),
+              status: item.status ?? OrderItemStatus.Open,
+              productionArea:
+                item.productionArea ??
+                (item.isKitchenItem === false
+                  ? ProductionArea.Bar
+                  : ProductionArea.Kitchen),
+              courseType: item.courseType ?? CourseType.Main,
+              specialRequests: item.specialRequests ?? [],
+              allergens: item.allergens ?? [],
+            })),
+            subtotal: totals?.subtotal,
+            tax: totals?.tax,
+            total: totals?.total,
+          }
         : {}),
     };
 
@@ -182,8 +220,61 @@ export class OrdersService {
       statusChanged ? 'order.statusChanged' : 'order.updated',
       updatedOrder,
     );
+    await this.syncTableStatus(updatedOrder);
 
     return updatedOrder;
+  }
+
+  async sendToKitchen(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<OrderDocument> {
+    return this.update(id, { status: OrderStatus.Accepted }, actor);
+  }
+
+  async markPaid(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<OrderDocument> {
+    return this.update(
+      id,
+      { paymentStatus: PaymentStatus.Paid, status: OrderStatus.Closed },
+      actor,
+    );
+  }
+
+  async close(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<OrderDocument> {
+    return this.update(id, { status: OrderStatus.Closed }, actor);
+  }
+
+  async releaseTable(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<OrderDocument> {
+    const order = await this.findOne(id, actor);
+
+    if (!order.tableId) {
+      throw new BadRequestException('Bestellung ist keinem Tisch zugeordnet');
+    }
+
+    const released = await this.update(
+      id,
+      { paymentStatus: PaymentStatus.Paid, status: OrderStatus.Closed },
+      actor,
+    );
+
+    await this.tableModel
+      .findByIdAndUpdate(order.tableId, { status: TableStatus.Free }, { new: true })
+      .exec();
+    this.realtimeService.publish('table.released', {
+      tableId: order.tableId,
+      orderId: order._id.toString(),
+    });
+
+    return released;
   }
 
   async remove(id: string, actor: AuthenticatedUser): Promise<OrderDocument> {
@@ -198,14 +289,81 @@ export class OrdersService {
     }
 
     this.realtimeService.publish('order.cancelled', deletedOrder);
+    await this.syncTableStatus(deletedOrder, true);
 
     return deletedOrder;
   }
 
-  private calculateTotal(
+  private calculateTotals(
     items: Pick<OrderItem, 'quantity' | 'price'>[],
+  ): { subtotal: number; tax: number; total: number } {
+    const subtotal = items.reduce(
+      (sum, item) => sum + this.calculateItemTotal(item),
+      0,
+    );
+    const tax = this.roundMoney(subtotal * 0.19);
+
+    return {
+      subtotal: this.roundMoney(subtotal),
+      tax,
+      total: this.roundMoney(subtotal),
+    };
+  }
+
+  private calculateItemTotal(
+    item: Pick<OrderItem, 'quantity' | 'price'>,
   ): number {
-    return items.reduce((sum, item) => sum + item.quantity * item.price, 0);
+    return this.roundMoney(item.quantity * item.price);
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private async syncTableStatus(
+    order: Pick<OrderDocument, 'tableId' | 'status' | 'paymentStatus'>,
+    removed = false,
+  ): Promise<void> {
+    if (!order.tableId) {
+      return;
+    }
+
+    const status = removed
+      ? TableStatus.Free
+      : this.getTableStatusForOrder(order.status, order.paymentStatus);
+
+    await this.tableModel
+      .findByIdAndUpdate(order.tableId, { status }, { new: true })
+      .exec();
+    this.realtimeService.publish('table.statusChanged', {
+      tableId: order.tableId,
+      status,
+    });
+  }
+
+  private getTableStatusForOrder(
+    status: OrderStatus,
+    paymentStatus?: PaymentStatus,
+  ): TableStatus {
+    if (paymentStatus === PaymentStatus.Paid) {
+      return TableStatus.Paid;
+    }
+
+    switch (status) {
+      case OrderStatus.Draft:
+      case OrderStatus.New:
+        return TableStatus.Ordering;
+      case OrderStatus.Accepted:
+      case OrderStatus.Preparing:
+      case OrderStatus.Ready:
+        return TableStatus.InProgress;
+      case OrderStatus.Served:
+        return TableStatus.ReadyToPay;
+      case OrderStatus.Closed:
+        return TableStatus.Paid;
+      case OrderStatus.Cancelled:
+        return TableStatus.Free;
+    }
   }
 
   private validateObjectId(id: string, label: string): void {

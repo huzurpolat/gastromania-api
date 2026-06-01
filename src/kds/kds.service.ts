@@ -16,6 +16,11 @@ import {
 } from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
+  RestaurantTable,
+  RestaurantTableDocument,
+  TableStatus,
+} from '../tables/schemas/table.schema';
+import {
   KdsActionDto,
   UpdateOrderItemStatusDto,
   UpdateOrderStatusDto,
@@ -57,6 +62,8 @@ export class KdsService {
   constructor(
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(RestaurantTable.name)
+    private readonly tableModel: Model<RestaurantTableDocument>,
     @InjectModel(KdsStatusLog.name)
     private readonly logModel: Model<KdsStatusLogDocument>,
     @InjectModel(KdsSettings.name)
@@ -143,6 +150,7 @@ export class KdsService {
     }
 
     const saved = await order.save();
+    await this.syncTableStatus(saved);
     await this.writeLog(saved, 'order.statusChanged', actor, {
       fromStatus: previousStatus,
       toStatus: dto.status,
@@ -346,6 +354,27 @@ export class KdsService {
         item.status = status;
         item.changedAt = new Date();
       }
+    });
+  }
+
+  private async syncTableStatus(order: OrderDocument): Promise<void> {
+    if (!order.tableId) {
+      return;
+    }
+
+    const status =
+      order.status === OrderStatus.Served
+        ? TableStatus.ReadyToPay
+        : order.status === OrderStatus.Cancelled
+          ? TableStatus.Free
+          : TableStatus.InProgress;
+
+    await this.tableModel
+      .findByIdAndUpdate(order.tableId, { status }, { new: true })
+      .exec();
+    this.realtimeService.publish('table.statusChanged', {
+      tableId: order.tableId,
+      status,
     });
   }
 

@@ -34,6 +34,11 @@ const stringArray = (value: unknown): string[] | undefined => {
 };
 
 export class OrderItemDto {
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  productId?: string;
+
   @Transform(({ value }) => trimString(value))
   @IsString()
   name!: string;

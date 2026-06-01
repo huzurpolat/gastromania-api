@@ -6,6 +6,10 @@ import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { Recipe, RecipeSchema } from '../recipes/schemas/recipe.schema';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
 import {
+  RestaurantTable,
+  RestaurantTableSchema,
+} from '../tables/schemas/table.schema';
+import {
   StockMovement,
   StockMovementSchema,
 } from '../stock/schemas/stock-movement.schema';
@@ -22,6 +26,7 @@ import { OrdersService } from './orders.service';
       { name: Recipe.name, schema: RecipeSchema },
       { name: StockItem.name, schema: StockItemSchema },
       { name: StockMovement.name, schema: StockMovementSchema },
+      { name: RestaurantTable.name, schema: RestaurantTableSchema },
     ]),
   ],
   controllers: [OrdersController],

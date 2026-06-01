@@ -3,6 +3,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
+import {
+  RestaurantTable,
+  RestaurantTableSchema,
+} from '../tables/schemas/table.schema';
 import { KdsController } from './kds.controller';
 import { KdsService } from './kds.service';
 import { KdsSettings, KdsSettingsSchema } from './schemas/kds-settings.schema';
@@ -25,6 +29,7 @@ import {
     RealtimeModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
+      { name: RestaurantTable.name, schema: RestaurantTableSchema },
       { name: KdsStatusLog.name, schema: KdsStatusLogSchema },
       { name: KdsSettings.name, schema: KdsSettingsSchema },
       { name: KitchenStation.name, schema: KitchenStationSchema },
