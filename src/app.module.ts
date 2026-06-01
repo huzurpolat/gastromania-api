@@ -24,6 +24,7 @@ import { RbacModule } from './rbac/rbac.module';
 import { KdsModule } from './kds/kds.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SettingsModule } from './settings/settings.module';
+import { StaffPlanningModule } from './staff-planning/staff-planning.module';
 import { StockModule } from './stock/stock.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { TablesModule } from './tables/tables.module';
@@ -74,6 +75,7 @@ import { HealthController } from './health.controller';
     DemoDataModule,
     DashboardModule,
     DailyClosingsModule,
+    StaffPlanningModule,
     StockModule,
     SuppliersModule,
     ChecklistsModule,
