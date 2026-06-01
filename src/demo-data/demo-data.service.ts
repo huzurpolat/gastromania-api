@@ -104,7 +104,7 @@ interface DemoRegionConfig {
 @Injectable()
 export class DemoDataService {
   private readonly demoPrefix = '[Demo]';
-  private readonly demoPassword = 'Demo123!';
+  private readonly demoPassword = 'Gastromania2026!';
   private readonly demoCompanyName = 'Gastro Group Deutschland';
   private readonly demoRegions: DemoRegionConfig[] = [
     {
