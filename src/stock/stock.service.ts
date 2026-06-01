@@ -224,6 +224,7 @@ export class StockService {
   async findMovements(
     actor: AuthenticatedUser,
     locationId?: string,
+    type?: StockMovementType,
   ): Promise<StockMovementResponse[]> {
     const locationIds = locationId
       ? [locationId]
@@ -232,7 +233,10 @@ export class StockService {
     await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
 
     const movements = await this.movementModel
-      .find({ locationId: { $in: locationIds } })
+      .find({
+        locationId: { $in: locationIds },
+        ...(type ? { type } : {}),
+      })
       .sort({ createdAt: -1 })
       .limit(80)
       .exec();
@@ -560,7 +564,14 @@ export class StockService {
       {
         $match: {
           locationId: { $in: locationIds },
-          type: { $in: ['Verbrauch', 'Warenausgang'] },
+          type: {
+            $in: [
+              StockMovementType.Usage,
+              StockMovementType.Issue,
+              StockMovementType.OrderConsumption,
+              StockMovementType.OrderQuantityAdjustment,
+            ],
+          },
           quantityChange: { $lt: 0 },
         },
       },
@@ -568,7 +579,7 @@ export class StockService {
       { $sort: { quantity: -1 } },
       { $limit: 5 },
     ]);
-    const sumMovement = (types: string[]) =>
+    const sumMovement = (types: StockMovementType[]) =>
       movements
         .filter((movement) => types.includes(movement.type))
         .reduce((sum, movement) => sum + Math.abs(movement.quantityChange), 0);
@@ -578,9 +589,19 @@ export class StockService {
       totalStockValueNet: items.reduce((sum, item) => sum + item.quantity * (item.purchasePriceNet ?? 0), 0),
       lowStockCount: items.filter((item) => item.isActive && item.quantity <= item.minQuantity).length,
       openInventorySessions,
-      receiptsToday: sumMovement(['Wareneingang']),
-      issuesToday: sumMovement(['Warenausgang', 'Verbrauch']),
-      shrinkageToday: sumMovement(['Schwund', 'Bruch', 'Verderb', 'Verlust', 'Bruch/Verderb']),
+      receiptsToday: sumMovement([StockMovementType.Receipt]),
+      issuesToday: sumMovement([
+        StockMovementType.Issue,
+        StockMovementType.Usage,
+        StockMovementType.OrderConsumption,
+        StockMovementType.OrderQuantityAdjustment,
+      ]),
+      shrinkageToday: sumMovement([
+        StockMovementType.Shrinkage,
+        StockMovementType.Breakage,
+        StockMovementType.Spoilage,
+        StockMovementType.Loss,
+      ]),
       expiringSoonCount,
       negativeStockCount: items.filter((item) => item.quantity < 0).length,
       topUsageItems: topUsage.map((entry) => ({

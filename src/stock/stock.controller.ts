@@ -33,6 +33,7 @@ import { ReceiveStockDto } from './dto/receive-stock.dto';
 import { ReportWasteDto } from './dto/report-waste.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
 import { StockService } from './stock.service';
+import { StockMovementType } from './schemas/stock-movement.schema';
 
 @Controller('stock')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
@@ -188,8 +189,9 @@ export class StockController {
   findMovements(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
+    @Query('type') type?: StockMovementType,
   ) {
-    return this.stockService.findMovements(user, locationId);
+    return this.stockService.findMovements(user, locationId, type);
   }
 
   @Get('batches')

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
+import { StockAlert, StockAlertSchema } from '../stock/schemas/stock-alert.schema';
 import {
   InventoryBatch,
   InventoryBatchSchema,
@@ -22,6 +23,7 @@ import { Recipe, RecipeSchema } from './schemas/recipe.schema';
     MongooseModule.forFeature([
       { name: Recipe.name, schema: RecipeSchema },
       { name: StockItem.name, schema: StockItemSchema },
+      { name: StockAlert.name, schema: StockAlertSchema },
       { name: InventoryBatch.name, schema: InventoryBatchSchema },
       { name: StockMovement.name, schema: StockMovementSchema },
     ]),

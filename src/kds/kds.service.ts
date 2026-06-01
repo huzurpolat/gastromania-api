@@ -16,6 +16,7 @@ import {
   ProductionArea,
 } from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
+import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import {
   RestaurantTable,
   RestaurantTableDocument,
@@ -76,6 +77,7 @@ export class KdsService {
     @InjectModel(KdsSettings.name)
     private readonly settingsModel: Model<KdsSettingsDocument>,
     private readonly realtimeService: RealtimeService,
+    private readonly recipeInventoryService: RecipeInventoryService,
     private readonly accessPolicy: AccessPolicyService,
   ) {}
 
@@ -157,6 +159,16 @@ export class KdsService {
     }
 
     const saved = await order.save();
+    if (dto.status === OrderStatus.Accepted && !this.hasInventoryDeduction(saved)) {
+      await this.deductOrderInventory(saved, actor.sub);
+    }
+    if (
+      dto.status === OrderStatus.Cancelled &&
+      this.hasInventoryDeduction(saved) &&
+      !saved.inventoryReversedAt
+    ) {
+      await this.reverseOrderInventory(saved, actor.sub);
+    }
     await this.syncTableStatus(saved, actor, 'table.status.changed');
     await this.writeLog(saved, 'order.statusChanged', actor, {
       fromStatus: previousStatus,
@@ -404,6 +416,44 @@ export class KdsService {
         item.changedAt = new Date();
       }
     });
+  }
+
+  private hasInventoryDeduction(order: OrderDocument): boolean {
+    return Boolean(order.inventoryDeducted || order.inventoryConsumedAt);
+  }
+
+  private async deductOrderInventory(order: OrderDocument, actorId: string): Promise<void> {
+    const result = await this.recipeInventoryService.consumeOrder(order, actorId);
+    order.inventoryDeducted = true;
+    order.inventoryDeductedAt = new Date();
+    order.inventoryConsumedAt = order.inventoryDeductedAt;
+    order.inventoryMovementIds = [
+      ...(order.inventoryMovementIds ?? []),
+      ...result.movementIds,
+    ];
+    order.inventoryWarnings = this.uniqueValues([
+      ...(order.inventoryWarnings ?? []),
+      ...result.warnings,
+    ]);
+    await order.save();
+  }
+
+  private async reverseOrderInventory(order: OrderDocument, actorId: string): Promise<void> {
+    const result = await this.recipeInventoryService.reverseOrder(order, actorId);
+    order.inventoryReversedAt = new Date();
+    order.inventoryMovementIds = [
+      ...(order.inventoryMovementIds ?? []),
+      ...result.movementIds,
+    ];
+    order.inventoryWarnings = this.uniqueValues([
+      ...(order.inventoryWarnings ?? []),
+      ...result.warnings,
+    ]);
+    await order.save();
+  }
+
+  private uniqueValues(values: string[]): string[] {
+    return [...new Set(values.filter(Boolean))];
   }
 
   private aggregateOrderStatus(order: OrderDocument): OrderStatus {

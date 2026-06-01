@@ -18,6 +18,7 @@ describe('OrdersService', () => {
     create: jest.fn(),
     countDocuments: jest.fn(),
     findById: jest.fn(),
+    findByIdAndUpdate: jest.fn(),
     find: jest.fn(),
   };
   const logModel = {
@@ -35,6 +36,8 @@ describe('OrdersService', () => {
   };
   const recipeInventoryService = {
     consumeOrder: jest.fn(),
+    reverseOrder: jest.fn(),
+    adjustOrder: jest.fn(),
   };
   const accessPolicy = {
     assertCanAccessLocation: jest.fn(),
@@ -88,7 +91,18 @@ describe('OrdersService', () => {
         guestCount: 4,
       }),
     });
-    recipeInventoryService.consumeOrder.mockResolvedValue(undefined);
+    recipeInventoryService.consumeOrder.mockResolvedValue({
+      movementIds: ['mov-1'],
+      warnings: [],
+    });
+    recipeInventoryService.reverseOrder.mockResolvedValue({
+      movementIds: ['mov-2'],
+      warnings: [],
+    });
+    recipeInventoryService.adjustOrder.mockResolvedValue({
+      movementIds: ['mov-3'],
+      warnings: [],
+    });
     accessPolicy.assertCanAccessLocation.mockResolvedValue(undefined);
     accessPolicy.canAccessLocation.mockResolvedValue(true);
     logModel.create.mockResolvedValue({});
@@ -147,6 +161,60 @@ describe('OrdersService', () => {
       { new: true },
     );
     expect(realtimeService.publish).toHaveBeenCalledWith('order.created', order);
+    expect(recipeInventoryService.consumeOrder).not.toHaveBeenCalled();
+  });
+
+  it('deducts inventory exactly once when an order is sent to kitchen', async () => {
+    const currentOrder = {
+      _id: { toString: () => '507f1f77bcf86cd799439014' },
+      companyId: 'company-1',
+      locationId,
+      tableId,
+      status: OrderStatus.New,
+      paymentStatus: undefined,
+      statusTimestamps: {},
+      inventoryDeducted: false,
+      items: [{ name: 'Burger', quantity: 2, price: 12, isKitchenItem: true }],
+      save: jest.fn(),
+    };
+    const updatedOrder = {
+      ...currentOrder,
+      status: OrderStatus.Accepted,
+      statusTimestamps: { [OrderStatus.Accepted]: new Date() },
+      inventoryMovementIds: [],
+      inventoryWarnings: [],
+      save: jest.fn(),
+    };
+    updatedOrder.save.mockResolvedValue(updatedOrder);
+    orderModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(currentOrder),
+    });
+    orderModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(updatedOrder),
+    });
+    orderModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([updatedOrder]),
+      }),
+    });
+
+    const result = await service.sendToKitchen(
+      '507f1f77bcf86cd799439014',
+      {
+        sub: 'waiter-1',
+        email: 'service@test.local',
+        roles: [Role.Service],
+        companyId: 'company-1',
+      },
+    );
+
+    expect(result.status).toBe(OrderStatus.Accepted);
+    expect(recipeInventoryService.consumeOrder).toHaveBeenCalledWith(
+      updatedOrder,
+      'waiter-1',
+    );
+    expect(updatedOrder.inventoryDeducted).toBe(true);
+    expect(updatedOrder.inventoryMovementIds).toEqual(['mov-1']);
   });
 
   it('aggregates order status from item status changes and writes an audit log', async () => {

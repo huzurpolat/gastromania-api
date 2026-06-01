@@ -1,5 +1,5 @@
-import { BadRequestException } from '@nestjs/common';
 import { RecipeInventoryService } from './recipe-inventory.service';
+import { StockMovementType } from '../stock/schemas/stock-movement.schema';
 
 describe('RecipeInventoryService', () => {
   const recipeModel = {
@@ -14,6 +14,10 @@ describe('RecipeInventoryService', () => {
   const movementModel = {
     create: jest.fn(),
   };
+  const stockAlertModel = {
+    findOneAndUpdate: jest.fn(),
+    updateMany: jest.fn(),
+  };
   let service: RecipeInventoryService;
 
   beforeEach(() => {
@@ -23,6 +27,7 @@ describe('RecipeInventoryService', () => {
       stockItemModel as never,
       batchModel as never,
       movementModel as never,
+      stockAlertModel as never,
     );
     batchModel.find.mockReturnValue({
       sort: jest.fn().mockReturnValue({
@@ -75,6 +80,7 @@ describe('RecipeInventoryService', () => {
       expect.objectContaining({
         locationId: 'loc-1',
         stockItemName: 'Patty',
+        type: StockMovementType.OrderConsumption,
         quantityChange: -6,
         quantityBefore: 10,
         quantityAfter: 4,
@@ -83,7 +89,7 @@ describe('RecipeInventoryService', () => {
     );
   });
 
-  it('rejects consumption when ingredients are unavailable', async () => {
+  it('allows negative stock and creates a low-stock alert when ingredients are unavailable', async () => {
     const recipe = {
       name: 'Burger',
       ingredients: [
@@ -99,20 +105,46 @@ describe('RecipeInventoryService', () => {
     recipeModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue(recipe),
     });
+    const item = {
+      _id: { toString: () => 'stock-1' },
+      locationId: 'loc-1',
+      name: 'Patty',
+      quantity: 1,
+      minQuantity: 2,
+      criticalQuantity: 0,
+      unit: 'Stueck',
+      isActive: true,
+      isArchived: false,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
     stockItemModel.findById.mockReturnValue({
-      exec: jest.fn().mockResolvedValue({ locationId: 'loc-1', quantity: 1 }),
+      exec: jest.fn().mockResolvedValue(item),
     });
+    movementModel.create.mockResolvedValue({});
 
-    await expect(
-      service.consumeOrder(
-        {
-          _id: 'order-1',
-          locationId: 'loc-1',
-          items: [{ name: 'Burger', quantity: 1 }],
-        } as never,
-        'user-1',
-      ),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await service.consumeOrder(
+      {
+        _id: 'order-1',
+        locationId: 'loc-1',
+        items: [{ name: 'Burger', quantity: 1 }],
+      } as never,
+      'user-1',
+    );
+
+    expect(item.quantity).toBe(-1);
+    expect(movementModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: StockMovementType.OrderConsumption,
+        quantityChange: -2,
+        quantityBefore: 1,
+        quantityAfter: -1,
+      }),
+    );
+    expect(stockAlertModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ stockItemId: 'stock-1', type: 'Mindestbestand' }),
+      expect.objectContaining({ severity: 'critical' }),
+      expect.objectContaining({ upsert: true }),
+    );
   });
 
   it('matches recipes by menu item id before falling back to the item name', async () => {
@@ -165,6 +197,7 @@ describe('RecipeInventoryService', () => {
     expect(movementModel.create).toHaveBeenCalledWith(
       expect.objectContaining({
         orderId: 'order-2',
+        type: StockMovementType.OrderConsumption,
         quantityChange: -2,
         quantityAfter: 3,
       }),

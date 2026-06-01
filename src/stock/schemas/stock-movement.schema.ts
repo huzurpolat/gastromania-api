@@ -7,6 +7,9 @@ export enum StockMovementType {
   Receipt = 'Wareneingang',
   Issue = 'Warenausgang',
   Usage = 'Verbrauch',
+  OrderConsumption = 'order_consumption',
+  OrderCancelReversal = 'order_cancel_reversal',
+  OrderQuantityAdjustment = 'order_quantity_adjustment',
   Shrinkage = 'Schwund',
   Breakage = 'Bruch',
   Spoilage = 'Verderb',
@@ -30,6 +33,12 @@ export class StockMovement {
   @Prop({ trim: true, index: true })
   orderId?: string;
 
+  @Prop({ trim: true, index: true })
+  orderItemId?: string;
+
+  @Prop({ trim: true, index: true })
+  recipeId?: string;
+
   @Prop({ required: true, trim: true })
   stockItemName!: string;
 
@@ -39,7 +48,7 @@ export class StockMovement {
   @Prop({ required: true })
   quantityChange!: number;
 
-  @Prop({ required: true, min: 0, default: 0 })
+  @Prop({ required: true, default: 0 })
   quantityBefore!: number;
 
   @Prop({ required: true })

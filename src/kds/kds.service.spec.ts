@@ -6,6 +6,7 @@ import { KdsSettings } from './schemas/kds-settings.schema';
 import { KdsStatusLog } from './schemas/kds-status-log.schema';
 import { Order, OrderStatus } from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
+import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { RestaurantTable, TableStatus } from '../tables/schemas/table.schema';
 import { TableStatusLog } from '../tables/schemas/table-status-log.schema';
@@ -42,6 +43,10 @@ describe('KdsService', () => {
   const realtimeService = {
     publish: jest.fn(),
   };
+  const recipeInventoryService = {
+    consumeOrder: jest.fn(),
+    reverseOrder: jest.fn(),
+  };
   const accessPolicy = {
     canAccessLocation: jest.fn(),
     assertCanManageLocation: jest.fn(),
@@ -52,6 +57,11 @@ describe('KdsService', () => {
     jest.clearAllMocks();
     order.status = OrderStatus.New;
     order.statusTimestamps = {};
+    delete (order as { inventoryDeducted?: boolean }).inventoryDeducted;
+    delete (order as { inventoryConsumedAt?: Date }).inventoryConsumedAt;
+    delete (order as { inventoryReversedAt?: Date }).inventoryReversedAt;
+    (order as { inventoryMovementIds?: string[] }).inventoryMovementIds = [];
+    (order as { inventoryWarnings?: string[] }).inventoryWarnings = [];
     order.save.mockResolvedValue(order);
     orderModel.findById.mockReturnValue({
       exec: jest.fn().mockResolvedValue(order),
@@ -85,6 +95,14 @@ describe('KdsService', () => {
     accessPolicy.canAccessLocation.mockResolvedValue(true);
     accessPolicy.assertCanManageLocation.mockResolvedValue(undefined);
     accessPolicy.getScopedResourceFilter.mockResolvedValue({});
+    recipeInventoryService.consumeOrder.mockResolvedValue({
+      movementIds: ['mov-1'],
+      warnings: [],
+    });
+    recipeInventoryService.reverseOrder.mockResolvedValue({
+      movementIds: ['mov-2'],
+      warnings: [],
+    });
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -95,6 +113,7 @@ describe('KdsService', () => {
         { provide: getModelToken(KdsStatusLog.name), useValue: logModel },
         { provide: getModelToken(KdsSettings.name), useValue: settingsModel },
         { provide: RealtimeService, useValue: realtimeService },
+        { provide: RecipeInventoryService, useValue: recipeInventoryService },
         { provide: AccessPolicyService, useValue: accessPolicy },
       ],
     }).compile();
@@ -112,6 +131,8 @@ describe('KdsService', () => {
     ).resolves.toBe(order);
 
     expect(order.status).toBe(OrderStatus.Accepted);
+    expect(recipeInventoryService.consumeOrder).toHaveBeenCalledWith(order, 'user-1');
+    expect(order.inventoryDeducted).toBe(true);
     expect(logModel.create).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'order.statusChanged',

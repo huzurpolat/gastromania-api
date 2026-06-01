@@ -58,6 +58,12 @@ export class RecipeIngredient {
   @Prop({ required: true, trim: true })
   unit!: string;
 
+  @Prop({ min: 0, default: 1 })
+  wasteFactor!: number;
+
+  @Prop({ default: false })
+  isOptional!: boolean;
+
   @Prop({ min: 0, default: 0 })
   purchasePriceNet!: number;
 

@@ -67,6 +67,15 @@ export class RecipeIngredientDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  wasteFactor?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isOptional?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   purchasePriceNet?: number;
 
   @IsOptional()

@@ -427,6 +427,8 @@ export class DashboardAnalyticsService {
             type: {
               $in: [
                 StockMovementType.Usage,
+                StockMovementType.OrderConsumption,
+                StockMovementType.OrderQuantityAdjustment,
                 StockMovementType.Shrinkage,
                 StockMovementType.Breakage,
                 StockMovementType.Spoilage,

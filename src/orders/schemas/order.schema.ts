@@ -240,8 +240,20 @@ export class Order {
   @Prop({ index: true })
   inventoryConsumedAt?: Date;
 
+  @Prop({ default: false, index: true })
+  inventoryDeducted!: boolean;
+
+  @Prop({ index: true })
+  inventoryDeductedAt?: Date;
+
   @Prop({ index: true })
   inventoryReversedAt?: Date;
+
+  @Prop({ type: [String], default: [] })
+  inventoryMovementIds!: string[];
+
+  @Prop({ type: [String], default: [] })
+  inventoryWarnings!: string[];
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);

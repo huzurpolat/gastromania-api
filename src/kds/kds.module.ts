@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
+import { RecipesModule } from '../recipes/recipes.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import {
   RestaurantTable,
@@ -31,6 +32,7 @@ import {
   imports: [
     AuthJwtModule,
     RealtimeModule,
+    RecipesModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
       { name: RestaurantTable.name, schema: RestaurantTableSchema },

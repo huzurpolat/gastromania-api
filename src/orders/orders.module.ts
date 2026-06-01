@@ -5,6 +5,7 @@ import { RealtimeModule } from '../realtime/realtime.module';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { Recipe, RecipeSchema } from '../recipes/schemas/recipe.schema';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
+import { StockAlert, StockAlertSchema } from '../stock/schemas/stock-alert.schema';
 import {
   RestaurantTable,
   RestaurantTableSchema,
@@ -37,6 +38,7 @@ import { OrdersService } from './orders.service';
       { name: Order.name, schema: OrderSchema },
       { name: Recipe.name, schema: RecipeSchema },
       { name: StockItem.name, schema: StockItemSchema },
+      { name: StockAlert.name, schema: StockAlertSchema },
       { name: StockMovement.name, schema: StockMovementSchema },
       { name: InventoryBatch.name, schema: InventoryBatchSchema },
       { name: RestaurantTable.name, schema: RestaurantTableSchema },

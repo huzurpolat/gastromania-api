@@ -108,18 +108,6 @@ export class OrdersService {
       total: totals.total,
     });
 
-    try {
-      await this.recipeInventoryService.consumeOrder(
-        order,
-        actor.sub,
-      );
-      order.inventoryConsumedAt = new Date();
-      await order.save();
-    } catch (error) {
-      await order.deleteOne();
-      throw error;
-    }
-
     this.realtimeService.publish('order.created', order);
     await this.syncTableStatus(order, false, actor, 'table.order.created');
 
@@ -258,12 +246,14 @@ export class OrdersService {
 
     if (
       updatedOrder.status === OrderStatus.Cancelled &&
-      updatedOrder.inventoryConsumedAt &&
+      this.hasInventoryDeduction(updatedOrder) &&
       !updatedOrder.inventoryReversedAt
     ) {
-      await this.recipeInventoryService.reverseOrder(updatedOrder, actor.sub);
-      updatedOrder.inventoryReversedAt = new Date();
-      await updatedOrder.save();
+      await this.reverseOrderInventory(updatedOrder, actor.sub);
+    } else if (this.shouldDeductInventory(currentOrder, updatedOrder)) {
+      await this.deductOrderInventory(updatedOrder, actor.sub);
+    } else if (updateOrderDto.items && this.hasInventoryDeduction(currentOrder)) {
+      await this.adjustOrderInventory(currentOrder, updatedOrder, actor.sub);
     }
 
     this.realtimeService.publish(
@@ -419,10 +409,8 @@ export class OrdersService {
     const order = await this.findOne(id, actor);
     await this.accessPolicy.assertCanManageLocation(actor, order.locationId);
 
-    if (order.inventoryConsumedAt && !order.inventoryReversedAt) {
-      await this.recipeInventoryService.reverseOrder(order, actor.sub);
-      order.inventoryReversedAt = new Date();
-      await order.save();
+    if (this.hasInventoryDeduction(order) && !order.inventoryReversedAt) {
+      await this.reverseOrderInventory(order, actor.sub);
     }
 
     const deletedOrder = await this.orderModel.findByIdAndDelete(id).exec();
@@ -435,6 +423,87 @@ export class OrdersService {
     await this.syncTableStatus(deletedOrder, true, actor, 'table.status.changed');
 
     return deletedOrder;
+  }
+
+  private shouldDeductInventory(
+    currentOrder: OrderDocument,
+    updatedOrder: OrderDocument,
+  ): boolean {
+    return (
+      !this.hasInventoryDeduction(currentOrder) &&
+      !this.hasInventoryDeduction(updatedOrder) &&
+      updatedOrder.status === OrderStatus.Accepted
+    );
+  }
+
+  private hasInventoryDeduction(order: Pick<OrderDocument, 'inventoryDeducted' | 'inventoryConsumedAt'>): boolean {
+    return Boolean(order.inventoryDeducted || order.inventoryConsumedAt);
+  }
+
+  private async deductOrderInventory(
+    order: OrderDocument,
+    actorId: string,
+  ): Promise<void> {
+    const result = await this.recipeInventoryService.consumeOrder(order, actorId);
+    order.inventoryDeducted = true;
+    order.inventoryDeductedAt = new Date();
+    order.inventoryConsumedAt = order.inventoryDeductedAt;
+    order.inventoryMovementIds = [
+      ...(order.inventoryMovementIds ?? []),
+      ...result.movementIds,
+    ];
+    order.inventoryWarnings = this.uniqueValues([
+      ...(order.inventoryWarnings ?? []),
+      ...result.warnings,
+    ]);
+    await order.save();
+  }
+
+  private async reverseOrderInventory(
+    order: OrderDocument,
+    actorId: string,
+  ): Promise<void> {
+    const result = await this.recipeInventoryService.reverseOrder(order, actorId);
+    order.inventoryReversedAt = new Date();
+    order.inventoryMovementIds = [
+      ...(order.inventoryMovementIds ?? []),
+      ...result.movementIds,
+    ];
+    order.inventoryWarnings = this.uniqueValues([
+      ...(order.inventoryWarnings ?? []),
+      ...result.warnings,
+    ]);
+    await order.save();
+  }
+
+  private async adjustOrderInventory(
+    currentOrder: OrderDocument,
+    updatedOrder: OrderDocument,
+    actorId: string,
+  ): Promise<void> {
+    const result = await this.recipeInventoryService.adjustOrder(
+      currentOrder,
+      updatedOrder,
+      actorId,
+    );
+
+    if (!result.movementIds.length && !result.warnings.length) {
+      return;
+    }
+
+    updatedOrder.inventoryMovementIds = [
+      ...(updatedOrder.inventoryMovementIds ?? []),
+      ...result.movementIds,
+    ];
+    updatedOrder.inventoryWarnings = this.uniqueValues([
+      ...(updatedOrder.inventoryWarnings ?? []),
+      ...result.warnings,
+    ]);
+    await updatedOrder.save();
+  }
+
+  private uniqueValues(values: string[]): string[] {
+    return [...new Set(values.filter(Boolean))];
   }
 
   private calculateTotals(
