@@ -12,6 +12,7 @@ import {
 } from 'class-validator';
 import {
   OrderPriority,
+  PaymentMethod,
   OrderStatus,
   PaymentStatus,
 } from '../schemas/order.schema';
@@ -59,6 +60,50 @@ export class CreateOrderDto {
   @IsOptional()
   @IsEnum(PaymentStatus)
   paymentStatus?: PaymentStatus;
+
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
+
+  @Type(() => Number)
+  @IsOptional()
+  @Min(0)
+  discountTotal?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @Min(0)
+  refundTotal?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @Min(0)
+  tipTotal?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @Min(0)
+  cashAmount?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @Min(0)
+  cardAmount?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @Min(0)
+  onlineAmount?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @Min(0)
+  voucherAmount?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @Min(0)
+  otherAmount?: number;
 
   @IsArray()
   @ArrayNotEmpty()

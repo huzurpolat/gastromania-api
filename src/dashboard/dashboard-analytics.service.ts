@@ -24,6 +24,10 @@ import { TimeEntry } from '../time-tracking/schemas/time-entry.schema';
 import { User } from '../users/schemas/user.schema';
 import { DashboardQueryDto, DashboardRange } from './dto/dashboard-query.dto';
 import { DashboardNotificationSeverity } from './schemas/notification.schema';
+import {
+  DailyClosing,
+  DailyClosingStatus,
+} from '../daily-closings/schemas/daily-closing.schema';
 
 export interface ResolvedDashboardQuery {
   locationIds?: string[];
@@ -80,6 +84,8 @@ export class DashboardAnalyticsService {
     private readonly stockItemModel: Model<StockItem>,
     @InjectModel(StockMovement.name)
     private readonly stockMovementModel: Model<StockMovement>,
+    @InjectModel(DailyClosing.name)
+    private readonly dailyClosingModel: Model<DailyClosing>,
   ) {}
 
   resolveQuery(
@@ -149,6 +155,7 @@ export class DashboardAnalyticsService {
       employeesInService,
       checklistOpenTasks,
       inventory,
+      dailyClosing,
       alerts,
     ] = await Promise.all([
       this.availableLocations(user),
@@ -185,6 +192,7 @@ export class DashboardAnalyticsService {
       }),
       this.countOpenChecklistTasks(locationFilter, today.from, today.to),
       this.inventorySummary(locationFilter),
+      this.dailyClosingSummary(locationFilter, today.from, today.to),
       this.alerts(user, resolved),
     ]);
 
@@ -208,6 +216,9 @@ export class DashboardAnalyticsService {
         openChecklistTasks: checklistOpenTasks,
         inventoryValue: inventory.value,
         lowStockItems: inventory.lowStockItems,
+        dailyClosingOpen: dailyClosing.open,
+        dailyClosingCompleted: dailyClosing.completed,
+        dailyClosingIssues: dailyClosing.issues,
       },
       alerts,
     };
@@ -648,6 +659,36 @@ export class DashboardAnalyticsService {
       value: Number(result?.value ?? 0),
       lowStockItems: Number(result?.lowStockItems ?? 0),
       unavailableItems: Number(result?.unavailableItems ?? 0),
+    };
+  }
+
+  private async dailyClosingSummary(
+    locationFilter: Record<string, unknown>,
+    from: Date,
+    to: Date,
+  ) {
+    const closings = await this.dailyClosingModel
+      .find({ ...locationFilter, businessDate: { $gte: from, $lte: to } })
+      .lean();
+
+    return {
+      open: closings.filter((closing) =>
+        [
+          DailyClosingStatus.Draft,
+          DailyClosingStatus.ReadyForReview,
+          DailyClosingStatus.Reopened,
+        ].includes(closing.status),
+      ).length,
+      completed: closings.filter((closing) =>
+        [
+          DailyClosingStatus.Completed,
+          DailyClosingStatus.CompletedWithIssues,
+          DailyClosingStatus.Locked,
+        ].includes(closing.status),
+      ).length,
+      issues: closings.filter(
+        (closing) => closing.status === DailyClosingStatus.CompletedWithIssues,
+      ).length,
     };
   }
 

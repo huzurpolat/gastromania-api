@@ -42,6 +42,10 @@ import {
   DashboardNotification,
   DashboardNotificationSchema,
 } from './schemas/notification.schema';
+import {
+  DailyClosing,
+  DailyClosingSchema,
+} from '../daily-closings/schemas/daily-closing.schema';
 
 @Module({
   imports: [
@@ -60,6 +64,7 @@ import {
       { name: StockMovement.name, schema: StockMovementSchema },
       { name: DashboardPreference.name, schema: DashboardPreferenceSchema },
       { name: DashboardNotification.name, schema: DashboardNotificationSchema },
+      { name: DailyClosing.name, schema: DailyClosingSchema },
     ]),
   ],
   controllers: [DashboardController],

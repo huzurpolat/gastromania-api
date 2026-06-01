@@ -8,6 +8,7 @@ export interface PermissionDefinition {
 
 const modules = {
   dashboard: ['view'],
+  dailyClosings: ['view', 'manage', 'reopen', 'lock'],
   users: ['view', 'create', 'update', 'delete', 'own.view', 'own.update'],
   roles: ['view', 'create', 'update', 'delete', 'permissions.update'],
   companies: ['view', 'create', 'update'],
@@ -142,6 +143,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'suppliers.view',
     'reports.view',
     'analytics.view',
+    'dailyClosings.view',
+    'dailyClosings.manage',
   ],
   Schichtleiter: [
     'dashboard.view',
@@ -152,6 +155,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'kds.view',
     'kds.manage',
     'tasks.view',
+    'dailyClosings.view',
+    'dailyClosings.manage',
   ],
   Service: [
     'dashboard.view',

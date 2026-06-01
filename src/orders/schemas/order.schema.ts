@@ -45,6 +45,15 @@ export enum PaymentStatus {
   Cancelled = 'Storniert',
 }
 
+export enum PaymentMethod {
+  Cash = 'cash',
+  Card = 'card',
+  Online = 'online',
+  Voucher = 'voucher',
+  Other = 'other',
+  Mixed = 'mixed',
+}
+
 export enum CourseType {
   Drink = 'Getränk',
   Starter = 'Vorspeise',
@@ -195,6 +204,14 @@ export class Order {
   })
   paymentStatus?: PaymentStatus;
 
+  @Prop({
+    type: String,
+    enum: Object.values(PaymentMethod),
+    default: PaymentMethod.Other,
+    index: true,
+  })
+  paymentMethod?: PaymentMethod;
+
   @Prop({ type: [OrderItemSchema], default: [] })
   items!: OrderItem[];
 
@@ -206,6 +223,30 @@ export class Order {
 
   @Prop({ required: true, min: 0, default: 0 })
   total!: number;
+
+  @Prop({ min: 0, default: 0 })
+  discountTotal!: number;
+
+  @Prop({ min: 0, default: 0 })
+  refundTotal!: number;
+
+  @Prop({ min: 0, default: 0 })
+  tipTotal!: number;
+
+  @Prop({ min: 0, default: 0 })
+  cashAmount!: number;
+
+  @Prop({ min: 0, default: 0 })
+  cardAmount!: number;
+
+  @Prop({ min: 0, default: 0 })
+  onlineAmount!: number;
+
+  @Prop({ min: 0, default: 0 })
+  voucherAmount!: number;
+
+  @Prop({ min: 0, default: 0 })
+  otherAmount!: number;
 
   @Prop({ trim: true })
   notes?: string;
