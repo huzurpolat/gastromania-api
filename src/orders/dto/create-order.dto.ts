@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   Min,
@@ -12,6 +13,7 @@ import {
 } from 'class-validator';
 import {
   OrderPriority,
+  OrderSource,
   PaymentMethod,
   OrderStatus,
   PaymentStatus,
@@ -56,6 +58,10 @@ export class CreateOrderDto {
   @IsOptional()
   @IsEnum(OrderPriority)
   priority?: OrderPriority;
+
+  @IsOptional()
+  @IsEnum(OrderSource)
+  source?: OrderSource;
 
   @IsOptional()
   @IsEnum(PaymentStatus)
@@ -135,4 +141,19 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   comment?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  guestNote?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  customerName?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  qrTokenId?: string;
 }

@@ -69,6 +69,21 @@ export class RestaurantTable {
   @Prop({ default: true })
   isActive!: boolean;
 
+  @Prop({ trim: true, index: true, unique: true, sparse: true })
+  qrToken?: string;
+
+  @Prop()
+  qrTokenCreatedAt?: Date;
+
+  @Prop()
+  qrTokenRevokedAt?: Date;
+
+  @Prop({ default: false, index: true })
+  qrEnabled!: boolean;
+
+  @Prop({ trim: true })
+  qrMenuId?: string;
+
   @Prop({ min: 0, default: 0 })
   guestCount!: number;
 

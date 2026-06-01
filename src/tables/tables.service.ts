@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
@@ -76,6 +77,19 @@ export interface TableOverviewItem {
   waitingState: WaitingState;
   latestOrderStatus?: OrderStatus;
   activeOrders: TableOverviewOrder[];
+}
+
+export interface TableQrInfo {
+  tableId: string;
+  tableName: string;
+  locationId: string;
+  qrEnabled: boolean;
+  qrToken?: string;
+  qrTokenCreatedAt?: Date;
+  qrTokenRevokedAt?: Date;
+  qrMenuId?: string;
+  publicUrl?: string;
+  printableLabel: string;
 }
 
 @Injectable()
@@ -234,6 +248,97 @@ export class TablesService {
     }
 
     return deletedTable;
+  }
+
+  async generateQrToken(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<TableQrInfo> {
+    const table = await this.findOne(id, actor);
+    await this.accessPolicy.assertCanManageLocation(actor, table.locationId);
+    const now = new Date();
+    const updated = await this.tableModel
+      .findByIdAndUpdate(
+        id,
+        {
+          qrToken: await this.createUniqueQrToken(),
+          qrTokenCreatedAt: now,
+          qrTokenRevokedAt: undefined,
+          qrEnabled: true,
+        },
+        { new: true, runValidators: true },
+      )
+      .exec();
+
+    if (!updated) {
+      throw new NotFoundException('Tisch nicht gefunden');
+    }
+
+    this.realtimeService.publish('table.qr.generated', this.toQrInfo(updated));
+    return this.toQrInfo(updated);
+  }
+
+  async revokeQrToken(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<TableQrInfo> {
+    const table = await this.findOne(id, actor);
+    await this.accessPolicy.assertCanManageLocation(actor, table.locationId);
+    const updated = await this.tableModel
+      .findByIdAndUpdate(
+        id,
+        {
+          qrEnabled: false,
+          qrTokenRevokedAt: new Date(),
+        },
+        { new: true, runValidators: true },
+      )
+      .exec();
+
+    if (!updated) {
+      throw new NotFoundException('Tisch nicht gefunden');
+    }
+
+    this.realtimeService.publish('table.qr.revoked', this.toQrInfo(updated));
+    return this.toQrInfo(updated);
+  }
+
+  async setQrEnabled(
+    id: string,
+    enabled: boolean,
+    actor: AuthenticatedUser,
+  ): Promise<TableQrInfo> {
+    const table = await this.findOne(id, actor);
+    await this.accessPolicy.assertCanManageLocation(actor, table.locationId);
+    const patch: Record<string, unknown> = {
+      qrEnabled: enabled,
+      qrTokenRevokedAt: enabled ? undefined : new Date(),
+    };
+
+    if (enabled && !table.qrToken) {
+      patch.qrToken = await this.createUniqueQrToken();
+      patch.qrTokenCreatedAt = new Date();
+    }
+
+    const updated = await this.tableModel
+      .findByIdAndUpdate(id, patch, { new: true, runValidators: true })
+      .exec();
+
+    if (!updated) {
+      throw new NotFoundException('Tisch nicht gefunden');
+    }
+
+    this.realtimeService.publish('table.qr.enabled.changed', this.toQrInfo(updated));
+    return this.toQrInfo(updated);
+  }
+
+  async getQrCodeInfo(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<TableQrInfo> {
+    const table = await this.findOne(id, actor);
+    await this.accessPolicy.assertCanAccessLocation(actor, table.locationId);
+    return this.toQrInfo(table);
   }
 
   private validateObjectId(id: string, label: string): void {
@@ -573,6 +678,46 @@ export class TablesService {
       error !== null &&
       'code' in error &&
       error.code === 11000
+    );
+  }
+
+  private async createUniqueQrToken(): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const token = randomBytes(32).toString('base64url');
+      const existing = await this.tableModel.exists({ qrToken: token });
+
+      if (!existing) {
+        return token;
+      }
+    }
+
+    throw new ConflictException('QR-Token konnte nicht eindeutig erzeugt werden');
+  }
+
+  private toQrInfo(table: RestaurantTableDocument): TableQrInfo {
+    const publicUrl = table.qrToken
+      ? `${this.publicFrontendOrigin()}/qr-order/${table.qrToken}`
+      : undefined;
+
+    return {
+      tableId: table._id.toString(),
+      tableName: table.tableName ?? table.name,
+      locationId: table.locationId,
+      qrEnabled: Boolean(table.qrEnabled),
+      qrToken: table.qrToken,
+      qrTokenCreatedAt: table.qrTokenCreatedAt,
+      qrTokenRevokedAt: table.qrTokenRevokedAt,
+      qrMenuId: table.qrMenuId,
+      publicUrl,
+      printableLabel: `${table.tableName ?? table.name} - Gastromania QR-Bestellung`,
+    };
+  }
+
+  private publicFrontendOrigin(): string {
+    return (
+      process.env.PUBLIC_FRONTEND_ORIGIN ??
+      process.env.FRONTEND_ORIGIN?.split(',')[0]?.trim() ??
+      'https://gastromania.gastrowerk24.de'
     );
   }
 }

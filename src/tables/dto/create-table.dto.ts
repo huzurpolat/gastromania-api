@@ -79,6 +79,16 @@ export class CreateTableDto {
   isActive?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  qrEnabled?: boolean;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  qrMenuId?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   guestCount?: number;

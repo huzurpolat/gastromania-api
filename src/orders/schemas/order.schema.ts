@@ -54,6 +54,11 @@ export enum PaymentMethod {
   Mixed = 'mixed',
 }
 
+export enum OrderSource {
+  Internal = 'internal',
+  Qr = 'qr',
+}
+
 export enum CourseType {
   Drink = 'Getränk',
   Starter = 'Vorspeise',
@@ -169,6 +174,14 @@ export class Order {
   @Prop({ required: true, trim: true, index: true })
   orderNumber?: string;
 
+  @Prop({
+    type: String,
+    enum: Object.values(OrderSource),
+    default: OrderSource.Internal,
+    index: true,
+  })
+  source!: OrderSource;
+
   @Prop({ trim: true, index: true })
   tableId?: string;
 
@@ -265,6 +278,18 @@ export class Order {
 
   @Prop({ trim: true })
   comment?: string;
+
+  @Prop({ trim: true })
+  guestNote?: string;
+
+  @Prop({ trim: true })
+  customerName?: string;
+
+  @Prop({ trim: true, index: true })
+  qrTokenId?: string;
+
+  @Prop({ trim: true })
+  qrUserAgent?: string;
 
   @Prop({ type: Object, default: {} })
   statusTimestamps?: Record<string, Date>;

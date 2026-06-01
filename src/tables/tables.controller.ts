@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseBoolPipe,
   Patch,
   Post,
   Query,
@@ -60,6 +61,38 @@ export class TablesController {
   )
   overview(@CurrentUser() user: AuthenticatedUser, @Query('locationId') locationId?: string) {
     return this.tablesService.overview(user, locationId);
+  }
+
+  @Post(':id/qr-token')
+  @Permissions('tables.update')
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  generateQrToken(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.tablesService.generateQrToken(id, user);
+  }
+
+  @Patch(':id/qr-token/revoke')
+  @Permissions('tables.update')
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  revokeQrToken(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.tablesService.revokeQrToken(id, user);
+  }
+
+  @Patch(':id/qr-enabled')
+  @Permissions('tables.update')
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  setQrEnabled(
+    @Param('id') id: string,
+    @Body('enabled', ParseBoolPipe) enabled: boolean,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.tablesService.setQrEnabled(id, enabled, user);
+  }
+
+  @Get(':id/qr-code')
+  @Permissions('tables.view')
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Schichtleiter, Role.Service)
+  getQrCode(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.tablesService.getQrCodeInfo(id, user);
   }
 
   @Get(':id')
