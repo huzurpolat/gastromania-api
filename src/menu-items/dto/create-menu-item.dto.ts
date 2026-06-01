@@ -47,6 +47,23 @@ export class CreateMenuItemDto {
   @Min(0)
   price!: number;
 
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  sellingPrice?: number;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  recipeId?: string;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  targetMargin?: number;
+
   @IsOptional()
   @IsBoolean()
   isKitchenItem?: boolean;

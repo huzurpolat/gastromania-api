@@ -78,6 +78,26 @@ export class CreateStockItemDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  lastPurchasePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  averageCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  unitCost?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(24)
+  costUnit?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   purchasePriceGross?: number;
 
   @IsOptional()

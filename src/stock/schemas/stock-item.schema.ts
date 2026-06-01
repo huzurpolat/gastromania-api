@@ -48,6 +48,18 @@ export class StockItem {
   purchasePriceNet!: number;
 
   @Prop({ min: 0, default: 0 })
+  lastPurchasePrice!: number;
+
+  @Prop({ min: 0, default: 0 })
+  averageCost!: number;
+
+  @Prop({ min: 0, default: 0 })
+  unitCost!: number;
+
+  @Prop({ trim: true })
+  costUnit?: string;
+
+  @Prop({ min: 0, default: 0 })
   purchasePriceGross!: number;
 
   @Prop({ min: 0, default: 0 })

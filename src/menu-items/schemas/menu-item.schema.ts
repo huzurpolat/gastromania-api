@@ -26,6 +26,15 @@ export class MenuItem {
   @Prop({ required: true, min: 0 })
   price!: number;
 
+  @Prop({ min: 0 })
+  sellingPrice?: number;
+
+  @Prop({ trim: true, index: true })
+  recipeId?: string;
+
+  @Prop({ min: 0, max: 100 })
+  targetMargin?: number;
+
   @Prop({ default: true })
   isKitchenItem!: boolean;
 
