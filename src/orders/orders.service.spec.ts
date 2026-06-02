@@ -49,12 +49,14 @@ describe('OrdersService', () => {
     orderModel.countDocuments.mockReturnValue({
       exec: jest.fn().mockResolvedValue(0),
     });
-    orderModel.create.mockImplementation(async (payload: Record<string, unknown>) => ({
-      _id: { toString: () => '507f1f77bcf86cd799439014' },
-      ...payload,
-      save: jest.fn().mockResolvedValue(undefined),
-      deleteOne: jest.fn(),
-    }));
+    orderModel.create.mockImplementation(
+      async (payload: Record<string, unknown>) => ({
+        _id: { toString: () => '507f1f77bcf86cd799439014' },
+        ...payload,
+        save: jest.fn().mockResolvedValue(undefined),
+        deleteOne: jest.fn(),
+      }),
+    );
     orderModel.find.mockReturnValue({
       sort: jest.fn().mockReturnValue({
         exec: jest.fn().mockResolvedValue([
@@ -67,7 +69,9 @@ describe('OrdersService', () => {
             total: 19,
             guestCount: 4,
             assignedWaiterId: 'waiter-1',
-            statusTimestamps: { [OrderStatus.New]: new Date('2026-01-01T10:00:00Z') },
+            statusTimestamps: {
+              [OrderStatus.New]: new Date('2026-01-01T10:00:00Z'),
+            },
           },
         ]),
       }),
@@ -113,7 +117,10 @@ describe('OrdersService', () => {
         OrdersService,
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(RestaurantTable.name), useValue: tableModel },
-        { provide: getModelToken(TableStatusLog.name), useValue: tableStatusLogModel },
+        {
+          provide: getModelToken(TableStatusLog.name),
+          useValue: tableStatusLogModel,
+        },
         { provide: getModelToken(KdsStatusLog.name), useValue: logModel },
         { provide: RealtimeService, useValue: realtimeService },
         { provide: RecipeInventoryService, useValue: recipeInventoryService },
@@ -160,7 +167,10 @@ describe('OrdersService', () => {
       expect.objectContaining({ status: TableStatus.Ordering }),
       { new: true },
     );
-    expect(realtimeService.publish).toHaveBeenCalledWith('order.created', order);
+    expect(realtimeService.publish).toHaveBeenCalledWith(
+      'order.created',
+      order,
+    );
     expect(recipeInventoryService.consumeOrder).not.toHaveBeenCalled();
   });
 
@@ -198,15 +208,12 @@ describe('OrdersService', () => {
       }),
     });
 
-    const result = await service.sendToKitchen(
-      '507f1f77bcf86cd799439014',
-      {
-        sub: 'waiter-1',
-        email: 'service@test.local',
-        roles: [Role.Service],
-        companyId: 'company-1',
-      },
-    );
+    const result = await service.sendToKitchen('507f1f77bcf86cd799439014', {
+      sub: 'waiter-1',
+      email: 'service@test.local',
+      roles: [Role.Service],
+      companyId: 'company-1',
+    });
 
     expect(result.status).toBe(OrderStatus.Accepted);
     expect(recipeInventoryService.consumeOrder).toHaveBeenCalledWith(

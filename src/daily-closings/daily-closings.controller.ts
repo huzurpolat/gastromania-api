@@ -53,7 +53,11 @@ export class DailyClosingsController {
     @Query('date') date?: string,
     @Query('status') status?: DailyClosingStatus,
   ) {
-    return this.dailyClosingsService.findAll(user, { locationId, date, status });
+    return this.dailyClosingsService.findAll(user, {
+      locationId,
+      date,
+      status,
+    });
   }
 
   @Get('location/:locationId/date/:date')
@@ -63,7 +67,11 @@ export class DailyClosingsController {
     @Param('locationId') locationId: string,
     @Param('date') date: string,
   ) {
-    return this.dailyClosingsService.findByLocationAndDate(user, locationId, date);
+    return this.dailyClosingsService.findByLocationAndDate(
+      user,
+      locationId,
+      date,
+    );
   }
 
   @Get(':id/audit')

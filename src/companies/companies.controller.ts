@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -19,7 +27,10 @@ export class CompaniesController {
 
   @Post()
   @Permissions('companies.create')
-  create(@Body() dto: CreateCompanyDto, @CurrentUser() user: AuthenticatedUser) {
+  create(
+    @Body() dto: CreateCompanyDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.companiesService.create(dto, user);
   }
 

@@ -143,7 +143,16 @@ export class KdsController {
 
   @Patch('settings')
   @Permissions('kds.manage')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
   updateSettings(
     @Query('locationId') locationId: string,
     @Body() dto: UpdateKdsSettingsDto,

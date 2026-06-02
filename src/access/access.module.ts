@@ -1,7 +1,10 @@
 import { Global, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Company, CompanySchema } from '../companies/schemas/company.schema';
-import { Department, DepartmentSchema } from '../departments/schemas/department.schema';
+import {
+  Department,
+  DepartmentSchema,
+} from '../departments/schemas/department.schema';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
 import { Region, RegionSchema } from '../regions/schemas/region.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';

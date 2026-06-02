@@ -10,10 +10,7 @@ import {
   OrderStatus,
 } from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
-import {
-  RestaurantTable,
-  TableStatus,
-} from '../tables/schemas/table.schema';
+import { RestaurantTable, TableStatus } from '../tables/schemas/table.schema';
 import { QrOrdersService } from './qr-orders.service';
 
 describe('QrOrdersService', () => {
@@ -110,10 +107,12 @@ describe('QrOrdersService', () => {
       lean: jest.fn().mockResolvedValue([menuItem]),
     });
     orderModel.countDocuments.mockResolvedValue(0);
-    orderModel.create.mockImplementation(async (payload: Record<string, unknown>) => ({
-      _id: { toString: () => 'order-1' },
-      ...payload,
-    }));
+    orderModel.create.mockImplementation(
+      async (payload: Record<string, unknown>) => ({
+        _id: { toString: () => 'order-1' },
+        ...payload,
+      }),
+    );
     orderModel.findOne.mockReturnValue({
       lean: jest.fn().mockResolvedValue({
         _id: { toString: () => 'order-1' },

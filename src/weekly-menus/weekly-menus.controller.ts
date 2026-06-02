@@ -28,7 +28,16 @@ export class WeeklyMenusController {
 
   @Post()
   @Permissions('menuItems.create')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
   create(
     @Body() createWeeklyMenuDto: CreateWeeklyMenuDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -38,7 +47,18 @@ export class WeeklyMenusController {
 
   @Get()
   @Permissions('menuItems.view')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Kueche)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Kueche,
+  )
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -50,7 +70,16 @@ export class WeeklyMenusController {
 
   @Patch(':id')
   @Permissions('menuItems.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
   update(
     @Param('id') id: string,
     @Body() updateWeeklyMenuDto: UpdateWeeklyMenuDto,
@@ -61,7 +90,16 @@ export class WeeklyMenusController {
 
   @Delete(':id')
   @Permissions('menuItems.delete')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.weeklyMenusService.remove(id, user);
   }

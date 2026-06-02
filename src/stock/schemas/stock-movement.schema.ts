@@ -76,8 +76,7 @@ export class StockMovement {
   actorId!: string;
 }
 
-export const StockMovementSchema =
-  SchemaFactory.createForClass(StockMovement);
+export const StockMovementSchema = SchemaFactory.createForClass(StockMovement);
 
 StockMovementSchema.index({ locationId: 1, createdAt: -1 });
 StockMovementSchema.index({ stockItemId: 1, createdAt: -1 });

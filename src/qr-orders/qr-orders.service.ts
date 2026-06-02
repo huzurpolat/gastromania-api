@@ -103,10 +103,14 @@ export class QrOrdersService {
     const menuItems = await this.menuItemModel
       .find({ _id: { $in: itemIds }, isActive: true })
       .lean();
-    const menuById = new Map(menuItems.map((item) => [this.stringifyId(item._id), item]));
+    const menuById = new Map(
+      menuItems.map((item) => [this.stringifyId(item._id), item]),
+    );
 
     if (menuItems.length !== itemIds.length) {
-      throw new BadRequestException('Ein oder mehrere Artikel sind nicht verfuegbar');
+      throw new BadRequestException(
+        'Ein oder mehrere Artikel sind nicht verfuegbar',
+      );
     }
 
     const orderItems = dto.items.map((item) => {
@@ -127,14 +131,20 @@ export class QrOrdersService {
         note,
         isKitchenItem: menuItem.isKitchenItem,
         status: OrderItemStatus.Open,
-        productionArea: menuItem.isKitchenItem ? ProductionArea.Kitchen : ProductionArea.Bar,
+        productionArea: menuItem.isKitchenItem
+          ? ProductionArea.Kitchen
+          : ProductionArea.Bar,
         courseType: CourseType.Main,
         specialRequests: note ? [note] : [],
         allergens: [],
       };
     });
-    const subtotal = this.roundMoney(orderItems.reduce((sum, item) => sum + item.totalPrice, 0));
-    const guestNote = this.cleanText([dto.guestNote, dto.allergyNote].filter(Boolean).join(' | '));
+    const subtotal = this.roundMoney(
+      orderItems.reduce((sum, item) => sum + item.totalPrice, 0),
+    );
+    const guestNote = this.cleanText(
+      [dto.guestNote, dto.allergyNote].filter(Boolean).join(' | '),
+    );
     const order = await this.orderModel.create({
       companyId: context.location.companyId,
       locationId: this.stringifyId(context.location._id),
@@ -144,7 +154,9 @@ export class QrOrdersService {
       paymentStatus: PaymentStatus.Open,
       paymentMethod: PaymentMethod.Other,
       guestCount: 1,
-      orderNumber: await this.nextOrderNumber(this.stringifyId(context.location._id)),
+      orderNumber: await this.nextOrderNumber(
+        this.stringifyId(context.location._id),
+      ),
       pickupNumber: undefined,
       customerName: this.cleanText(dto.customerName),
       guestNote,
@@ -248,14 +260,18 @@ export class QrOrdersService {
     table: RestaurantTableDocument,
     order: OrderDocument,
   ): Promise<void> {
-    const activeOrderIds = [...new Set([...(table.activeOrderIds ?? []), order._id.toString()])];
+    const activeOrderIds = [
+      ...new Set([...(table.activeOrderIds ?? []), order._id.toString()]),
+    ];
     const updatedTable = await this.tableModel
       .findByIdAndUpdate(
         table._id,
         {
           status: TableStatus.Ordering,
           activeOrderIds,
-          currentTotal: this.roundMoney((table.currentTotal ?? 0) + order.total),
+          currentTotal: this.roundMoney(
+            (table.currentTotal ?? 0) + order.total,
+          ),
           guestCount: Math.max(table.guestCount ?? 0, 1),
           waitingSince: table.waitingSince ?? new Date(),
           lastStatusChange: new Date(),
@@ -272,7 +288,10 @@ export class QrOrdersService {
         status: updatedTable.status,
         activeOrderIds: updatedTable.activeOrderIds,
         currentTotal: updatedTable.currentTotal,
-        channels: this.eventChannels(updatedTable.companyId, updatedTable.locationId),
+        channels: this.eventChannels(
+          updatedTable.companyId,
+          updatedTable.locationId,
+        ),
       });
     }
   }
@@ -313,7 +332,10 @@ export class QrOrdersService {
     return String(value);
   }
 
-  private eventChannels(companyId: string | undefined, locationId: string): string[] {
+  private eventChannels(
+    companyId: string | undefined,
+    locationId: string,
+  ): string[] {
     return [
       ...(companyId ? [`company:${companyId}`] : []),
       `location:${locationId}`,

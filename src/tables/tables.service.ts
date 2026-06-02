@@ -44,21 +44,71 @@ interface TableOverviewOrder {
 }
 
 const TABLE_STATUS_TRANSITIONS = new Map<TableStatus, TableStatus[]>([
-  [TableStatus.Free, [TableStatus.OccupiedState, TableStatus.ReservedState, TableStatus.Dirty]],
-  [TableStatus.OccupiedState, [TableStatus.Ordering, TableStatus.ReadyToPay, TableStatus.Dirty, TableStatus.Free]],
-  [TableStatus.Ordering, [TableStatus.OrderSent, TableStatus.InPreparation, TableStatus.ReadyToPay, TableStatus.Dirty]],
-  [TableStatus.OrderSent, [TableStatus.InPreparation, TableStatus.ReadyToServe, TableStatus.ReadyToPay, TableStatus.Dirty]],
-  [TableStatus.InPreparation, [TableStatus.ReadyToServe, TableStatus.ReadyToPay, TableStatus.Dirty]],
-  [TableStatus.ReadyToServe, [TableStatus.Served, TableStatus.ReadyToPay, TableStatus.Dirty]],
-  [TableStatus.Served, [TableStatus.ReadyToPay, TableStatus.Paid, TableStatus.Dirty]],
+  [
+    TableStatus.Free,
+    [TableStatus.OccupiedState, TableStatus.ReservedState, TableStatus.Dirty],
+  ],
+  [
+    TableStatus.OccupiedState,
+    [
+      TableStatus.Ordering,
+      TableStatus.ReadyToPay,
+      TableStatus.Dirty,
+      TableStatus.Free,
+    ],
+  ],
+  [
+    TableStatus.Ordering,
+    [
+      TableStatus.OrderSent,
+      TableStatus.InPreparation,
+      TableStatus.ReadyToPay,
+      TableStatus.Dirty,
+    ],
+  ],
+  [
+    TableStatus.OrderSent,
+    [
+      TableStatus.InPreparation,
+      TableStatus.ReadyToServe,
+      TableStatus.ReadyToPay,
+      TableStatus.Dirty,
+    ],
+  ],
+  [
+    TableStatus.InPreparation,
+    [TableStatus.ReadyToServe, TableStatus.ReadyToPay, TableStatus.Dirty],
+  ],
+  [
+    TableStatus.ReadyToServe,
+    [TableStatus.Served, TableStatus.ReadyToPay, TableStatus.Dirty],
+  ],
+  [
+    TableStatus.Served,
+    [TableStatus.ReadyToPay, TableStatus.Paid, TableStatus.Dirty],
+  ],
   [TableStatus.ReadyToPay, [TableStatus.Paid, TableStatus.Dirty]],
   [TableStatus.Paid, [TableStatus.Dirty, TableStatus.Free]],
   [TableStatus.Dirty, [TableStatus.Free]],
   [TableStatus.ReservedState, [TableStatus.OccupiedState, TableStatus.Free]],
-  [TableStatus.Available, [TableStatus.OccupiedState, TableStatus.ReservedState, TableStatus.Dirty]],
-  [TableStatus.Occupied, [TableStatus.Ordering, TableStatus.ReadyToPay, TableStatus.Dirty, TableStatus.Free]],
+  [
+    TableStatus.Available,
+    [TableStatus.OccupiedState, TableStatus.ReservedState, TableStatus.Dirty],
+  ],
+  [
+    TableStatus.Occupied,
+    [
+      TableStatus.Ordering,
+      TableStatus.ReadyToPay,
+      TableStatus.Dirty,
+      TableStatus.Free,
+    ],
+  ],
   [TableStatus.Reserved, [TableStatus.OccupiedState, TableStatus.Free]],
-  [TableStatus.InProgress, [TableStatus.ReadyToServe, TableStatus.ReadyToPay, TableStatus.Dirty]],
+  [
+    TableStatus.InProgress,
+    [TableStatus.ReadyToServe, TableStatus.ReadyToPay, TableStatus.Dirty],
+  ],
   [TableStatus.Inactive, []],
 ]);
 
@@ -110,7 +160,10 @@ export class TablesService {
     actor: AuthenticatedUser,
   ): Promise<RestaurantTableDocument> {
     this.validateObjectId(createTableDto.locationId, 'Standort-ID');
-    await this.accessPolicy.assertCanManageLocation(actor, createTableDto.locationId);
+    await this.accessPolicy.assertCanManageLocation(
+      actor,
+      createTableDto.locationId,
+    );
 
     try {
       return await this.tableModel.create(createTableDto);
@@ -132,7 +185,10 @@ export class TablesService {
     if (locationId) {
       this.validateObjectId(locationId, 'Standort-ID');
     }
-    const scopeFilter = await this.accessPolicy.getScopedResourceFilter(actor, locationId);
+    const scopeFilter = await this.accessPolicy.getScopedResourceFilter(
+      actor,
+      locationId,
+    );
 
     return this.tableModel
       .find(scopeFilter)
@@ -206,7 +262,10 @@ export class TablesService {
 
     if (updateTableDto.locationId) {
       this.validateObjectId(updateTableDto.locationId, 'Standort-ID');
-      await this.accessPolicy.assertCanManageLocation(actor, updateTableDto.locationId);
+      await this.accessPolicy.assertCanManageLocation(
+        actor,
+        updateTableDto.locationId,
+      );
     }
 
     try {
@@ -328,7 +387,10 @@ export class TablesService {
       throw new NotFoundException('Tisch nicht gefunden');
     }
 
-    this.realtimeService.publish('table.qr.enabled.changed', this.toQrInfo(updated));
+    this.realtimeService.publish(
+      'table.qr.enabled.changed',
+      this.toQrInfo(updated),
+    );
     return this.toQrInfo(updated);
   }
 
@@ -385,23 +447,41 @@ export class TablesService {
       throw new NotFoundException('Tisch nicht gefunden');
     }
 
-    await this.writeStatusLog(updatedTable, existing.status, dto.status, actor, {
-      reason: dto.reason,
-      reservationId: dto.reservationId ?? existing.reservationId,
-      changedAt,
-    });
-    this.publishTableEvent('table.status.changed', updatedTable, existing.status, dto.status, {
-      changedBy: actor.sub,
-      changedByRole: this.primaryRole(actor),
-      reason: dto.reason,
-      changedAt,
-    });
+    await this.writeStatusLog(
+      updatedTable,
+      existing.status,
+      dto.status,
+      actor,
+      {
+        reason: dto.reason,
+        reservationId: dto.reservationId ?? existing.reservationId,
+        changedAt,
+      },
+    );
+    this.publishTableEvent(
+      'table.status.changed',
+      updatedTable,
+      existing.status,
+      dto.status,
+      {
+        changedBy: actor.sub,
+        changedByRole: this.primaryRole(actor),
+        reason: dto.reason,
+        changedAt,
+      },
+    );
 
     if (dto.status === TableStatus.Free) {
-      this.publishTableEvent('table.cleaned', updatedTable, existing.status, dto.status, {
-        changedBy: actor.sub,
-        changedAt,
-      });
+      this.publishTableEvent(
+        'table.cleaned',
+        updatedTable,
+        existing.status,
+        dto.status,
+        {
+          changedBy: actor.sub,
+          changedAt,
+        },
+      );
     }
 
     return updatedTable;
@@ -488,7 +568,9 @@ export class TablesService {
 
     const readyAt = timestamps[OrderStatus.Ready];
     const servedAt = timestamps[OrderStatus.Served];
-    const isFinished = Boolean(readyAt || servedAt || this.isPaidOrderStatus(order.status));
+    const isFinished = Boolean(
+      readyAt || servedAt || this.isPaidOrderStatus(order.status),
+    );
     const endAt = readyAt ?? servedAt ?? new Date();
     const minutes = Math.max(
       0,
@@ -569,7 +651,9 @@ export class TablesService {
       return;
     }
 
-    if (!TABLE_STATUS_TRANSITIONS.get(normalizedCurrent)?.includes(normalizedNext)) {
+    if (
+      !TABLE_STATUS_TRANSITIONS.get(normalizedCurrent)?.includes(normalizedNext)
+    ) {
       throw new BadRequestException(
         `Statuswechsel von ${currentStatus} zu ${nextStatus} ist nicht erlaubt`,
       );
@@ -594,7 +678,11 @@ export class TablesService {
   }
 
   private isFreeOrDirty(status: TableStatus): boolean {
-    return [TableStatus.Free, TableStatus.Available, TableStatus.Dirty].includes(status);
+    return [
+      TableStatus.Free,
+      TableStatus.Available,
+      TableStatus.Dirty,
+    ].includes(status);
   }
 
   private async writeStatusLog(
@@ -651,7 +739,10 @@ export class TablesService {
     });
   }
 
-  private eventChannels(companyId: string | undefined, locationId: string): string[] {
+  private eventChannels(
+    companyId: string | undefined,
+    locationId: string,
+  ): string[] {
     return [
       ...(companyId ? [`company:${companyId}`] : []),
       `location:${locationId}`,
@@ -691,7 +782,9 @@ export class TablesService {
       }
     }
 
-    throw new ConflictException('QR-Token konnte nicht eindeutig erzeugt werden');
+    throw new ConflictException(
+      'QR-Token konnte nicht eindeutig erzeugt werden',
+    );
   }
 
   private toQrInfo(table: RestaurantTableDocument): TableQrInfo {

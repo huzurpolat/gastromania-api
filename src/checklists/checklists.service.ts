@@ -11,7 +11,10 @@ import { Observable, Subject, filter, from, map, switchMap } from 'rxjs';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { Location, LocationDocument } from '../locations/schemas/location.schema';
+import {
+  Location,
+  LocationDocument,
+} from '../locations/schemas/location.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
 import { ToggleChecklistTaskDto } from './dto/toggle-checklist-task.dto';
@@ -125,8 +128,13 @@ export class ChecklistsService {
       roles: [Role.Tellerwaescher, Role.Filialleiter],
       tasks: [
         { title: 'Spülmaschine auf Funktion, Temperatur und Chemie prüfen.' },
-        { title: 'Sauberes Geschirr, Besteck und Gläser sortieren und auffüllen.' },
-        { title: 'Spülbereich reinigen, Müll trennen und Boden sauber halten.' },
+        {
+          title:
+            'Sauberes Geschirr, Besteck und Gläser sortieren und auffüllen.',
+        },
+        {
+          title: 'Spülbereich reinigen, Müll trennen und Boden sauber halten.',
+        },
       ],
     },
   ];
@@ -141,7 +149,10 @@ export class ChecklistsService {
     private readonly accessPolicy: AccessPolicyService,
   ) {}
 
-  async create(payload: CreateChecklistDto, actor: AuthenticatedUser): Promise<ChecklistResponse> {
+  async create(
+    payload: CreateChecklistDto,
+    actor: AuthenticatedUser,
+  ): Promise<ChecklistResponse> {
     await this.assertCanUseLocation(actor, payload.locationId);
     const checklist = await this.checklistModel.create({
       ...payload,
@@ -155,12 +166,22 @@ export class ChecklistsService {
     return response;
   }
 
-  async findAll(actor: AuthenticatedUser, locationId?: string, date?: string): Promise<ChecklistResponse[]> {
-    const locationIds = locationId ? [locationId] : await this.getReadableLocationIds(actor);
-    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
+  async findAll(
+    actor: AuthenticatedUser,
+    locationId?: string,
+    date?: string,
+  ): Promise<ChecklistResponse[]> {
+    const locationIds = locationId
+      ? [locationId]
+      : await this.getReadableLocationIds(actor);
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
+    );
     const day = date ? this.toDay(date) : undefined;
     if (day) await this.ensureDefaultChecklists(locationIds, day);
-    const filter: Record<string, unknown> = { locationId: { $in: locationIds } };
+    const filter: Record<string, unknown> = {
+      locationId: { $in: locationIds },
+    };
     if (day) filter.date = day;
     const checklists = await this.checklistModel
       .find(filter)
@@ -171,14 +192,20 @@ export class ChecklistsService {
       .map((checklist) => this.toResponse(checklist));
   }
 
-  async update(id: string, payload: UpdateChecklistDto, actor: AuthenticatedUser): Promise<ChecklistResponse> {
+  async update(
+    id: string,
+    payload: UpdateChecklistDto,
+    actor: AuthenticatedUser,
+  ): Promise<ChecklistResponse> {
     const checklist = await this.checklistModel.findById(id).exec();
     if (!checklist) throw new NotFoundException('Checkliste nicht gefunden');
     await this.assertCanUseLocation(actor, checklist.locationId);
     const update = {
       ...payload,
       ...(payload.date ? { date: this.toDay(payload.date) } : {}),
-      ...(payload.tasks ? { tasks: this.mergeTasks(checklist.tasks, payload.tasks) } : {}),
+      ...(payload.tasks
+        ? { tasks: this.mergeTasks(checklist.tasks, payload.tasks) }
+        : {}),
     };
     checklist.set(update);
     this.updateStatus(checklist);
@@ -197,7 +224,9 @@ export class ChecklistsService {
     const checklist = await this.checklistModel.findById(checklistId).exec();
     if (!checklist) throw new NotFoundException('Checkliste nicht gefunden');
     await this.assertCanUseLocation(actor, checklist.locationId);
-    const task = checklist.tasks.find((item) => item._id?.toString() === taskId);
+    const task = checklist.tasks.find(
+      (item) => item._id?.toString() === taskId,
+    );
     if (!task) throw new NotFoundException('Aufgabe nicht gefunden');
     task.isDone = payload.isDone;
     task.doneBy = payload.isDone ? actor.sub : undefined;
@@ -210,12 +239,17 @@ export class ChecklistsService {
     return response;
   }
 
-  async remove(id: string, actor: AuthenticatedUser): Promise<ChecklistResponse> {
+  async remove(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<ChecklistResponse> {
     const checklist = await this.checklistModel.findById(id).exec();
     if (!checklist) throw new NotFoundException('Checkliste nicht gefunden');
     await this.assertCanUseLocation(actor, checklist.locationId);
     if (checklist.templateKey) {
-      throw new BadRequestException('Standard-Checklisten können nicht gelöscht werden');
+      throw new BadRequestException(
+        'Standard-Checklisten können nicht gelöscht werden',
+      );
     }
     await this.checklistModel.deleteOne({ _id: id }).exec();
     const response = this.toResponse(checklist);
@@ -223,15 +257,24 @@ export class ChecklistsService {
     return response;
   }
 
-  stream(actor: AuthenticatedUser, locationId?: string, date?: string): Observable<MessageEvent> {
+  stream(
+    actor: AuthenticatedUser,
+    locationId?: string,
+    date?: string,
+  ): Observable<MessageEvent> {
     const day = date ? this.toDay(date).getTime() : undefined;
 
     return from(this.getReadableLocationIds(actor)).pipe(
       switchMap((locationIds) =>
         this.checklistEvents$.pipe(
           filter((event) => locationIds.includes(event.checklist.locationId)),
-          filter((event) => !locationId || event.checklist.locationId === locationId),
-          filter((event) => !day || this.toDay(event.checklist.date).getTime() === day),
+          filter(
+            (event) => !locationId || event.checklist.locationId === locationId,
+          ),
+          filter(
+            (event) =>
+              !day || this.toDay(event.checklist.date).getTime() === day,
+          ),
           filter((event) => this.canSeeChecklist(actor, event.checklist.roles)),
           map((event) => ({ data: event }) as MessageEvent),
         ),
@@ -249,7 +292,10 @@ export class ChecklistsService {
           : ChecklistStatus.InProgress;
   }
 
-  private async ensureDefaultChecklists(locationIds: string[], date: Date): Promise<void> {
+  private async ensureDefaultChecklists(
+    locationIds: string[],
+    date: Date,
+  ): Promise<void> {
     await Promise.all(
       locationIds.flatMap((locationId) =>
         this.defaultChecklistTemplates.map((template) =>
@@ -292,7 +338,9 @@ export class ChecklistsService {
     if (!missingTasks.length) return;
 
     checklist.tasks.push(
-      ...missingTasks.map((task) => ({ ...task, isDone: false }) as ChecklistTask),
+      ...missingTasks.map(
+        (task) => ({ ...task, isDone: false }) as ChecklistTask,
+      ),
     );
     this.updateStatus(checklist);
     await checklist.save();
@@ -327,19 +375,29 @@ export class ChecklistsService {
 
   private canSeeChecklist(actor: AuthenticatedUser, roles: Role[]): boolean {
     if (this.accessPolicy.isManagementRole(actor)) return true;
-    return roles.length === 0 || roles.some((role) => actor.roles.includes(role));
+    return (
+      roles.length === 0 || roles.some((role) => actor.roles.includes(role))
+    );
   }
 
-  private async assertCanUseLocation(actor: AuthenticatedUser, locationId: string): Promise<void> {
+  private async assertCanUseLocation(
+    actor: AuthenticatedUser,
+    locationId: string,
+  ): Promise<void> {
     await this.accessPolicy.assertCanAccessLocation(actor, locationId);
   }
 
-  private async getReadableLocationIds(actor: AuthenticatedUser): Promise<string[]> {
+  private async getReadableLocationIds(
+    actor: AuthenticatedUser,
+  ): Promise<string[]> {
     return this.accessPolicy.getReadableLocationIds(actor);
   }
 
   private async getManagedLocationIds(managerId: string): Promise<string[]> {
-    const locations = await this.locationModel.find({ managerId }).select('_id').exec();
+    const locations = await this.locationModel
+      .find({ managerId })
+      .select('_id')
+      .exec();
     return locations.map((location) => location._id.toString());
   }
 
@@ -350,7 +408,10 @@ export class ChecklistsService {
   }
 
   private toResponse(checklist: ChecklistDocument): ChecklistResponse {
-    const timestamped = checklist as ChecklistDocument & { createdAt?: Date; updatedAt?: Date };
+    const timestamped = checklist as ChecklistDocument & {
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
     return {
       _id: checklist._id.toString(),
       locationId: checklist.locationId,

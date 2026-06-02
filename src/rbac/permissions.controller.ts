@@ -20,7 +20,16 @@ export class PermissionsController {
   }
 
   @Get('users/:id/permissions')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
   @Permissions('users.view')
   userPermissions(@Param('id') id: string) {
     return this.rbacService.permissionsForUser(id);

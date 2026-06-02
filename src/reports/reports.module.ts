@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AccessModule } from '../access/access.module';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
-import { MenuItem, MenuItemSchema } from '../menu-items/schemas/menu-item.schema';
+import {
+  MenuItem,
+  MenuItemSchema,
+} from '../menu-items/schemas/menu-item.schema';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { Recipe, RecipeSchema } from '../recipes/schemas/recipe.schema';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';

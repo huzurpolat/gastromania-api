@@ -13,7 +13,11 @@ export class InventorySession {
   @Prop({ required: true, trim: true, index: true })
   locationId!: string;
 
-  @Prop({ required: true, enum: Object.values(InventorySessionStatus), default: InventorySessionStatus.Open })
+  @Prop({
+    required: true,
+    enum: Object.values(InventorySessionStatus),
+    default: InventorySessionStatus.Open,
+  })
   status!: InventorySessionStatus;
 
   @Prop({ required: true, trim: true })

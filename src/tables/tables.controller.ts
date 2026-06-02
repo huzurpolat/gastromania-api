@@ -30,15 +30,40 @@ export class TablesController {
 
   @Post()
   @Permissions('tables.create')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
-  create(@Body() createTableDto: CreateTableDto, @CurrentUser() user: AuthenticatedUser) {
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
+  create(
+    @Body() createTableDto: CreateTableDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.tablesService.create(createTableDto, user);
   }
 
   @Get()
   @Permissions('tables.view')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service)
-  findAll(@CurrentUser() user: AuthenticatedUser, @Query('locationId') locationId?: string) {
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Service,
+  )
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+  ) {
     return this.tablesService.findAll(user, locationId);
   }
 
@@ -59,27 +84,63 @@ export class TablesController {
     Role.Bar,
     Role.Theke,
   )
-  overview(@CurrentUser() user: AuthenticatedUser, @Query('locationId') locationId?: string) {
+  overview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+  ) {
     return this.tablesService.overview(user, locationId);
   }
 
   @Post(':id/qr-token')
   @Permissions('tables.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
-  generateQrToken(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
+  generateQrToken(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.tablesService.generateQrToken(id, user);
   }
 
   @Patch(':id/qr-token/revoke')
   @Permissions('tables.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
-  revokeQrToken(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
+  revokeQrToken(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.tablesService.revokeQrToken(id, user);
   }
 
   @Patch(':id/qr-enabled')
   @Permissions('tables.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
   setQrEnabled(
     @Param('id') id: string,
     @Body('enabled', ParseBoolPipe) enabled: boolean,
@@ -90,21 +151,51 @@ export class TablesController {
 
   @Get(':id/qr-code')
   @Permissions('tables.view')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Schichtleiter, Role.Service)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Schichtleiter,
+    Role.Service,
+  )
   getQrCode(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.tablesService.getQrCodeInfo(id, user);
   }
 
   @Get(':id')
   @Permissions('tables.view')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Service,
+  )
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.tablesService.findOne(id, user);
   }
 
   @Patch(':id')
   @Permissions('tables.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
   update(
     @Param('id') id: string,
     @Body() updateTableDto: UpdateTableDto,

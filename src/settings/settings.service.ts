@@ -5,7 +5,10 @@ import { createCipheriv, createHash, randomBytes } from 'crypto';
 import { Model } from 'mongoose';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
-import { AppSettings, AppSettingsDocument } from './schemas/app-settings.schema';
+import {
+  AppSettings,
+  AppSettingsDocument,
+} from './schemas/app-settings.schema';
 
 export interface SettingsResponse {
   _id: string;
@@ -76,7 +79,9 @@ export class SettingsService {
     return this.toResponse(saved);
   }
 
-  private async getOrCreateSettings(includeSecret = false): Promise<AppSettingsDocument> {
+  private async getOrCreateSettings(
+    includeSecret = false,
+  ): Promise<AppSettingsDocument> {
     const query = this.settingsModel.findOne({ key: this.settingsKey });
 
     if (includeSecret) {
@@ -92,10 +97,15 @@ export class SettingsService {
   private encryptSecret(value: string): string {
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', this.getEncryptionKey(), iv);
-    const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+    const encrypted = Buffer.concat([
+      cipher.update(value, 'utf8'),
+      cipher.final(),
+    ]);
     const tag = cipher.getAuthTag();
 
-    return [iv, tag, encrypted].map((part) => part.toString('base64')).join('.');
+    return [iv, tag, encrypted]
+      .map((part) => part.toString('base64'))
+      .join('.');
   }
 
   private getEncryptionKey(): Buffer {

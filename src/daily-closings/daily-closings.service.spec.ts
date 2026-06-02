@@ -12,7 +12,9 @@ import { TableStatus } from '../tables/schemas/table.schema';
 import { DailyClosingsService } from './daily-closings.service';
 import { DailyClosingStatus } from './schemas/daily-closing.schema';
 
-const leanValue = <T>(value: T) => ({ lean: jest.fn().mockResolvedValue(value) });
+const leanValue = <T>(value: T) => ({
+  lean: jest.fn().mockResolvedValue(value),
+});
 const queryValue = <T>(value: T) => ({
   sort: jest.fn(() => queryValue(value)),
   lean: jest.fn().mockResolvedValue(value),
@@ -31,14 +33,16 @@ describe('DailyClosingsService', () => {
     managedLocationIds: ['loc-1'],
   };
 
-  const createService = (options: {
-    orders?: unknown[];
-    stockMovements?: unknown[];
-    stockItems?: unknown[];
-    checklists?: unknown[];
-    tables?: unknown[];
-    existingClosing?: unknown;
-  } = {}) => {
+  const createService = (
+    options: {
+      orders?: unknown[];
+      stockMovements?: unknown[];
+      stockItems?: unknown[];
+      checklists?: unknown[];
+      tables?: unknown[];
+      existingClosing?: unknown;
+    } = {},
+  ) => {
     const dailyClosingModel = {
       find: jest.fn(() => queryValue([])),
       findById: jest.fn(),
@@ -64,7 +68,14 @@ describe('DailyClosingsService', () => {
     };
     const locationModel = {
       find: jest.fn(() => queryValue([{ _id: 'loc-1', name: 'Bonn' }])),
-      findById: jest.fn(() => leanValue({ _id: 'loc-1', name: 'Bonn', companyId: 'company-1', regionId: 'nrw' })),
+      findById: jest.fn(() =>
+        leanValue({
+          _id: 'loc-1',
+          name: 'Bonn',
+          companyId: 'company-1',
+          regionId: 'nrw',
+        }),
+      ),
     };
     const orderModel = findModel(options.orders ?? []);
     const stockMovementModel = findModel(options.stockMovements ?? []);
@@ -72,7 +83,9 @@ describe('DailyClosingsService', () => {
     const checklistModel = findModel(options.checklists ?? []);
     const tableModel = findModel(options.tables ?? []);
     const notificationModel = {
-      create: jest.fn().mockResolvedValue({ severity: DashboardNotificationSeverity.Info }),
+      create: jest
+        .fn()
+        .mockResolvedValue({ severity: DashboardNotificationSeverity.Info }),
     };
     const accessPolicy = {
       assertCanManageLocation: jest.fn().mockResolvedValue(undefined),
@@ -235,9 +248,9 @@ describe('DailyClosingsService', () => {
     );
 
     expect(result?.status).toBe(DailyClosingStatus.CompletedWithIssues);
-    expect(dailyClosingModel.findByIdAndUpdate.mock.calls[0][1].$set.status).toBe(
-      DailyClosingStatus.CompletedWithIssues,
-    );
+    expect(
+      dailyClosingModel.findByIdAndUpdate.mock.calls[0][1].$set.status,
+    ).toBe(DailyClosingStatus.CompletedWithIssues);
   });
 
   it('blocks service role from managing daily closings', async () => {

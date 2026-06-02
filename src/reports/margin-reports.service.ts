@@ -13,8 +13,19 @@ import { StockItem } from '../stock/schemas/stock-item.schema';
 import { MarginReportQueryDto } from './dto/margin-report-query.dto';
 import { MarginAnalysisRun } from './schemas/margin-analysis-run.schema';
 
-type CostBasis = 'averageCost' | 'unitCost' | 'lastPurchasePrice' | 'purchasePriceNet' | 'recipePurchasePriceNet' | 'missing';
-type MarginStatus = 'healthy' | 'below_target' | 'negative_margin' | 'high_food_cost' | 'missing_recipe';
+type CostBasis =
+  | 'averageCost'
+  | 'unitCost'
+  | 'lastPurchasePrice'
+  | 'purchasePriceNet'
+  | 'recipePurchasePriceNet'
+  | 'missing';
+type MarginStatus =
+  | 'healthy'
+  | 'below_target'
+  | 'negative_margin'
+  | 'high_food_cost'
+  | 'missing_recipe';
 type Quadrant = 'stars' | 'plowhorses' | 'puzzles' | 'dogs';
 
 interface Period {
@@ -100,7 +111,8 @@ export class MarginReportsService {
     @InjectModel(Order.name) private readonly orderModel: Model<Order>,
     @InjectModel(MenuItem.name) private readonly menuItemModel: Model<MenuItem>,
     @InjectModel(Recipe.name) private readonly recipeModel: Model<Recipe>,
-    @InjectModel(StockItem.name) private readonly stockItemModel: Model<StockItem>,
+    @InjectModel(StockItem.name)
+    private readonly stockItemModel: Model<StockItem>,
     @InjectModel(Location.name) private readonly locationModel: Model<Location>,
     @InjectModel(MarginAnalysisRun.name)
     private readonly analysisRunModel: Model<MarginAnalysisRun>,
@@ -124,7 +136,8 @@ export class MarginReportsService {
       range: scope.period.range,
       from: scope.period.from,
       to: scope.period.to,
-      costBasis: 'averageCost > unitCost > lastPurchasePrice > purchasePriceNet > recipePurchasePriceNet',
+      costBasis:
+        'averageCost > unitCost > lastPurchasePrice > purchasePriceNet > recipePurchasePriceNet',
       warningsCount: warnings.length,
       warnings,
     });
@@ -170,7 +183,9 @@ export class MarginReportsService {
     return (await this.getMargins(user, query)).summary;
   }
 
-  private async buildMenuItemRows(scope: ResolvedScope): Promise<MenuItemMarginReportRow[]> {
+  private async buildMenuItemRows(
+    scope: ResolvedScope,
+  ): Promise<MenuItemMarginReportRow[]> {
     const orderFilter = {
       locationId: { $in: scope.locationIds },
       status: { $in: this.marginRelevantStatuses() },
@@ -199,9 +214,13 @@ export class MarginReportsService {
             : {}),
         })
         .lean(),
-      this.stockItemModel.find({ locationId: { $in: scope.locationIds } }).lean(),
+      this.stockItemModel
+        .find({ locationId: { $in: scope.locationIds } })
+        .lean(),
     ]);
-    const menuById = new Map(menuItems.map((item) => [this.stringifyId(item._id), item]));
+    const menuById = new Map(
+      menuItems.map((item) => [this.stringifyId(item._id), item]),
+    );
     const menuByName = new Map(
       menuItems.map((item) => [this.normalize(item.name), item]),
     );
@@ -228,8 +247,11 @@ export class MarginReportsService {
         if (scope.menuItemId && itemId !== scope.menuItemId) {
           continue;
         }
-        const menuItem = itemId ? menuById.get(itemId) : menuByName.get(this.normalize(item.name));
-        const category = menuItem?.category ?? item.courseType ?? 'Ohne Kategorie';
+        const menuItem = itemId
+          ? menuById.get(itemId)
+          : menuByName.get(this.normalize(item.name));
+        const category =
+          menuItem?.category ?? item.courseType ?? 'Ohne Kategorie';
         if (scope.category && category !== scope.category) {
           continue;
         }
@@ -261,8 +283,11 @@ export class MarginReportsService {
 
     const baseRows = Array.from(keys).map((key) => {
       const stat = sales.get(key);
-      const menuItem = menuById.get(key) ?? (stat ? menuByName.get(this.normalize(stat.name)) : undefined);
-      const rowKey = stat?.menuItemId ?? (menuItem ? this.stringifyId(menuItem._id) : key);
+      const menuItem =
+        menuById.get(key) ??
+        (stat ? menuByName.get(this.normalize(stat.name)) : undefined);
+      const rowKey =
+        stat?.menuItemId ?? (menuItem ? this.stringifyId(menuItem._id) : key);
       const locationIds = this.unique(
         Array.from(sales.values())
           .filter((entry) => entry.key === key || entry.menuItemId === rowKey)
@@ -273,31 +298,52 @@ export class MarginReportsService {
         (rowKey ? recipesByMenuId.get(rowKey) : undefined) ??
         recipesByName.get(this.normalize(menuItem?.name ?? stat?.name ?? key));
       const cost = this.calculateRecipeCost(recipe, stockById);
-      const sellingPrice = Number(menuItem?.sellingPrice ?? menuItem?.price ?? recipe?.salePrice ?? (stat?.revenue && stat.quantity ? stat.revenue / stat.quantity : 0));
+      const sellingPrice = Number(
+        menuItem?.sellingPrice ??
+          menuItem?.price ??
+          recipe?.salePrice ??
+          (stat?.revenue && stat.quantity ? stat.revenue / stat.quantity : 0),
+      );
       const soldQuantity = Number(stat?.quantity ?? 0);
       const revenue = Number(stat?.revenue ?? 0);
       const recipeCost = cost.costPerPortion;
       const costOfGoods = recipeCost * soldQuantity;
       const contributionMargin = sellingPrice - recipeCost;
       const contributionMarginTotal = revenue - costOfGoods;
-      const marginPercent = sellingPrice > 0 ? (contributionMargin / sellingPrice) * 100 : 0;
-      const foodCostPercent = sellingPrice > 0 ? (recipeCost / sellingPrice) * 100 : 0;
+      const marginPercent =
+        sellingPrice > 0 ? (contributionMargin / sellingPrice) * 100 : 0;
+      const foodCostPercent =
+        sellingPrice > 0 ? (recipeCost / sellingPrice) * 100 : 0;
       const targetMargin = Number(menuItem?.targetMargin ?? 65);
       const warnings = [
         ...cost.warnings,
-        ...(!recipe ? [`${menuItem?.name ?? stat?.name ?? key}: kein Rezept hinterlegt`] : []),
-        ...(sellingPrice <= 0 ? [`${menuItem?.name ?? stat?.name ?? key}: Verkaufspreis fehlt`] : []),
-        ...(marginPercent < 0 ? [`${menuItem?.name ?? stat?.name ?? key}: negative Marge`] : []),
+        ...(!recipe
+          ? [`${menuItem?.name ?? stat?.name ?? key}: kein Rezept hinterlegt`]
+          : []),
+        ...(sellingPrice <= 0
+          ? [`${menuItem?.name ?? stat?.name ?? key}: Verkaufspreis fehlt`]
+          : []),
+        ...(marginPercent < 0
+          ? [`${menuItem?.name ?? stat?.name ?? key}: negative Marge`]
+          : []),
         ...(marginPercent > 0 && marginPercent < targetMargin
-          ? [`${menuItem?.name ?? stat?.name ?? key}: Marge unter Zielmarge ${targetMargin}%`]
+          ? [
+              `${menuItem?.name ?? stat?.name ?? key}: Marge unter Zielmarge ${targetMargin}%`,
+            ]
           : []),
       ];
 
       return {
-        menuItemId: menuItem ? this.stringifyId(menuItem._id) : stat?.menuItemId,
+        menuItemId: menuItem
+          ? this.stringifyId(menuItem._id)
+          : stat?.menuItemId,
         recipeId: recipe ? this.stringifyId(recipe._id) : undefined,
         name: menuItem?.name ?? stat?.name ?? key,
-        category: menuItem?.category ?? stat?.category ?? recipe?.category ?? 'Ohne Kategorie',
+        category:
+          menuItem?.category ??
+          stat?.category ??
+          recipe?.category ??
+          'Ohne Kategorie',
         locationIds,
         soldQuantity,
         orderCount: Number(stat?.orderCount ?? 0),
@@ -310,7 +356,12 @@ export class MarginReportsService {
         marginPercent,
         foodCostPercent,
         targetMargin,
-        status: this.resolveStatus(Boolean(recipe), marginPercent, foodCostPercent, targetMargin),
+        status: this.resolveStatus(
+          Boolean(recipe),
+          marginPercent,
+          foodCostPercent,
+          targetMargin,
+        ),
         quadrant: 'dogs' as Quadrant,
         costBasis: cost.costBasis,
         warnings: this.unique(warnings),
@@ -318,15 +369,23 @@ export class MarginReportsService {
       };
     });
 
-    const quantityThreshold = this.average(baseRows.map((row) => row.soldQuantity));
-    const marginThreshold = this.average(baseRows.map((row) => row.marginPercent).filter((value) => value > 0));
+    const quantityThreshold = this.average(
+      baseRows.map((row) => row.soldQuantity),
+    );
+    const marginThreshold = this.average(
+      baseRows.map((row) => row.marginPercent).filter((value) => value > 0),
+    );
 
     return baseRows
       .map((row) => ({
         ...row,
         quadrant: this.resolveQuadrant(row, quantityThreshold, marginThreshold),
       }))
-      .sort((first, second) => second.revenue - first.revenue || second.soldQuantity - first.soldQuantity);
+      .sort(
+        (first, second) =>
+          second.revenue - first.revenue ||
+          second.soldQuantity - first.soldQuantity,
+      );
   }
 
   private calculateRecipeCost(
@@ -347,12 +406,19 @@ export class MarginReportsService {
     const ingredients = (recipe.ingredients ?? []).map((ingredient) => {
       const stockItem = stockById.get(ingredient.stockItemId);
       if (!stockItem) {
-        warnings.push(`${recipe.name}: Lagerartikel ${ingredient.stockItemName} fehlt`);
+        warnings.push(
+          `${recipe.name}: Lagerartikel ${ingredient.stockItemName} fehlt`,
+        );
       }
-      const cost = this.resolveIngredientUnitCost(ingredient.purchasePriceNet, stockItem);
+      const cost = this.resolveIngredientUnitCost(
+        ingredient.purchasePriceNet,
+        stockItem,
+      );
       costBasis.add(cost.basis);
       if (cost.value <= 0) {
-        warnings.push(`${recipe.name}: Einkaufspreis fuer ${ingredient.stockItemName} fehlt`);
+        warnings.push(
+          `${recipe.name}: Einkaufspreis fuer ${ingredient.stockItemName} fehlt`,
+        );
       }
       const quantity = ingredient.quantity * (ingredient.wasteFactor ?? 1);
       const totalCost = quantity * cost.value;
@@ -389,9 +455,13 @@ export class MarginReportsService {
       { value: stockItem?.purchasePriceNet, basis: 'purchasePriceNet' },
       { value: recipePurchasePriceNet, basis: 'recipePurchasePriceNet' },
     ];
-    const match = candidates.find((candidate) => Number(candidate.value ?? 0) > 0);
+    const match = candidates.find(
+      (candidate) => Number(candidate.value ?? 0) > 0,
+    );
 
-    return match ? { value: Number(match.value), basis: match.basis } : { value: 0, basis: 'missing' };
+    return match
+      ? { value: Number(match.value), basis: match.basis }
+      : { value: 0, basis: 'missing' };
   }
 
   private createSummary(rows: MenuItemMarginReportRow[]) {
@@ -403,20 +473,34 @@ export class MarginReportsService {
       revenue,
       costOfGoods,
       contributionMargin,
-      averageMarginPercent: revenue > 0 ? (contributionMargin / revenue) * 100 : 0,
+      averageMarginPercent:
+        revenue > 0 ? (contributionMargin / revenue) * 100 : 0,
       soldQuantity: rows.reduce((sum, row) => sum + row.soldQuantity, 0),
       orderCount: rows.reduce((sum, row) => sum + row.orderCount, 0),
-      belowTargetItems: rows.filter((row) => row.status === 'below_target').length,
-      negativeMarginItems: rows.filter((row) => row.status === 'negative_margin').length,
-      highFoodCostItems: rows.filter((row) => row.status === 'high_food_cost').length,
-      itemsWithoutRecipe: rows.filter((row) => row.status === 'missing_recipe').length,
+      belowTargetItems: rows.filter((row) => row.status === 'below_target')
+        .length,
+      negativeMarginItems: rows.filter(
+        (row) => row.status === 'negative_margin',
+      ).length,
+      highFoodCostItems: rows.filter((row) => row.status === 'high_food_cost')
+        .length,
+      itemsWithoutRecipe: rows.filter((row) => row.status === 'missing_recipe')
+        .length,
       itemsWithoutSales: rows.filter((row) => row.soldQuantity === 0).length,
       warningsCount: this.unique(rows.flatMap((row) => row.warnings)).length,
-      topSeller: [...rows].sort((first, second) => second.soldQuantity - first.soldQuantity).slice(0, 10),
-      lowMarginItems: [...rows].sort((first, second) => first.marginPercent - second.marginPercent).slice(0, 10),
+      topSeller: [...rows]
+        .sort((first, second) => second.soldQuantity - first.soldQuantity)
+        .slice(0, 10),
+      lowMarginItems: [...rows]
+        .sort((first, second) => first.marginPercent - second.marginPercent)
+        .slice(0, 10),
       highMarginLowSalesItems: rows
         .filter((row) => row.marginPercent >= 65)
-        .sort((first, second) => first.soldQuantity - second.soldQuantity || second.marginPercent - first.marginPercent)
+        .sort(
+          (first, second) =>
+            first.soldQuantity - second.soldQuantity ||
+            second.marginPercent - first.marginPercent,
+        )
         .slice(0, 10),
     };
   }
@@ -428,10 +512,14 @@ export class MarginReportsService {
     return locations.map((location) => {
       const locationId = this.stringifyId(location._id);
       const locationRows = rows.filter(
-        (row) => !row.locationIds.length || row.locationIds.includes(locationId),
+        (row) =>
+          !row.locationIds.length || row.locationIds.includes(locationId),
       );
       const revenue = locationRows.reduce((sum, row) => sum + row.revenue, 0);
-      const costOfGoods = locationRows.reduce((sum, row) => sum + row.costOfGoods, 0);
+      const costOfGoods = locationRows.reduce(
+        (sum, row) => sum + row.costOfGoods,
+        0,
+      );
       const contributionMargin = revenue - costOfGoods;
 
       return {
@@ -441,12 +529,22 @@ export class MarginReportsService {
         revenue,
         costOfGoods,
         contributionMargin,
-        averageMarginPercent: revenue > 0 ? (contributionMargin / revenue) * 100 : 0,
-        soldQuantity: locationRows.reduce((sum, row) => sum + row.soldQuantity, 0),
+        averageMarginPercent:
+          revenue > 0 ? (contributionMargin / revenue) * 100 : 0,
+        soldQuantity: locationRows.reduce(
+          (sum, row) => sum + row.soldQuantity,
+          0,
+        ),
         orderCount: locationRows.reduce((sum, row) => sum + row.orderCount, 0),
-        belowTargetItems: locationRows.filter((row) => row.status === 'below_target').length,
-        topItems: [...locationRows].sort((first, second) => second.revenue - first.revenue).slice(0, 10),
-        worstItems: [...locationRows].sort((first, second) => first.marginPercent - second.marginPercent).slice(0, 10),
+        belowTargetItems: locationRows.filter(
+          (row) => row.status === 'below_target',
+        ).length,
+        topItems: [...locationRows]
+          .sort((first, second) => second.revenue - first.revenue)
+          .slice(0, 10),
+        worstItems: [...locationRows]
+          .sort((first, second) => first.marginPercent - second.marginPercent)
+          .slice(0, 10),
       };
     });
   }
@@ -470,7 +568,9 @@ export class MarginReportsService {
       },
       thresholds: {
         quantity: this.average(rows.map((row) => row.soldQuantity)),
-        marginPercent: this.average(rows.map((row) => row.marginPercent).filter((value) => value > 0)),
+        marginPercent: this.average(
+          rows.map((row) => row.marginPercent).filter((value) => value > 0),
+        ),
       },
       groups,
     };
@@ -481,17 +581,26 @@ export class MarginReportsService {
     query: MarginReportQueryDto,
   ): Promise<ResolvedScope> {
     const period = this.resolvePeriod(query);
-    if (query.companyId && !(await this.accessPolicy.canAccessCompany(user, query.companyId))) {
-      throw new ForbiddenException('Keine Berechtigung fuer dieses Unternehmen');
+    if (
+      query.companyId &&
+      !(await this.accessPolicy.canAccessCompany(user, query.companyId))
+    ) {
+      throw new ForbiddenException(
+        'Keine Berechtigung fuer dieses Unternehmen',
+      );
     }
-    if (query.regionId && !(await this.accessPolicy.canAccessRegion(user, query.regionId))) {
+    if (
+      query.regionId &&
+      !(await this.accessPolicy.canAccessRegion(user, query.regionId))
+    ) {
       throw new ForbiddenException('Keine Berechtigung fuer diese Region');
     }
     if (query.locationId) {
       await this.accessPolicy.assertCanAccessLocation(user, query.locationId);
     }
 
-    const readableLocationIds = await this.accessPolicy.getReadableLocationIds(user);
+    const readableLocationIds =
+      await this.accessPolicy.getReadableLocationIds(user);
     const locationFilter: Record<string, unknown> = {
       _id: { $in: query.locationId ? [query.locationId] : readableLocationIds },
       ...(query.companyId ? { companyId: query.companyId } : {}),
@@ -526,7 +635,11 @@ export class MarginReportsService {
 
     if (range === 'yesterday') {
       const yesterday = this.addDays(now, -1);
-      return { range, from: this.startOfDay(yesterday), to: this.endOfDay(yesterday) };
+      return {
+        range,
+        from: this.startOfDay(yesterday),
+        to: this.endOfDay(yesterday),
+      };
     }
 
     if (range === 'week') {
@@ -541,7 +654,11 @@ export class MarginReportsService {
       };
     }
 
-    return { range: 'today', from: this.startOfDay(now), to: this.endOfDay(now) };
+    return {
+      range: 'today',
+      from: this.startOfDay(now),
+      to: this.endOfDay(now),
+    };
   }
 
   private resolveStatus(
@@ -649,7 +766,9 @@ export class MarginReportsService {
       return 0;
     }
 
-    return cleanValues.reduce((sum, value) => sum + value, 0) / cleanValues.length;
+    return (
+      cleanValues.reduce((sum, value) => sum + value, 0) / cleanValues.length
+    );
   }
 
   private normalize(value: string): string {
@@ -671,6 +790,8 @@ export class MarginReportsService {
   }
 
   private unique(values: Array<string | undefined>): string[] {
-    return [...new Set(values.filter((value): value is string => Boolean(value)))];
+    return [
+      ...new Set(values.filter((value): value is string => Boolean(value))),
+    ];
   }
 }

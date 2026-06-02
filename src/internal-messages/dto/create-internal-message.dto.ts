@@ -1,4 +1,11 @@
-import { IsEnum, IsMongoId, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEnum,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { Role } from '../../auth/enums/role.enum';
 import { InternalMessagePriority } from '../schemas/internal-message.schema';
 

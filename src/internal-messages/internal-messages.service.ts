@@ -87,7 +87,10 @@ export class InternalMessagesService {
     const messages = await this.messageModel
       .find({
         locationId: { $in: locationIds },
-        $or: [{ targetRoles: { $size: 0 } }, { targetRoles: { $in: actor.roles } }],
+        $or: [
+          { targetRoles: { $size: 0 } },
+          { targetRoles: { $in: actor.roles } },
+        ],
       })
       .sort({ createdAt: -1 })
       .limit(50)
@@ -131,7 +134,9 @@ export class InternalMessagesService {
     await this.accessPolicy.assertCanAccessLocation(actor, locationId);
   }
 
-  private async getReadableLocationIds(actor: AuthenticatedUser): Promise<string[]> {
+  private async getReadableLocationIds(
+    actor: AuthenticatedUser,
+  ): Promise<string[]> {
     return this.accessPolicy.getReadableLocationIds(actor);
   }
 

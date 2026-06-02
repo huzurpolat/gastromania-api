@@ -48,14 +48,22 @@ describe('StockController', () => {
     );
     controller.completeInventory(
       'inventory-1',
-      { counts: [{ stockItemId: '6627d9a2c6f2d8f3e2b1a002', countedQuantity: 12 }] },
+      {
+        counts: [
+          { stockItemId: '6627d9a2c6f2d8f3e2b1a002', countedQuantity: 12 },
+        ],
+      },
       actor,
     );
 
     expect(stockService.startInventory).toHaveBeenCalledTimes(1);
     expect(stockService.completeInventory).toHaveBeenCalledWith(
       'inventory-1',
-      { counts: [{ stockItemId: '6627d9a2c6f2d8f3e2b1a002', countedQuantity: 12 }] },
+      {
+        counts: [
+          { stockItemId: '6627d9a2c6f2d8f3e2b1a002', countedQuantity: 12 },
+        ],
+      },
       actor,
     );
   });

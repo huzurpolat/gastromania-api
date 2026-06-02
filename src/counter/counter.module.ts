@@ -1,15 +1,27 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
-import { MenuItem, MenuItemSchema } from '../menu-items/schemas/menu-item.schema';
+import {
+  MenuItem,
+  MenuItemSchema,
+} from '../menu-items/schemas/menu-item.schema';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { Recipe, RecipeSchema } from '../recipes/schemas/recipe.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
-import { InventoryBatch, InventoryBatchSchema } from '../stock/schemas/inventory-batch.schema';
-import { StockAlert, StockAlertSchema } from '../stock/schemas/stock-alert.schema';
+import {
+  InventoryBatch,
+  InventoryBatchSchema,
+} from '../stock/schemas/inventory-batch.schema';
+import {
+  StockAlert,
+  StockAlertSchema,
+} from '../stock/schemas/stock-alert.schema';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
-import { StockMovement, StockMovementSchema } from '../stock/schemas/stock-movement.schema';
+import {
+  StockMovement,
+  StockMovementSchema,
+} from '../stock/schemas/stock-movement.schema';
 import { CounterController } from './counter.controller';
 import { CounterOrderService } from './counter-order.service';
 import { CounterPaymentService } from './counter-payment.service';

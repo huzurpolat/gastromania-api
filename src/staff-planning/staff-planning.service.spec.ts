@@ -97,9 +97,15 @@ describe('StaffPlanningService', () => {
     accessPolicy.assertCanManageUser.mockResolvedValue(undefined);
     accessPolicy.getScopedResourceFilter.mockResolvedValue({ locationId });
     accessPolicy.getReadableLocationIds.mockResolvedValue([locationId]);
-    accessPolicy.getManageableUsersFilter.mockResolvedValue({ locationIds: locationId });
-    locationModel.findById.mockReturnValue({ exec: jest.fn().mockResolvedValue(location) });
-    userModel.findById.mockReturnValue({ exec: jest.fn().mockResolvedValue(employee) });
+    accessPolicy.getManageableUsersFilter.mockResolvedValue({
+      locationIds: locationId,
+    });
+    locationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(location),
+    });
+    userModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(employee),
+    });
     userModel.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         exec: jest.fn().mockResolvedValue([employee]),
@@ -107,11 +113,13 @@ describe('StaffPlanningService', () => {
     });
     shiftModel.exists.mockResolvedValue(null);
     absenceModel.exists.mockResolvedValue(null);
-    shiftModel.create.mockImplementation(async (payload: Record<string, unknown>) => ({
-      _id: { toString: () => shiftId },
-      ...payload,
-      toObject: () => ({ _id: shiftId, ...payload }),
-    }));
+    shiftModel.create.mockImplementation(
+      async (payload: Record<string, unknown>) => ({
+        _id: { toString: () => shiftId },
+        ...payload,
+        toObject: () => ({ _id: shiftId, ...payload }),
+      }),
+    );
     shiftModel.findById.mockReturnValue({
       exec: jest.fn().mockResolvedValue({
         _id: { toString: () => shiftId },
@@ -127,10 +135,16 @@ describe('StaffPlanningService', () => {
         save: jest.fn().mockImplementation(function save(this: unknown) {
           return Promise.resolve(this);
         }),
-        toObject: () => ({ _id: shiftId, locationId, assignedUserIds: [userId] }),
+        toObject: () => ({
+          _id: shiftId,
+          locationId,
+          assignedUserIds: [userId],
+        }),
       }),
     });
-    notificationModel.create.mockImplementation(async (payload: Record<string, unknown>) => payload);
+    notificationModel.create.mockImplementation(
+      async (payload: Record<string, unknown>) => payload,
+    );
     auditModel.create.mockResolvedValue({});
     realtimeService.publish.mockReturnValue(undefined);
 
@@ -138,11 +152,20 @@ describe('StaffPlanningService', () => {
       providers: [
         StaffPlanningService,
         { provide: getModelToken(StaffShift.name), useValue: shiftModel },
-        { provide: getModelToken(StaffAvailability.name), useValue: availabilityModel },
+        {
+          provide: getModelToken(StaffAvailability.name),
+          useValue: availabilityModel,
+        },
         { provide: getModelToken(StaffAbsence.name), useValue: absenceModel },
         { provide: getModelToken(ShiftSwapRequest.name), useValue: swapModel },
-        { provide: getModelToken(StaffPlanningAudit.name), useValue: auditModel },
-        { provide: getModelToken(StaffNotification.name), useValue: notificationModel },
+        {
+          provide: getModelToken(StaffPlanningAudit.name),
+          useValue: auditModel,
+        },
+        {
+          provide: getModelToken(StaffNotification.name),
+          useValue: notificationModel,
+        },
         { provide: getModelToken(User.name), useValue: userModel },
         { provide: getModelToken(Location.name), useValue: locationModel },
         { provide: AccessPolicyService, useValue: accessPolicy },
@@ -235,11 +258,13 @@ describe('StaffPlanningService', () => {
   });
 
   it('creates an absence request for vacation and notifies managers', async () => {
-    absenceModel.create.mockImplementation(async (payload: Record<string, unknown>) => ({
-      _id: { toString: () => 'absence-1' },
-      ...payload,
-      toObject: () => ({ _id: 'absence-1', ...payload }),
-    }));
+    absenceModel.create.mockImplementation(
+      async (payload: Record<string, unknown>) => ({
+        _id: { toString: () => 'absence-1' },
+        ...payload,
+        toObject: () => ({ _id: 'absence-1', ...payload }),
+      }),
+    );
 
     const absence = await service.createAbsence(
       {

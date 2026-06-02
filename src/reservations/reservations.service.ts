@@ -73,7 +73,10 @@ export class ReservationsService {
 
     if (
       !reservation ||
-      !(await this.accessPolicy.canAccessLocation(actor, reservation.locationId))
+      !(await this.accessPolicy.canAccessLocation(
+        actor,
+        reservation.locationId,
+      ))
     ) {
       throw new NotFoundException('Reservierung nicht gefunden');
     }
@@ -134,7 +137,10 @@ export class ReservationsService {
   ): Promise<ReservationDocument> {
     this.validateObjectId(id, 'Reservierungs-ID');
     const reservation = await this.findOne(id, actor);
-    await this.accessPolicy.assertCanManageLocation(actor, reservation.locationId);
+    await this.accessPolicy.assertCanManageLocation(
+      actor,
+      reservation.locationId,
+    );
 
     const deletedReservation = await this.reservationModel
       .findByIdAndDelete(id)

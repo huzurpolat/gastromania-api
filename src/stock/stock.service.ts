@@ -11,7 +11,10 @@ import { Observable, Subject, filter, from, map, switchMap } from 'rxjs';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { Location, LocationDocument } from '../locations/schemas/location.schema';
+import {
+  Location,
+  LocationDocument,
+} from '../locations/schemas/location.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { CreateInventoryCategoryDto } from './dto/create-inventory-category.dto';
@@ -211,7 +214,9 @@ export class StockService {
       ? [locationId]
       : await this.getReadableLocationIds(actor);
 
-    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
+    );
 
     const items = await this.stockItemModel
       .find({ locationId: { $in: locationIds } })
@@ -230,7 +235,9 @@ export class StockService {
       ? [locationId]
       : await this.getReadableLocationIds(actor);
 
-    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
+    );
 
     const movements = await this.movementModel
       .find({
@@ -252,10 +259,16 @@ export class StockService {
       ? [locationId]
       : await this.getReadableLocationIds(actor);
 
-    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
+    );
 
     const batches = await this.batchModel
-      .find({ locationId: { $in: locationIds }, isActive: true, remainingQuantity: { $gt: 0 } })
+      .find({
+        locationId: { $in: locationIds },
+        isActive: true,
+        remainingQuantity: { $gt: 0 },
+      })
       .sort({ expiresAt: 1, receivedAt: 1 })
       .exec();
 
@@ -278,7 +291,9 @@ export class StockService {
       throw new BadRequestException('MHD ist fuer diese Zutat erforderlich');
     }
 
-    const receivedAt = payload.receivedAt ? new Date(payload.receivedAt) : new Date();
+    const receivedAt = payload.receivedAt
+      ? new Date(payload.receivedAt)
+      : new Date();
     const unitPriceNet = payload.unitPriceNet ?? item.purchasePriceNet ?? 0;
     const quantityBefore = item.quantity;
     item.quantity = quantityBefore + payload.quantity;
@@ -347,48 +362,67 @@ export class StockService {
     ];
 
     if (!allowed.includes(payload.type)) {
-      throw new BadRequestException('Nur Schwund, Verderb, Bruch oder Verlust sind erlaubt');
+      throw new BadRequestException(
+        'Nur Schwund, Verderb, Bruch oder Verlust sind erlaubt',
+      );
     }
 
     if (!payload.reason?.trim()) {
       throw new BadRequestException('Grund ist erforderlich');
     }
 
-    return this.adjust(payload.stockItemId, {
-      quantityChange: -Math.abs(payload.quantity),
-      type: payload.type,
-      reason: payload.reason,
-      note: payload.note,
-      batchId: payload.batchId,
-    }, actor);
+    return this.adjust(
+      payload.stockItemId,
+      {
+        quantityChange: -Math.abs(payload.quantity),
+        type: payload.type,
+        reason: payload.reason,
+        note: payload.note,
+        batchId: payload.batchId,
+      },
+      actor,
+    );
   }
 
   async reorderSuggestions(actor: AuthenticatedUser, locationId?: string) {
     const items = await this.findAll(actor, locationId);
-    const lowItems = items.filter((item) => item.isActive && !item.isArchived && item.quantity <= item.minQuantity);
-    const grouped = new Map<string, {
-      supplierId: string;
-      supplierName: string;
-      lines: Array<{
-        stockItemId: string;
-        stockItemName: string;
-        quantity: number;
-        unit: string;
-        unitPriceNet: number;
+    const lowItems = items.filter(
+      (item) =>
+        item.isActive && !item.isArchived && item.quantity <= item.minQuantity,
+    );
+    const grouped = new Map<
+      string,
+      {
+        supplierId: string;
+        supplierName: string;
+        lines: Array<{
+          stockItemId: string;
+          stockItemName: string;
+          quantity: number;
+          unit: string;
+          unitPriceNet: number;
+          totalNet: number;
+          currentQuantity: number;
+          minQuantity: number;
+          targetQuantity: number;
+        }>;
         totalNet: number;
-        currentQuantity: number;
-        minQuantity: number;
-        targetQuantity: number;
-      }>;
-      totalNet: number;
-    }>();
+      }
+    >();
 
     for (const item of lowItems) {
-      const targetQuantity = item.targetQuantity ?? Math.max(item.minQuantity * 2, item.minQuantity + 1);
+      const targetQuantity =
+        item.targetQuantity ??
+        Math.max(item.minQuantity * 2, item.minQuantity + 1);
       const quantity = Math.max(0, targetQuantity - item.quantity);
       const supplierId = item.supplierId ?? 'unassigned';
       const supplierName = item.supplierName ?? 'Ohne Lieferant';
-      const group = grouped.get(supplierId) ?? { supplierId, supplierName, lines: [], totalNet: 0 };
+      const group = grouped.get(supplierId) ?? {
+        supplierId,
+        supplierName,
+        lines: [],
+        totalNet: 0,
+      };
       const totalNet = quantity * item.purchasePriceNet;
       group.lines.push({
         stockItemId: item._id,
@@ -405,12 +439,18 @@ export class StockService {
       grouped.set(supplierId, group);
     }
 
-    return Array.from(grouped.values()).sort((a, b) => a.supplierName.localeCompare(b.supplierName));
+    return Array.from(grouped.values()).sort((a, b) =>
+      a.supplierName.localeCompare(b.supplierName),
+    );
   }
 
   async listPurchaseOrders(actor: AuthenticatedUser, locationId?: string) {
-    const locationIds = locationId ? [locationId] : await this.getReadableLocationIds(actor);
-    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
+    const locationIds = locationId
+      ? [locationId]
+      : await this.getReadableLocationIds(actor);
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
+    );
 
     return this.purchaseOrderModel
       .find({ locationId: { $in: locationIds } })
@@ -418,11 +458,16 @@ export class StockService {
       .exec();
   }
 
-  async createPurchaseOrder(payload: CreatePurchaseOrderDto, actor: AuthenticatedUser) {
+  async createPurchaseOrder(
+    payload: CreatePurchaseOrderDto,
+    actor: AuthenticatedUser,
+  ) {
     await this.assertCanUseLocation(actor, payload.locationId);
 
     if (!payload.lines.length) {
-      throw new BadRequestException('Bestellung benoetigt mindestens eine Position');
+      throw new BadRequestException(
+        'Bestellung benoetigt mindestens eine Position',
+      );
     }
 
     const lines = [];
@@ -460,16 +505,25 @@ export class StockService {
   }
 
   async findLocations(actor: AuthenticatedUser, locationId?: string) {
-    const locationIds = locationId ? [locationId] : await this.getReadableLocationIds(actor);
-    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
+    const locationIds = locationId
+      ? [locationId]
+      : await this.getReadableLocationIds(actor);
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
+    );
     const locations = await this.inventoryLocationModel
       .find({ locationId: { $in: locationIds } })
       .sort({ name: 1 })
       .exec();
-    return locations.map((location) => this.toInventoryLocationResponse(location));
+    return locations.map((location) =>
+      this.toInventoryLocationResponse(location),
+    );
   }
 
-  async createLocation(payload: CreateInventoryLocationDto, actor: AuthenticatedUser) {
+  async createLocation(
+    payload: CreateInventoryLocationDto,
+    actor: AuthenticatedUser,
+  ) {
     await this.assertCanUseLocation(actor, payload.locationId);
     const location = await this.inventoryLocationModel.create({
       ...payload,
@@ -479,7 +533,11 @@ export class StockService {
     return this.toInventoryLocationResponse(location);
   }
 
-  async updateLocation(id: string, payload: Partial<CreateInventoryLocationDto>, actor: AuthenticatedUser) {
+  async updateLocation(
+    id: string,
+    payload: Partial<CreateInventoryLocationDto>,
+    actor: AuthenticatedUser,
+  ) {
     const location = await this.inventoryLocationModel.findById(id).exec();
     if (!location) throw new NotFoundException('Lagerort nicht gefunden');
     await this.assertCanUseLocation(actor, location.locationId);
@@ -500,8 +558,13 @@ export class StockService {
   }
 
   async findCategories() {
-    const categories = await this.inventoryCategoryModel.find().sort({ name: 1 }).exec();
-    return categories.map((category) => this.toInventoryCategoryResponse(category));
+    const categories = await this.inventoryCategoryModel
+      .find()
+      .sort({ name: 1 })
+      .exec();
+    return categories.map((category) =>
+      this.toInventoryCategoryResponse(category),
+    );
   }
 
   async createCategory(payload: CreateInventoryCategoryDto) {
@@ -513,7 +576,10 @@ export class StockService {
     return this.toInventoryCategoryResponse(category);
   }
 
-  async updateCategory(id: string, payload: Partial<CreateInventoryCategoryDto>) {
+  async updateCategory(
+    id: string,
+    payload: Partial<CreateInventoryCategoryDto>,
+  ) {
     const category = await this.inventoryCategoryModel.findById(id).exec();
     if (!category) throw new NotFoundException('Kategorie nicht gefunden');
     category.set(payload);
@@ -530,7 +596,9 @@ export class StockService {
 
   async findAlerts(actor: AuthenticatedUser, locationId?: string) {
     await this.refreshAlerts(actor, locationId);
-    const locationIds = locationId ? [locationId] : await this.getReadableLocationIds(actor);
+    const locationIds = locationId
+      ? [locationId]
+      : await this.getReadableLocationIds(actor);
     const alerts = await this.stockAlertModel
       .find({ locationId: { $in: locationIds }, isResolved: false })
       .sort({ createdAt: -1 })
@@ -538,11 +606,20 @@ export class StockService {
     return alerts.map((alert) => this.toAlertResponse(alert));
   }
 
-  async dashboard(actor: AuthenticatedUser, locationId?: string): Promise<InventoryDashboardResponse> {
-    const locationIds = locationId ? [locationId] : await this.getReadableLocationIds(actor);
-    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
+  async dashboard(
+    actor: AuthenticatedUser,
+    locationId?: string,
+  ): Promise<InventoryDashboardResponse> {
+    const locationIds = locationId
+      ? [locationId]
+      : await this.getReadableLocationIds(actor);
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
+    );
     await this.refreshAlerts(actor, locationId);
-    const items = await this.stockItemModel.find({ locationId: { $in: locationIds }, isArchived: { $ne: true } }).exec();
+    const items = await this.stockItemModel
+      .find({ locationId: { $in: locationIds }, isArchived: { $ne: true } })
+      .exec();
     const expiringSoonCount = await this.batchModel.countDocuments({
       locationId: { $in: locationIds },
       isActive: true,
@@ -551,11 +628,14 @@ export class StockService {
     });
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const movements = await this.movementModel.find({ locationId: { $in: locationIds }, createdAt: { $gte: today } }).exec();
-    const openInventorySessions = await this.inventorySessionModel.countDocuments({
-      locationId: { $in: locationIds },
-      status: InventorySessionStatus.Open,
-    });
+    const movements = await this.movementModel
+      .find({ locationId: { $in: locationIds }, createdAt: { $gte: today } })
+      .exec();
+    const openInventorySessions =
+      await this.inventorySessionModel.countDocuments({
+        locationId: { $in: locationIds },
+        status: InventorySessionStatus.Open,
+      });
     const topUsage = await this.movementModel.aggregate<{
       _id: string;
       name: string;
@@ -575,7 +655,13 @@ export class StockService {
           quantityChange: { $lt: 0 },
         },
       },
-      { $group: { _id: '$stockItemId', name: { $first: '$stockItemName' }, quantity: { $sum: { $abs: '$quantityChange' } } } },
+      {
+        $group: {
+          _id: '$stockItemId',
+          name: { $first: '$stockItemName' },
+          quantity: { $sum: { $abs: '$quantityChange' } },
+        },
+      },
       { $sort: { quantity: -1 } },
       { $limit: 5 },
     ]);
@@ -586,8 +672,13 @@ export class StockService {
 
     return {
       itemCount: items.length,
-      totalStockValueNet: items.reduce((sum, item) => sum + item.quantity * (item.purchasePriceNet ?? 0), 0),
-      lowStockCount: items.filter((item) => item.isActive && item.quantity <= item.minQuantity).length,
+      totalStockValueNet: items.reduce(
+        (sum, item) => sum + item.quantity * (item.purchasePriceNet ?? 0),
+        0,
+      ),
+      lowStockCount: items.filter(
+        (item) => item.isActive && item.quantity <= item.minQuantity,
+      ).length,
       openInventorySessions,
       receiptsToday: sumMovement([StockMovementType.Receipt]),
       issuesToday: sumMovement([
@@ -612,7 +703,10 @@ export class StockService {
     };
   }
 
-  async startInventory(payload: StartInventorySessionDto, actor: AuthenticatedUser) {
+  async startInventory(
+    payload: StartInventorySessionDto,
+    actor: AuthenticatedUser,
+  ) {
     await this.assertCanUseLocation(actor, payload.locationId);
     const session = await this.inventorySessionModel.create({
       locationId: payload.locationId,
@@ -625,13 +719,24 @@ export class StockService {
   }
 
   async listInventorySessions(actor: AuthenticatedUser, locationId?: string) {
-    const locationIds = locationId ? [locationId] : await this.getReadableLocationIds(actor);
-    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
-    const sessions = await this.inventorySessionModel.find({ locationId: { $in: locationIds } }).sort({ startedAt: -1 }).exec();
+    const locationIds = locationId
+      ? [locationId]
+      : await this.getReadableLocationIds(actor);
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
+    );
+    const sessions = await this.inventorySessionModel
+      .find({ locationId: { $in: locationIds } })
+      .sort({ startedAt: -1 })
+      .exec();
     return sessions.map((session) => this.toInventorySessionResponse(session));
   }
 
-  async completeInventory(id: string, payload: CompleteInventorySessionDto, actor: AuthenticatedUser) {
+  async completeInventory(
+    id: string,
+    payload: CompleteInventorySessionDto,
+    actor: AuthenticatedUser,
+  ) {
     const session = await this.inventorySessionModel.findById(id).exec();
     if (!session) throw new NotFoundException('Inventur nicht gefunden');
     if (session.status === InventorySessionStatus.Closed) {
@@ -646,7 +751,9 @@ export class StockService {
       const quantityBefore = item.quantity;
       const difference = line.countedQuantity - quantityBefore;
       if (difference !== 0 && !payload.note?.trim()) {
-        throw new BadRequestException('Inventurabweichungen benoetigen eine Pflichtnotiz');
+        throw new BadRequestException(
+          'Inventurabweichungen benoetigen eine Pflichtnotiz',
+        );
       }
       item.quantity = line.countedQuantity;
       await item.save();
@@ -754,19 +861,22 @@ export class StockService {
       ].includes(payload.type) &&
       !payload.reason?.trim()
     ) {
-      throw new BadRequestException('Grund ist fuer Schwund, Verderb, Bruch und Verlust erforderlich');
+      throw new BadRequestException(
+        'Grund ist fuer Schwund, Verderb, Bruch und Verlust erforderlich',
+      );
     }
 
     item.quantity = nextQuantity;
     const saved = await item.save();
     const unitPriceNet = payload.unitPriceNet ?? saved.purchasePriceNet ?? 0;
-    const batchIds = payload.quantityChange < 0
-      ? await this.consumeBatches(
-          saved._id.toString(),
-          Math.abs(payload.quantityChange),
-          payload.batchId,
-        )
-      : [];
+    const batchIds =
+      payload.quantityChange < 0
+        ? await this.consumeBatches(
+            saved._id.toString(),
+            Math.abs(payload.quantityChange),
+            payload.batchId,
+          )
+        : [];
     const movement = await this.movementModel.create({
       locationId: saved.locationId,
       stockItemId: saved._id.toString(),
@@ -795,7 +905,10 @@ export class StockService {
     return event;
   }
 
-  async remove(id: string, actor: AuthenticatedUser): Promise<StockItemResponse> {
+  async remove(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<StockItemResponse> {
     const item = await this.stockItemModel.findById(id).exec();
 
     if (!item) {
@@ -828,7 +941,9 @@ export class StockService {
     await this.accessPolicy.assertCanAccessLocation(actor, locationId);
   }
 
-  private async getReadableLocationIds(actor: AuthenticatedUser): Promise<string[]> {
+  private async getReadableLocationIds(
+    actor: AuthenticatedUser,
+  ): Promise<string[]> {
     return this.accessPolicy.getReadableLocationIds(actor);
   }
 
@@ -841,21 +956,34 @@ export class StockService {
     return locations.map((location) => location._id.toString());
   }
 
-  private async refreshAlerts(actor: AuthenticatedUser, locationId?: string): Promise<void> {
-    const locationIds = locationId ? [locationId] : await this.getReadableLocationIds(actor);
+  private async refreshAlerts(
+    actor: AuthenticatedUser,
+    locationId?: string,
+  ): Promise<void> {
+    const locationIds = locationId
+      ? [locationId]
+      : await this.getReadableLocationIds(actor);
     const items = await this.stockItemModel
       .find({ locationId: { $in: locationIds }, isArchived: { $ne: true } })
       .exec();
     await Promise.all(items.map((item) => this.syncLowStockAlert(item)));
     const batches = await this.batchModel
-      .find({ locationId: { $in: locationIds }, isActive: true, remainingQuantity: { $gt: 0 } })
+      .find({
+        locationId: { $in: locationIds },
+        isActive: true,
+        remainingQuantity: { $gt: 0 },
+      })
       .exec();
     await Promise.all(batches.map((batch) => this.syncExpiryAlert(batch)));
   }
 
   private async syncLowStockAlert(item: StockItemDocument): Promise<void> {
     const stockItemId = item._id.toString();
-    if (item.isActive && !item.isArchived && item.quantity <= item.minQuantity) {
+    if (
+      item.isActive &&
+      !item.isArchived &&
+      item.quantity <= item.minQuantity
+    ) {
       await this.stockAlertModel.findOneAndUpdate(
         { stockItemId, type: 'Mindestbestand', isResolved: false },
         {
@@ -864,7 +992,10 @@ export class StockService {
           stockItemName: item.name,
           type: 'Mindestbestand',
           message: `${item.name} liegt mit ${item.quantity} ${item.unit} am oder unter dem Mindestbestand von ${item.minQuantity} ${item.unit}.`,
-          severity: item.quantity <= (item.criticalQuantity ?? 0) || item.quantity < 0 ? 'critical' : 'warning',
+          severity:
+            item.quantity <= (item.criticalQuantity ?? 0) || item.quantity < 0
+              ? 'critical'
+              : 'warning',
           isResolved: false,
         },
         { upsert: true, new: true },
@@ -891,7 +1022,11 @@ export class StockService {
       daysUntilExpiry <= 7
     ) {
       await this.stockAlertModel.findOneAndUpdate(
-        { stockItemId: batch.stockItemId, type: `MHD:${batchId}`, isResolved: false },
+        {
+          stockItemId: batch.stockItemId,
+          type: `MHD:${batchId}`,
+          isResolved: false,
+        },
         {
           locationId: batch.locationId,
           stockItemId: batch.stockItemId,
@@ -908,7 +1043,11 @@ export class StockService {
 
     await this.stockAlertModel
       .updateMany(
-        { stockItemId: batch.stockItemId, type: `MHD:${batchId}`, isResolved: false },
+        {
+          stockItemId: batch.stockItemId,
+          type: `MHD:${batchId}`,
+          isResolved: false,
+        },
         { isResolved: true },
       )
       .exec();
@@ -1003,9 +1142,13 @@ export class StockService {
       note: item.note,
       isActive: item.isActive,
       isArchived: item.isArchived ?? false,
-      lowStock: item.isActive && !item.isArchived && item.quantity <= item.minQuantity,
+      lowStock:
+        item.isActive && !item.isArchived && item.quantity <= item.minQuantity,
       stockValueNet: item.quantity * (item.purchasePriceNet ?? 0),
-      criticalStock: item.isActive && !item.isArchived && item.quantity <= (item.criticalQuantity ?? 0),
+      criticalStock:
+        item.isActive &&
+        !item.isArchived &&
+        item.quantity <= (item.criticalQuantity ?? 0),
       negativeStock: item.quantity < 0,
       createdAt: timestamped.createdAt?.toISOString(),
       updatedAt: timestamped.updatedAt?.toISOString(),
@@ -1015,7 +1158,9 @@ export class StockService {
   private toMovementResponse(
     movement: StockMovementDocument,
   ): StockMovementResponse {
-    const timestamped = movement as StockMovementDocument & { createdAt?: Date };
+    const timestamped = movement as StockMovementDocument & {
+      createdAt?: Date;
+    };
 
     return {
       _id: movement._id.toString(),
@@ -1026,7 +1171,9 @@ export class StockService {
       stockItemName: movement.stockItemName,
       type: movement.type,
       quantityChange: movement.quantityChange,
-      quantityBefore: movement.quantityBefore ?? Math.max(0, movement.quantityAfter - movement.quantityChange),
+      quantityBefore:
+        movement.quantityBefore ??
+        Math.max(0, movement.quantityAfter - movement.quantityChange),
       quantityAfter: movement.quantityAfter,
       note: movement.note,
       reason: movement.reason,
@@ -1040,7 +1187,10 @@ export class StockService {
   }
 
   private toInventoryLocationResponse(location: InventoryLocationDocument) {
-    const timestamped = location as InventoryLocationDocument & { createdAt?: Date; updatedAt?: Date };
+    const timestamped = location as InventoryLocationDocument & {
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
     return {
       _id: location._id.toString(),
       locationId: location.locationId,
@@ -1054,7 +1204,10 @@ export class StockService {
   }
 
   private toInventoryCategoryResponse(category: InventoryCategoryDocument) {
-    const timestamped = category as InventoryCategoryDocument & { createdAt?: Date; updatedAt?: Date };
+    const timestamped = category as InventoryCategoryDocument & {
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
     return {
       _id: category._id.toString(),
       name: category.name,
@@ -1067,7 +1220,10 @@ export class StockService {
   }
 
   private toAlertResponse(alert: StockAlertDocument) {
-    const timestamped = alert as StockAlertDocument & { createdAt?: Date; updatedAt?: Date };
+    const timestamped = alert as StockAlertDocument & {
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
     return {
       _id: alert._id.toString(),
       locationId: alert.locationId,
@@ -1083,7 +1239,10 @@ export class StockService {
   }
 
   private toInventorySessionResponse(session: InventorySessionDocument) {
-    const timestamped = session as InventorySessionDocument & { createdAt?: Date; updatedAt?: Date };
+    const timestamped = session as InventorySessionDocument & {
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
     return {
       _id: session._id.toString(),
       locationId: session.locationId,
@@ -1111,8 +1270,13 @@ export class StockService {
     };
   }
 
-  private toBatchResponse(batch: InventoryBatchDocument): InventoryBatchResponse {
-    const timestamped = batch as InventoryBatchDocument & { createdAt?: Date; updatedAt?: Date };
+  private toBatchResponse(
+    batch: InventoryBatchDocument,
+  ): InventoryBatchResponse {
+    const timestamped = batch as InventoryBatchDocument & {
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
     const daysUntilExpiry = this.daysUntil(batch.expiresAt);
     return {
       _id: batch._id.toString(),
@@ -1127,7 +1291,8 @@ export class StockService {
       supplierId: batch.supplierId,
       supplierName: batch.supplierName,
       storageLocation: batch.storageLocation,
-      receivedAt: batch.receivedAt?.toISOString() ?? timestamped.createdAt?.toISOString(),
+      receivedAt:
+        batch.receivedAt?.toISOString() ?? timestamped.createdAt?.toISOString(),
       expiresAt: batch.expiresAt?.toISOString(),
       note: batch.note,
       isActive: batch.isActive,
@@ -1137,7 +1302,9 @@ export class StockService {
   }
 
   private async nextPurchaseOrderNumber(locationId: string): Promise<string> {
-    const count = await this.purchaseOrderModel.countDocuments({ locationId }).exec();
+    const count = await this.purchaseOrderModel
+      .countDocuments({ locationId })
+      .exec();
     return `PO-${String(count + 1).padStart(5, '0')}`;
   }
 }

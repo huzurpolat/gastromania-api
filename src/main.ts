@@ -48,9 +48,12 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.enableShutdownHooks();
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
-  app.useStaticAssets(resolve(process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')), {
-    prefix: '/uploads/',
-  });
+  app.useStaticAssets(
+    resolve(process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')),
+    {
+      prefix: '/uploads/',
+    },
+  );
   app.setGlobalPrefix(API_PREFIX);
 
   app.use(

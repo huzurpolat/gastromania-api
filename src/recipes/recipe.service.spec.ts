@@ -53,23 +53,35 @@ describe('RecipeService scope handling', () => {
   });
 
   it('filters unscoped recipes by ingredient locations', async () => {
-    const visibleRecipe = recipeDocument('recipe-visible', 'Visible', 'stock-visible');
-    const hiddenRecipe = recipeDocument('recipe-hidden', 'Hidden', 'stock-hidden');
+    const visibleRecipe = recipeDocument(
+      'recipe-visible',
+      'Visible',
+      'stock-visible',
+    );
+    const hiddenRecipe = recipeDocument(
+      'recipe-hidden',
+      'Hidden',
+      'stock-hidden',
+    );
 
     recipeModel.find.mockReturnValue({
       sort: jest.fn().mockReturnValue({
         exec: jest.fn().mockResolvedValue([visibleRecipe, hiddenRecipe]),
       }),
     });
-    stockItemModel.find.mockImplementation((query: { _id: { $in: string[] } }) => ({
-      select: jest.fn().mockReturnValue({
-        exec: jest.fn().mockResolvedValue(
-          query._id.$in.includes('stock-hidden')
-            ? [{ locationId: 'loc-2' }]
-            : [{ locationId: 'loc-1' }],
-        ),
+    stockItemModel.find.mockImplementation(
+      (query: { _id: { $in: string[] } }) => ({
+        select: jest.fn().mockReturnValue({
+          exec: jest
+            .fn()
+            .mockResolvedValue(
+              query._id.$in.includes('stock-hidden')
+                ? [{ locationId: 'loc-2' }]
+                : [{ locationId: 'loc-1' }],
+            ),
+        }),
       }),
-    }));
+    );
 
     const recipes = await service.findAll(actor as never, {});
 
@@ -78,15 +90,20 @@ describe('RecipeService scope handling', () => {
   });
 
   it('hides scoped recipes outside the actor location scope', async () => {
-    const recipe = recipeDocument('recipe-hidden', 'Hidden', 'stock-hidden', 'loc-2');
+    const recipe = recipeDocument(
+      'recipe-hidden',
+      'Hidden',
+      'stock-hidden',
+      'loc-2',
+    );
     accessPolicy.canAccessLocation.mockResolvedValue(false);
     recipeModel.findById.mockReturnValue({
       exec: jest.fn().mockResolvedValue(recipe),
     });
 
-    await expect(service.findOne('recipe-hidden', actor as never)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.findOne('recipe-hidden', actor as never),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('infers recipe location from ingredients on create', async () => {
@@ -105,20 +122,23 @@ describe('RecipeService scope handling', () => {
     };
     recipeModel.create.mockResolvedValue(created);
 
-    await service.create({
-      name: 'Burger',
-      category: 'Burger',
-      type: 'Speise',
-      salePrice: 12,
-      ingredients: [
-        {
-          stockItemId: 'stock-visible',
-          stockItemName: 'Burger Bun',
-          quantity: 1,
-          unit: 'Stueck',
-        },
-      ],
-    } as never, actor as never);
+    await service.create(
+      {
+        name: 'Burger',
+        category: 'Burger',
+        type: 'Speise',
+        salePrice: 12,
+        ingredients: [
+          {
+            stockItemId: 'stock-visible',
+            stockItemName: 'Burger Bun',
+            quantity: 1,
+            unit: 'Stueck',
+          },
+        ],
+      } as never,
+      actor as never,
+    );
 
     expect(accessPolicy.assertCanAccessLocation).toHaveBeenCalledWith(
       actor,
@@ -147,7 +167,14 @@ describe('RecipeService scope handling', () => {
       category: 'Food',
       salePrice: 12,
       isArchived: false,
-      ingredients: [{ stockItemId, stockItemName: stockItemId, quantity: 1, unit: 'Stueck' }],
+      ingredients: [
+        {
+          stockItemId,
+          stockItemName: stockItemId,
+          quantity: 1,
+          unit: 'Stueck',
+        },
+      ],
       toObject: () => ({
         _id: id,
         companyId: 'company-1',
@@ -156,7 +183,14 @@ describe('RecipeService scope handling', () => {
         name,
         category: 'Food',
         salePrice: 12,
-        ingredients: [{ stockItemId, stockItemName: stockItemId, quantity: 1, unit: 'Stueck' }],
+        ingredients: [
+          {
+            stockItemId,
+            stockItemName: stockItemId,
+            quantity: 1,
+            unit: 'Stueck',
+          },
+        ],
       }),
     };
   }

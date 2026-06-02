@@ -3,7 +3,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { Location, LocationDocument } from '../locations/schemas/location.schema';
+import {
+  Location,
+  LocationDocument,
+} from '../locations/schemas/location.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
@@ -44,15 +47,25 @@ export class SuppliersService {
     private readonly accessPolicy: AccessPolicyService,
   ) {}
 
-  async create(payload: CreateSupplierDto, actor: AuthenticatedUser): Promise<SupplierResponse> {
+  async create(
+    payload: CreateSupplierDto,
+    actor: AuthenticatedUser,
+  ): Promise<SupplierResponse> {
     await this.assertCanUseLocation(actor, payload.locationId);
     const supplier = await this.supplierModel.create(payload);
     return this.toResponse(supplier);
   }
 
-  async findAll(actor: AuthenticatedUser, locationId?: string): Promise<SupplierResponse[]> {
-    const locationIds = locationId ? [locationId] : await this.getReadableLocationIds(actor);
-    await Promise.all(locationIds.map((id) => this.assertCanUseLocation(actor, id)));
+  async findAll(
+    actor: AuthenticatedUser,
+    locationId?: string,
+  ): Promise<SupplierResponse[]> {
+    const locationIds = locationId
+      ? [locationId]
+      : await this.getReadableLocationIds(actor);
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
+    );
     const suppliers = await this.supplierModel
       .find({ locationId: { $in: locationIds } })
       .sort({ name: 1 })
@@ -60,7 +73,11 @@ export class SuppliersService {
     return suppliers.map((supplier) => this.toResponse(supplier));
   }
 
-  async update(id: string, payload: UpdateSupplierDto, actor: AuthenticatedUser): Promise<SupplierResponse> {
+  async update(
+    id: string,
+    payload: UpdateSupplierDto,
+    actor: AuthenticatedUser,
+  ): Promise<SupplierResponse> {
     const supplier = await this.supplierModel.findById(id).exec();
     if (!supplier) throw new NotFoundException('Lieferant nicht gefunden');
     await this.assertCanUseLocation(actor, supplier.locationId);
@@ -71,7 +88,10 @@ export class SuppliersService {
     return this.toResponse(await supplier.save());
   }
 
-  async remove(id: string, actor: AuthenticatedUser): Promise<SupplierResponse> {
+  async remove(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<SupplierResponse> {
     const supplier = await this.supplierModel.findById(id).exec();
     if (!supplier) throw new NotFoundException('Lieferant nicht gefunden');
     await this.assertCanUseLocation(actor, supplier.locationId);
@@ -79,21 +99,32 @@ export class SuppliersService {
     return this.toResponse(supplier);
   }
 
-  private async assertCanUseLocation(actor: AuthenticatedUser, locationId: string): Promise<void> {
+  private async assertCanUseLocation(
+    actor: AuthenticatedUser,
+    locationId: string,
+  ): Promise<void> {
     await this.accessPolicy.assertCanAccessLocation(actor, locationId);
   }
 
-  private async getReadableLocationIds(actor: AuthenticatedUser): Promise<string[]> {
+  private async getReadableLocationIds(
+    actor: AuthenticatedUser,
+  ): Promise<string[]> {
     return this.accessPolicy.getReadableLocationIds(actor);
   }
 
   private async getManagedLocationIds(managerId: string): Promise<string[]> {
-    const locations = await this.locationModel.find({ managerId }).select('_id').exec();
+    const locations = await this.locationModel
+      .find({ managerId })
+      .select('_id')
+      .exec();
     return locations.map((location) => location._id.toString());
   }
 
   private toResponse(supplier: SupplierDocument): SupplierResponse {
-    const timestamped = supplier as SupplierDocument & { createdAt?: Date; updatedAt?: Date };
+    const timestamped = supplier as SupplierDocument & {
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
     return {
       _id: supplier._id.toString(),
       locationId: supplier.locationId,

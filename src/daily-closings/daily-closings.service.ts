@@ -10,7 +10,10 @@ import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { hasAnyRole } from '../auth/role-utils';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { Checklist, ChecklistStatus } from '../checklists/schemas/checklist.schema';
+import {
+  Checklist,
+  ChecklistStatus,
+} from '../checklists/schemas/checklist.schema';
 import {
   DashboardNotification,
   DashboardNotificationSeverity,
@@ -56,8 +59,10 @@ export class DailyClosingsService {
     @InjectModel(Order.name) private readonly orderModel: Model<Order>,
     @InjectModel(StockMovement.name)
     private readonly stockMovementModel: Model<StockMovement>,
-    @InjectModel(StockItem.name) private readonly stockItemModel: Model<StockItem>,
-    @InjectModel(Checklist.name) private readonly checklistModel: Model<Checklist>,
+    @InjectModel(StockItem.name)
+    private readonly stockItemModel: Model<StockItem>,
+    @InjectModel(Checklist.name)
+    private readonly checklistModel: Model<Checklist>,
     @InjectModel(RestaurantTable.name)
     private readonly tableModel: Model<RestaurantTable>,
     @InjectModel(DashboardNotification.name)
@@ -145,10 +150,23 @@ export class DailyClosingsService {
       createdBy: existing?.createdBy ?? actor.sub,
       ...snapshot,
     };
-    const audit = this.audit(actor, dto.locationId, 'generated', previousStatus, payload.status);
+    const audit = this.audit(
+      actor,
+      dto.locationId,
+      'generated',
+      previousStatus,
+      payload.status,
+    );
     const statusHistory =
       previousStatus && previousStatus !== payload.status
-        ? [this.statusHistory(actor, previousStatus, payload.status, 'Systemdaten neu geladen')]
+        ? [
+            this.statusHistory(
+              actor,
+              previousStatus,
+              payload.status,
+              'Systemdaten neu geladen',
+            ),
+          ]
         : [];
 
     const closing = await this.dailyClosingModel
@@ -158,14 +176,27 @@ export class DailyClosingsService {
           $set: payload,
           $push: {
             activityLog: audit,
-            ...(statusHistory.length ? { statusHistory: { $each: statusHistory } } : {}),
+            ...(statusHistory.length
+              ? { statusHistory: { $each: statusHistory } }
+              : {}),
           },
         },
-        { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+        {
+          new: true,
+          upsert: true,
+          runValidators: true,
+          setDefaultsOnInsert: true,
+        },
       )
       .lean();
 
-    await this.notify(actor, closing, 'Tagesabschluss vorbereitet', 'Der Tagesabschluss wurde generiert.', DashboardNotificationSeverity.Info);
+    await this.notify(
+      actor,
+      closing,
+      'Tagesabschluss vorbereitet',
+      'Der Tagesabschluss wurde generiert.',
+      DashboardNotificationSeverity.Info,
+    );
     return closing;
   }
 
@@ -179,7 +210,8 @@ export class DailyClosingsService {
     const paymentSummary = {
       ...closing.paymentSummary,
       countedCash: dto.countedCash ?? closing.paymentSummary.countedCash ?? 0,
-      differenceNote: dto.differenceNote ?? closing.paymentSummary.differenceNote,
+      differenceNote:
+        dto.differenceNote ?? closing.paymentSummary.differenceNote,
     };
     paymentSummary.cashDifference =
       Number(paymentSummary.countedCash ?? 0) -
@@ -220,30 +252,41 @@ export class DailyClosingsService {
     const paymentSummary = {
       ...closing.paymentSummary,
       countedCash: dto.countedCash ?? closing.paymentSummary.countedCash ?? 0,
-      differenceNote: dto.differenceNote ?? closing.paymentSummary.differenceNote,
+      differenceNote:
+        dto.differenceNote ?? closing.paymentSummary.differenceNote,
     };
     paymentSummary.cashDifference =
       Number(paymentSummary.countedCash ?? 0) -
       Number(paymentSummary.expectedCash ?? 0);
     const issueList = this.createIssueList({ ...closing, paymentSummary });
     const hasCashPayments = Number(paymentSummary.expectedCash ?? 0) > 0;
-    const hasDifference = Math.abs(Number(paymentSummary.cashDifference ?? 0)) > 0.009;
+    const hasDifference =
+      Math.abs(Number(paymentSummary.cashDifference ?? 0)) > 0.009;
 
-    if (hasCashPayments && dto.countedCash === undefined && closing.paymentSummary.countedCash === 0) {
+    if (
+      hasCashPayments &&
+      dto.countedCash === undefined &&
+      closing.paymentSummary.countedCash === 0
+    ) {
       throw new BadRequestException('Barbestand muss gezaehlt werden');
     }
 
     if (hasDifference && !paymentSummary.differenceNote) {
-      throw new BadRequestException('Differenzen muessen mit Pflichtnotiz dokumentiert werden');
+      throw new BadRequestException(
+        'Differenzen muessen mit Pflichtnotiz dokumentiert werden',
+      );
     }
 
     if (issueList.length && !(dto.issueNote ?? closing.issueNote)) {
-      throw new BadRequestException('Offene Probleme erfordern eine Tagesnotiz');
+      throw new BadRequestException(
+        'Offene Probleme erfordern eine Tagesnotiz',
+      );
     }
 
-    const newStatus = issueList.length || hasDifference
-      ? DailyClosingStatus.CompletedWithIssues
-      : DailyClosingStatus.Completed;
+    const newStatus =
+      issueList.length || hasDifference
+        ? DailyClosingStatus.CompletedWithIssues
+        : DailyClosingStatus.Completed;
     const updated = await this.dailyClosingModel
       .findByIdAndUpdate(
         id,
@@ -266,7 +309,12 @@ export class DailyClosingsService {
               newStatus,
               dto.issueNote ?? dto.note,
             ),
-            statusHistory: this.statusHistory(actor, closing.status, newStatus, dto.issueNote),
+            statusHistory: this.statusHistory(
+              actor,
+              closing.status,
+              newStatus,
+              dto.issueNote,
+            ),
           },
         },
         { new: true, runValidators: true },
@@ -375,7 +423,9 @@ export class DailyClosingsService {
         DailyClosingStatus.CompletedWithIssues,
       ].includes(closing.status)
     ) {
-      throw new BadRequestException('Nur abgeschlossene Tagesabschluesse koennen gesperrt werden');
+      throw new BadRequestException(
+        'Nur abgeschlossene Tagesabschluesse koennen gesperrt werden',
+      );
     }
 
     return this.dailyClosingModel
@@ -396,7 +446,12 @@ export class DailyClosingsService {
               DailyClosingStatus.Locked,
               dto.note,
             ),
-            statusHistory: this.statusHistory(actor, closing.status, DailyClosingStatus.Locked, dto.note),
+            statusHistory: this.statusHistory(
+              actor,
+              closing.status,
+              DailyClosingStatus.Locked,
+              dto.note,
+            ),
           },
         },
         { new: true, runValidators: true },
@@ -434,11 +489,26 @@ export class DailyClosingsService {
         this.tableModel.find({ locationId, isActive: true }).lean(),
       ]);
     const paidOrders = orders.filter((order) => this.isRevenueOrder(order));
-    const grossSales = paidOrders.reduce((sum, order) => sum + Number(order.total ?? 0), 0);
-    const taxAmount = paidOrders.reduce((sum, order) => sum + Number(order.tax ?? 0), 0);
-    const discountTotal = orders.reduce((sum, order) => sum + Number(order.discountTotal ?? 0), 0);
-    const refundTotal = orders.reduce((sum, order) => sum + Number(order.refundTotal ?? 0), 0);
-    const tipTotal = orders.reduce((sum, order) => sum + Number(order.tipTotal ?? 0), 0);
+    const grossSales = paidOrders.reduce(
+      (sum, order) => sum + Number(order.total ?? 0),
+      0,
+    );
+    const taxAmount = paidOrders.reduce(
+      (sum, order) => sum + Number(order.tax ?? 0),
+      0,
+    );
+    const discountTotal = orders.reduce(
+      (sum, order) => sum + Number(order.discountTotal ?? 0),
+      0,
+    );
+    const refundTotal = orders.reduce(
+      (sum, order) => sum + Number(order.refundTotal ?? 0),
+      0,
+    );
+    const tipTotal = orders.reduce(
+      (sum, order) => sum + Number(order.tipTotal ?? 0),
+      0,
+    );
     const paymentSummary = this.createPaymentSummary(paidOrders);
     const foodCost = Math.abs(
       stockMovements
@@ -469,12 +539,25 @@ export class DailyClosingsService {
     const lowStockItems = stockItems.filter(
       (item) => Number(item.quantity ?? 0) <= Number(item.minQuantity ?? 0),
     );
-    const negativeStockItems = stockItems.filter((item) => Number(item.quantity ?? 0) < 0);
+    const negativeStockItems = stockItems.filter(
+      (item) => Number(item.quantity ?? 0) < 0,
+    );
     const openingChecklists = checklists.filter((checklist) =>
-      this.isChecklistKind(checklist, ['opening', 'oeffnung', 'öffnung', 'start']),
+      this.isChecklistKind(checklist, [
+        'opening',
+        'oeffnung',
+        'öffnung',
+        'start',
+      ]),
     );
     const closingChecklists = checklists.filter((checklist) =>
-      this.isChecklistKind(checklist, ['closing', 'schluss', 'schliess', 'schließ', 'ende']),
+      this.isChecklistKind(checklist, [
+        'closing',
+        'schluss',
+        'schliess',
+        'schließ',
+        'ende',
+      ]),
     );
     const openChecklistItems = checklists.reduce(
       (sum, checklist) =>
@@ -492,7 +575,9 @@ export class DailyClosingsService {
       0,
     );
     const completedOrders = paidOrders.length;
-    const openOrders = orders.filter((order) => this.isOpenCriticalOrder(order)).length;
+    const openOrders = orders.filter((order) =>
+      this.isOpenCriticalOrder(order),
+    ).length;
     const unpaidOrders = orders.filter((order) =>
       [PaymentStatus.Open, PaymentStatus.PartiallyPaid].includes(
         order.paymentStatus ?? PaymentStatus.Open,
@@ -540,10 +625,14 @@ export class DailyClosingsService {
       checklistSummary: {
         openingChecklistCompleted:
           openingChecklists.length > 0 &&
-          openingChecklists.every((checklist) => checklist.status === ChecklistStatus.Done),
+          openingChecklists.every(
+            (checklist) => checklist.status === ChecklistStatus.Done,
+          ),
         closingChecklistCompleted:
           closingChecklists.length > 0 &&
-          closingChecklists.every((checklist) => checklist.status === ChecklistStatus.Done),
+          closingChecklists.every(
+            (checklist) => checklist.status === ChecklistStatus.Done,
+          ),
         openChecklistItems,
         blockedChecklistItems,
       },
@@ -553,8 +642,12 @@ export class DailyClosingsService {
         wasteTotal,
         spoilageTotal,
         inventoryWarnings: [
-          ...lowStockItems.slice(0, 10).map((item) => `${item.name}: Mindestbestand erreicht`),
-          ...negativeStockItems.slice(0, 10).map((item) => `${item.name}: negativer Bestand`),
+          ...lowStockItems
+            .slice(0, 10)
+            .map((item) => `${item.name}: Mindestbestand erreicht`),
+          ...negativeStockItems
+            .slice(0, 10)
+            .map((item) => `${item.name}: negativer Bestand`),
         ],
       },
       marginSummary: {
@@ -619,7 +712,15 @@ export class DailyClosingsService {
     };
   }
 
-  private createIssueList(snapshot: Pick<DailyClosing, 'orderSummary' | 'checklistSummary' | 'inventorySummary' | 'paymentSummary'>): string[] {
+  private createIssueList(
+    snapshot: Pick<
+      DailyClosing,
+      | 'orderSummary'
+      | 'checklistSummary'
+      | 'inventorySummary'
+      | 'paymentSummary'
+    >,
+  ): string[] {
     const issues: string[] = [];
     if (snapshot.orderSummary.openOrders > 0) {
       issues.push(`${snapshot.orderSummary.openOrders} offene Bestellungen`);
@@ -628,19 +729,27 @@ export class DailyClosingsService {
       issues.push(`${snapshot.orderSummary.unpaidOrders} offene Rechnungen`);
     }
     if (snapshot.orderSummary.readyButNotServed > 0) {
-      issues.push(`${snapshot.orderSummary.readyButNotServed} fertige, nicht ausgegebene Bestellungen`);
+      issues.push(
+        `${snapshot.orderSummary.readyButNotServed} fertige, nicht ausgegebene Bestellungen`,
+      );
     }
     if (snapshot.orderSummary.tablesStillOccupied > 0) {
-      issues.push(`${snapshot.orderSummary.tablesStillOccupied} Tische noch belegt`);
+      issues.push(
+        `${snapshot.orderSummary.tablesStillOccupied} Tische noch belegt`,
+      );
     }
     if (!snapshot.checklistSummary.closingChecklistCompleted) {
       issues.push('Schliessungscheckliste nicht abgeschlossen');
     }
     if (snapshot.checklistSummary.openChecklistItems > 0) {
-      issues.push(`${snapshot.checklistSummary.openChecklistItems} offene Checklistenpunkte`);
+      issues.push(
+        `${snapshot.checklistSummary.openChecklistItems} offene Checklistenpunkte`,
+      );
     }
     if (snapshot.inventorySummary.negativeStockItems > 0) {
-      issues.push(`${snapshot.inventorySummary.negativeStockItems} negative Lagerbestaende`);
+      issues.push(
+        `${snapshot.inventorySummary.negativeStockItems} negative Lagerbestaende`,
+      );
     }
     if (Math.abs(Number(snapshot.paymentSummary.cashDifference ?? 0)) > 0.009) {
       issues.push('Bardifferenz vorhanden');
@@ -662,7 +771,11 @@ export class DailyClosingsService {
       return {};
     }
 
-    return { locationId: { $in: await this.accessPolicy.getReadableLocationIds(actor) } };
+    return {
+      locationId: {
+        $in: await this.accessPolicy.getReadableLocationIds(actor),
+      },
+    };
   }
 
   private async getEditableClosing(
@@ -675,13 +788,17 @@ export class DailyClosingsService {
     }
     await this.accessPolicy.assertCanManageLocation(actor, closing.locationId);
     if (closing.status === DailyClosingStatus.Locked) {
-      throw new BadRequestException('Gesperrte Tagesabschluesse koennen nicht bearbeitet werden');
+      throw new BadRequestException(
+        'Gesperrte Tagesabschluesse koennen nicht bearbeitet werden',
+      );
     }
 
     return closing;
   }
 
-  private isRevenueOrder(order: Pick<Order, 'status' | 'paymentStatus'>): boolean {
+  private isRevenueOrder(
+    order: Pick<Order, 'status' | 'paymentStatus'>,
+  ): boolean {
     return (
       order.status !== OrderStatus.Cancelled &&
       (order.paymentStatus === PaymentStatus.Paid ||
@@ -689,7 +806,9 @@ export class DailyClosingsService {
     );
   }
 
-  private isOpenCriticalOrder(order: Pick<Order, 'status' | 'paymentStatus'>): boolean {
+  private isOpenCriticalOrder(
+    order: Pick<Order, 'status' | 'paymentStatus'>,
+  ): boolean {
     return (
       order.status !== OrderStatus.Cancelled &&
       order.status !== OrderStatus.Closed &&
@@ -698,7 +817,8 @@ export class DailyClosingsService {
   }
 
   private isChecklistKind(checklist: Checklist, needles: string[]): boolean {
-    const haystack = `${checklist.title} ${checklist.templateKey ?? ''} ${checklist.area}`.toLowerCase();
+    const haystack =
+      `${checklist.title} ${checklist.templateKey ?? ''} ${checklist.area}`.toLowerCase();
     return needles.some((needle) => haystack.includes(needle));
   }
 
@@ -798,7 +918,9 @@ export class DailyClosingsService {
       message,
       severity,
       source: 'daily-closing',
-      referenceId: String((closing as DailyClosing & { _id?: unknown })._id ?? ''),
+      referenceId: String(
+        (closing as DailyClosing & { _id?: unknown })._id ?? '',
+      ),
       read: false,
     });
   }

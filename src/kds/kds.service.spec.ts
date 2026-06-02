@@ -109,7 +109,10 @@ describe('KdsService', () => {
         KdsService,
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(RestaurantTable.name), useValue: tableModel },
-        { provide: getModelToken(TableStatusLog.name), useValue: tableStatusLogModel },
+        {
+          provide: getModelToken(TableStatusLog.name),
+          useValue: tableStatusLogModel,
+        },
         { provide: getModelToken(KdsStatusLog.name), useValue: logModel },
         { provide: getModelToken(KdsSettings.name), useValue: settingsModel },
         { provide: RealtimeService, useValue: realtimeService },
@@ -131,7 +134,10 @@ describe('KdsService', () => {
     ).resolves.toBe(order);
 
     expect(order.status).toBe(OrderStatus.Accepted);
-    expect(recipeInventoryService.consumeOrder).toHaveBeenCalledWith(order, 'user-1');
+    expect(recipeInventoryService.consumeOrder).toHaveBeenCalledWith(
+      order,
+      'user-1',
+    );
     expect(order.inventoryDeducted).toBe(true);
     expect(logModel.create).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -1,6 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import { PaymentMethod, PaymentStatus } from '../../orders/schemas/order.schema';
+import {
+  PaymentMethod,
+  PaymentStatus,
+} from '../../orders/schemas/order.schema';
 
 export type CounterPaymentDocument = HydratedDocument<CounterPayment>;
 

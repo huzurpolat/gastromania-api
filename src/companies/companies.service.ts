@@ -22,7 +22,9 @@ export class CompaniesService {
 
   async create(dto: CreateCompanyDto, actor: AuthenticatedUser) {
     if (!this.accessPolicy.isPlatformAdmin(actor)) {
-      throw new ForbiddenException('Nur Platform-Admins duerfen Unternehmen anlegen');
+      throw new ForbiddenException(
+        'Nur Platform-Admins duerfen Unternehmen anlegen',
+      );
     }
 
     return this.companyModel.create(dto);
@@ -37,7 +39,10 @@ export class CompaniesService {
       return [];
     }
 
-    return this.companyModel.find({ _id: actor.companyId }).sort({ name: 1 }).exec();
+    return this.companyModel
+      .find({ _id: actor.companyId })
+      .sort({ name: 1 })
+      .exec();
   }
 
   async findOne(id: string, actor: AuthenticatedUser) {
@@ -57,7 +62,9 @@ export class CompaniesService {
   async update(id: string, dto: UpdateCompanyDto, actor: AuthenticatedUser) {
     this.validateObjectId(id);
     if (!this.accessPolicy.isPlatformAdmin(actor)) {
-      throw new ForbiddenException('Nur Platform-Admins duerfen Unternehmen bearbeiten');
+      throw new ForbiddenException(
+        'Nur Platform-Admins duerfen Unternehmen bearbeiten',
+      );
     }
 
     const company = await this.companyModel

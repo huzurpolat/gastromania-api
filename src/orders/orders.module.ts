@@ -5,7 +5,10 @@ import { RealtimeModule } from '../realtime/realtime.module';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { Recipe, RecipeSchema } from '../recipes/schemas/recipe.schema';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
-import { StockAlert, StockAlertSchema } from '../stock/schemas/stock-alert.schema';
+import {
+  StockAlert,
+  StockAlertSchema,
+} from '../stock/schemas/stock-alert.schema';
 import {
   RestaurantTable,
   RestaurantTableSchema,

@@ -27,7 +27,11 @@ export class DepartmentsService {
 
     const department = await this.departmentModel
       .findOneAndUpdate(
-        { companyId: dto.companyId, locationId: dto.locationId, type: dto.type },
+        {
+          companyId: dto.companyId,
+          locationId: dto.locationId,
+          type: dto.type,
+        },
         { $set: { ...dto, isActive: dto.isActive ?? true } },
         { new: true, upsert: true, runValidators: true },
       )
@@ -44,7 +48,10 @@ export class DepartmentsService {
     actor: AuthenticatedUser,
     locationId?: string,
   ): Promise<DepartmentDocument[]> {
-    const filter = await this.accessPolicy.getScopedResourceFilter(actor, locationId);
+    const filter = await this.accessPolicy.getScopedResourceFilter(
+      actor,
+      locationId,
+    );
 
     return this.departmentModel.find(filter).sort({ name: 1 }).exec();
   }
@@ -60,7 +67,10 @@ export class DepartmentsService {
       throw new NotFoundException('Department nicht gefunden');
     }
 
-    await this.accessPolicy.assertCanManageLocation(actor, department.locationId);
+    await this.accessPolicy.assertCanManageLocation(
+      actor,
+      department.locationId,
+    );
 
     if (dto.locationId) {
       await this.accessPolicy.assertCanManageLocation(actor, dto.locationId);

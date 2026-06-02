@@ -124,10 +124,42 @@ export class DemoDataService {
       mainLocationKey: 'bonn',
       multiManagerLocationKeys: ['bonn', 'essen'],
       locations: [
-        { key: 'bonn', name: 'Bonn', city: 'Bonn', zip: '53111', street: 'Markt 1', emailSlug: 'bonn', icon: 'restaurant' },
-        { key: 'koeln', name: 'Köln', city: 'Köln', zip: '50667', street: 'Domplatz 4', emailSlug: 'koeln', icon: 'storefront' },
-        { key: 'essen', name: 'Essen', city: 'Essen', zip: '45127', street: 'Limbecker Platz 7', emailSlug: 'essen', icon: 'local_cafe' },
-        { key: 'olpe', name: 'Olpe', city: 'Olpe', zip: '57462', street: 'Biggeseestrasse 12', emailSlug: 'olpe', icon: 'deck' },
+        {
+          key: 'bonn',
+          name: 'Bonn',
+          city: 'Bonn',
+          zip: '53111',
+          street: 'Markt 1',
+          emailSlug: 'bonn',
+          icon: 'restaurant',
+        },
+        {
+          key: 'koeln',
+          name: 'Köln',
+          city: 'Köln',
+          zip: '50667',
+          street: 'Domplatz 4',
+          emailSlug: 'koeln',
+          icon: 'storefront',
+        },
+        {
+          key: 'essen',
+          name: 'Essen',
+          city: 'Essen',
+          zip: '45127',
+          street: 'Limbecker Platz 7',
+          emailSlug: 'essen',
+          icon: 'local_cafe',
+        },
+        {
+          key: 'olpe',
+          name: 'Olpe',
+          city: 'Olpe',
+          zip: '57462',
+          street: 'Biggeseestrasse 12',
+          emailSlug: 'olpe',
+          icon: 'deck',
+        },
       ],
     },
     {
@@ -138,10 +170,42 @@ export class DemoDataService {
       mainLocationKey: 'frankfurt',
       multiManagerLocationKeys: ['frankfurt', 'wiesbaden'],
       locations: [
-        { key: 'frankfurt', name: 'Frankfurt', city: 'Frankfurt am Main', zip: '60311', street: 'Roemerberg 2', emailSlug: 'frankfurt', icon: 'restaurant' },
-        { key: 'wiesbaden', name: 'Wiesbaden', city: 'Wiesbaden', zip: '65183', street: 'Schlossplatz 1', emailSlug: 'wiesbaden', icon: 'storefront' },
-        { key: 'kassel', name: 'Kassel', city: 'Kassel', zip: '34117', street: 'Koenigsplatz 5', emailSlug: 'kassel', icon: 'local_cafe' },
-        { key: 'darmstadt', name: 'Darmstadt', city: 'Darmstadt', zip: '64283', street: 'Luisenplatz 8', emailSlug: 'darmstadt', icon: 'local_bar' },
+        {
+          key: 'frankfurt',
+          name: 'Frankfurt',
+          city: 'Frankfurt am Main',
+          zip: '60311',
+          street: 'Roemerberg 2',
+          emailSlug: 'frankfurt',
+          icon: 'restaurant',
+        },
+        {
+          key: 'wiesbaden',
+          name: 'Wiesbaden',
+          city: 'Wiesbaden',
+          zip: '65183',
+          street: 'Schlossplatz 1',
+          emailSlug: 'wiesbaden',
+          icon: 'storefront',
+        },
+        {
+          key: 'kassel',
+          name: 'Kassel',
+          city: 'Kassel',
+          zip: '34117',
+          street: 'Koenigsplatz 5',
+          emailSlug: 'kassel',
+          icon: 'local_cafe',
+        },
+        {
+          key: 'darmstadt',
+          name: 'Darmstadt',
+          city: 'Darmstadt',
+          zip: '64283',
+          street: 'Luisenplatz 8',
+          emailSlug: 'darmstadt',
+          icon: 'local_bar',
+        },
       ],
     },
     {
@@ -152,10 +216,42 @@ export class DemoDataService {
       mainLocationKey: 'muenchen',
       multiManagerLocationKeys: ['muenchen', 'augsburg'],
       locations: [
-        { key: 'muenchen', name: 'München', city: 'München', zip: '80331', street: 'Marienplatz 3', emailSlug: 'muenchen', icon: 'restaurant' },
-        { key: 'nuernberg', name: 'Nürnberg', city: 'Nürnberg', zip: '90403', street: 'Hauptmarkt 6', emailSlug: 'nuernberg', icon: 'storefront' },
-        { key: 'augsburg', name: 'Augsburg', city: 'Augsburg', zip: '86150', street: 'Rathausplatz 2', emailSlug: 'augsburg', icon: 'local_cafe' },
-        { key: 'regensburg', name: 'Regensburg', city: 'Regensburg', zip: '93047', street: 'Domplatz 9', emailSlug: 'regensburg', icon: 'deck' },
+        {
+          key: 'muenchen',
+          name: 'München',
+          city: 'München',
+          zip: '80331',
+          street: 'Marienplatz 3',
+          emailSlug: 'muenchen',
+          icon: 'restaurant',
+        },
+        {
+          key: 'nuernberg',
+          name: 'Nürnberg',
+          city: 'Nürnberg',
+          zip: '90403',
+          street: 'Hauptmarkt 6',
+          emailSlug: 'nuernberg',
+          icon: 'storefront',
+        },
+        {
+          key: 'augsburg',
+          name: 'Augsburg',
+          city: 'Augsburg',
+          zip: '86150',
+          street: 'Rathausplatz 2',
+          emailSlug: 'augsburg',
+          icon: 'local_cafe',
+        },
+        {
+          key: 'regensburg',
+          name: 'Regensburg',
+          city: 'Regensburg',
+          zip: '93047',
+          street: 'Domplatz 9',
+          emailSlug: 'regensburg',
+          icon: 'deck',
+        },
       ],
     },
     {
@@ -166,10 +262,42 @@ export class DemoDataService {
       mainLocationKey: 'mitte',
       multiManagerLocationKeys: ['mitte', 'kreuzberg'],
       locations: [
-        { key: 'mitte', name: 'Berlin Mitte', city: 'Berlin', zip: '10115', street: 'Torstrasse 15', emailSlug: 'mitte', icon: 'restaurant' },
-        { key: 'kreuzberg', name: 'Berlin Kreuzberg', city: 'Berlin', zip: '10997', street: 'Oranienstrasse 24', emailSlug: 'kreuzberg', icon: 'local_bar' },
-        { key: 'charlottenburg', name: 'Berlin Charlottenburg', city: 'Berlin', zip: '10623', street: 'Kantstrasse 10', emailSlug: 'charlottenburg', icon: 'storefront' },
-        { key: 'neukoelln', name: 'Berlin Neukölln', city: 'Berlin', zip: '12043', street: 'Karl-Marx-Strasse 88', emailSlug: 'neukoelln', icon: 'local_cafe' },
+        {
+          key: 'mitte',
+          name: 'Berlin Mitte',
+          city: 'Berlin',
+          zip: '10115',
+          street: 'Torstrasse 15',
+          emailSlug: 'mitte',
+          icon: 'restaurant',
+        },
+        {
+          key: 'kreuzberg',
+          name: 'Berlin Kreuzberg',
+          city: 'Berlin',
+          zip: '10997',
+          street: 'Oranienstrasse 24',
+          emailSlug: 'kreuzberg',
+          icon: 'local_bar',
+        },
+        {
+          key: 'charlottenburg',
+          name: 'Berlin Charlottenburg',
+          city: 'Berlin',
+          zip: '10623',
+          street: 'Kantstrasse 10',
+          emailSlug: 'charlottenburg',
+          icon: 'storefront',
+        },
+        {
+          key: 'neukoelln',
+          name: 'Berlin Neukölln',
+          city: 'Berlin',
+          zip: '12043',
+          street: 'Karl-Marx-Strasse 88',
+          emailSlug: 'neukoelln',
+          icon: 'local_cafe',
+        },
       ],
     },
   ];
@@ -234,7 +362,10 @@ export class DemoDataService {
     this.validateDemoUsers(users, locationsByKey);
     await this.assignLocationManagers(locations, users);
 
-    const locationId = this.requireMapValue(locationsByKey, 'bonn')._id.toString();
+    const locationId = this.requireMapValue(
+      locationsByKey,
+      'bonn',
+    )._id.toString();
     const primaryUsers = users.filter((user) =>
       (user.locationIds ?? []).includes(locationId),
     );
@@ -423,10 +554,7 @@ export class DemoDataService {
         locations.push(location);
         locationsByKey.set(locationConfig.key, location);
         departments.push(
-          ...(await this.createDepartments(
-            companyId,
-            location._id.toString(),
-          )),
+          ...(await this.createDepartments(companyId, location._id.toString())),
         );
       }
     }
@@ -529,7 +657,10 @@ export class DemoDataService {
       );
 
       for (const locationConfig of regionConfig.locations) {
-        const location = this.requireMapValue(locationsByKey, locationConfig.key);
+        const location = this.requireMapValue(
+          locationsByKey,
+          locationConfig.key,
+        );
         const locationId = location._id.toString();
         const assignedLocationIds =
           locationConfig.key === regionConfig.mainLocationKey
@@ -672,7 +803,9 @@ export class DemoDataService {
     users
       .filter((user) => user.roles.includes(Role.Filialleiter))
       .forEach((user) => {
-        for (const locationId of user.managedLocationIds ?? user.locationIds ?? []) {
+        for (const locationId of user.managedLocationIds ??
+          user.locationIds ??
+          []) {
           if (!filialleiterByLocation.has(locationId)) {
             filialleiterByLocation.set(locationId, user._id.toString());
           }
@@ -820,9 +953,13 @@ export class DemoDataService {
     return value;
   }
 
-  private getMainLocationConfig(regionConfig: DemoRegionConfig): DemoLocationConfig {
+  private getMainLocationConfig(
+    regionConfig: DemoRegionConfig,
+  ): DemoLocationConfig {
     return this.requireMapValue(
-      new Map(regionConfig.locations.map((location) => [location.key, location])),
+      new Map(
+        regionConfig.locations.map((location) => [location.key, location]),
+      ),
       regionConfig.mainLocationKey,
     );
   }
@@ -838,7 +975,9 @@ export class DemoDataService {
   private sameValues(first: string[], second: string[]): boolean {
     const normalize = (values: string[]) => [...new Set(values)].sort();
 
-    return JSON.stringify(normalize(first)) === JSON.stringify(normalize(second));
+    return (
+      JSON.stringify(normalize(first)) === JSON.stringify(normalize(second))
+    );
   }
 
   private createTables(locationId: string): Promise<RestaurantTableDocument[]> {
@@ -1725,7 +1864,12 @@ export class DemoDataService {
         supplierName: item.supplierName,
         storageLocation: item.storageLocation,
         receivedAt: today,
-        expiresAt: index === 1 ? expiresSoon : index % 2 === 0 ? expiresLater : undefined,
+        expiresAt:
+          index === 1
+            ? expiresSoon
+            : index % 2 === 0
+              ? expiresLater
+              : undefined,
         note: `${this.demoPrefix} FIFO/MHD Startcharge`,
         isActive: true,
       })),
@@ -1738,7 +1882,9 @@ export class DemoDataService {
     suppliers: SupplierDocument[],
     actor: AuthenticatedUser,
   ): Promise<PurchaseOrderDocument[]> {
-    const lowStockItems = stockItems.filter((item) => item.quantity <= item.minQuantity);
+    const lowStockItems = stockItems.filter(
+      (item) => item.quantity <= item.minQuantity,
+    );
     if (!lowStockItems.length) {
       return [];
     }
@@ -1762,9 +1908,13 @@ export class DemoDataService {
     }> = [];
     let index = 1;
     for (const [supplierId, items] of bySupplier) {
-      const supplier = suppliers.find((entry) => entry._id.toString() === supplierId);
+      const supplier = suppliers.find(
+        (entry) => entry._id.toString() === supplierId,
+      );
       const lines = items.map((item) => {
-        const targetQuantity = item.targetQuantity ?? Math.max(item.minQuantity * 2, item.minQuantity + 1);
+        const targetQuantity =
+          item.targetQuantity ??
+          Math.max(item.minQuantity * 2, item.minQuantity + 1);
         const quantity = Math.max(1, targetQuantity - item.quantity);
         const unitPriceNet = item.purchasePriceNet ?? 0;
         return {
@@ -1780,7 +1930,8 @@ export class DemoDataService {
       orders.push({
         locationId,
         supplierId,
-        supplierName: supplier?.name ?? items[0].supplierName ?? 'Ohne Lieferant',
+        supplierName:
+          supplier?.name ?? items[0].supplierName ?? 'Ohne Lieferant',
         orderNumber: `DEMO-PO-${String(index).padStart(3, '0')}`,
         status: PurchaseOrderStatus.Draft,
         lines,

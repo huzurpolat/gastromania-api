@@ -1,5 +1,11 @@
 import { Transform, Type } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 const trimString = (value: unknown): unknown =>
   typeof value === 'string' ? value.trim() : value;

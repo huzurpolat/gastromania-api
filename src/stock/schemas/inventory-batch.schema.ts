@@ -51,7 +51,13 @@ export class InventoryBatch {
   isActive!: boolean;
 }
 
-export const InventoryBatchSchema = SchemaFactory.createForClass(InventoryBatch);
+export const InventoryBatchSchema =
+  SchemaFactory.createForClass(InventoryBatch);
 
-InventoryBatchSchema.index({ locationId: 1, stockItemId: 1, expiresAt: 1, receivedAt: 1 });
+InventoryBatchSchema.index({
+  locationId: 1,
+  stockItemId: 1,
+  expiresAt: 1,
+  receivedAt: 1,
+});
 InventoryBatchSchema.index({ locationId: 1, expiresAt: 1 });

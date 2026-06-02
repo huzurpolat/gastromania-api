@@ -118,12 +118,18 @@ export class StaffPlanningController {
   }
 
   @Patch('shifts/:id/publish')
-  publishShift(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  publishShift(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.staffPlanningService.publishShift(id, user);
   }
 
   @Patch('shifts/:id/complete')
-  completeShift(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  completeShift(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.staffPlanningService.completeShift(id, user);
   }
 
@@ -138,7 +144,10 @@ export class StaffPlanningController {
     @Query('locationId') locationId?: string,
     @Query('userId') userId?: string,
   ) {
-    return this.staffPlanningService.findAvailability(user, { locationId, userId });
+    return this.staffPlanningService.findAvailability(user, {
+      locationId,
+      userId,
+    });
   }
 
   @Post('availability')
@@ -159,7 +168,10 @@ export class StaffPlanningController {
   }
 
   @Delete('availability/:id')
-  deleteAvailability(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  deleteAvailability(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.staffPlanningService.deleteAvailability(id, user);
   }
 
@@ -180,17 +192,26 @@ export class StaffPlanningController {
   }
 
   @Patch('absences/:id/approve')
-  approveAbsence(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  approveAbsence(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.staffPlanningService.approveAbsence(id, user);
   }
 
   @Patch('absences/:id/reject')
-  rejectAbsence(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  rejectAbsence(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.staffPlanningService.rejectAbsence(id, user);
   }
 
   @Patch('absences/:id/cancel')
-  cancelAbsence(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  cancelAbsence(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.staffPlanningService.cancelAbsence(id, user);
   }
 
@@ -208,17 +229,26 @@ export class StaffPlanningController {
   }
 
   @Patch('shift-swaps/:id/accept')
-  acceptShiftSwap(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  acceptShiftSwap(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.staffPlanningService.acceptShiftSwap(id, user);
   }
 
   @Patch('shift-swaps/:id/approve')
-  approveShiftSwap(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  approveShiftSwap(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.staffPlanningService.approveShiftSwap(id, user);
   }
 
   @Patch('shift-swaps/:id/reject')
-  rejectShiftSwap(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  rejectShiftSwap(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.staffPlanningService.rejectShiftSwap(id, user);
   }
 }

@@ -39,7 +39,9 @@ describe('AccessPolicyService', () => {
 
         if (filter.companyId) {
           return query(
-            locations.filter((location) => location.companyId === filter.companyId),
+            locations.filter(
+              (location) => location.companyId === filter.companyId,
+            ),
           );
         }
 
@@ -81,9 +83,11 @@ describe('AccessPolicyService', () => {
 
   it('scopes region and location roles to their assigned hierarchy', async () => {
     await expect(
-      service.getReadableLocationIds(user([Role.RegionAdmin], {
-        regionIds: ['nrw'],
-      })),
+      service.getReadableLocationIds(
+        user([Role.RegionAdmin], {
+          regionIds: ['nrw'],
+        }),
+      ),
     ).resolves.toEqual(['bonn', 'essen']);
     await expect(
       service.canAccessLocation(
@@ -92,13 +96,17 @@ describe('AccessPolicyService', () => {
       ),
     ).resolves.toBe(false);
     await expect(
-      service.getReadableLocationIds(user([Role.Bereichsleiter], {
-        locationIds: ['bonn', 'essen'],
-        managedLocationIds: ['bonn', 'essen'],
-      })),
+      service.getReadableLocationIds(
+        user([Role.Bereichsleiter], {
+          locationIds: ['bonn', 'essen'],
+          managedLocationIds: ['bonn', 'essen'],
+        }),
+      ),
     ).resolves.toEqual(['bonn', 'essen']);
     await expect(
-      service.getReadableLocationIds(user([Role.Service], { locationIds: ['bonn'] })),
+      service.getReadableLocationIds(
+        user([Role.Service], { locationIds: ['bonn'] }),
+      ),
     ).resolves.toEqual(['bonn']);
   });
 
@@ -128,16 +136,18 @@ describe('AccessPolicyService', () => {
       ),
     ).resolves.toEqual(['bonn', 'essen']);
     await expect(
-      service.getReadableLocationIds(user([Role.Service], { locationIds: ['bonn'] })),
+      service.getReadableLocationIds(
+        user([Role.Service], { locationIds: ['bonn'] }),
+      ),
     ).resolves.toEqual(['bonn']);
   });
 
   it('rejects direct access to foreign locations', async () => {
     const serviceUser = user([Role.Service], { locationIds: ['bonn'] });
 
-    await expect(service.canAccessLocation(serviceUser, 'frankfurt')).resolves.toBe(
-      false,
-    );
+    await expect(
+      service.canAccessLocation(serviceUser, 'frankfurt'),
+    ).resolves.toBe(false);
     await expect(
       service.getScopedResourceFilter(serviceUser, 'frankfurt'),
     ).rejects.toThrow('Kein Zugriff auf diesen Standort');
@@ -191,7 +201,10 @@ describe('AccessPolicyService', () => {
     ).resolves.toBe(true);
     await expect(
       service.canManageUser(
-        user([Role.Regionalleiter], { companyId: 'gastro', regionIds: ['nrw'] }),
+        user([Role.Regionalleiter], {
+          companyId: 'gastro',
+          regionIds: ['nrw'],
+        }),
         {
           roles: [Role.CompanyAdmin],
           companyId: 'gastro',

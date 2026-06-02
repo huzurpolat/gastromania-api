@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
-import { Checklist, ChecklistSchema } from '../checklists/schemas/checklist.schema';
+import {
+  Checklist,
+  ChecklistSchema,
+} from '../checklists/schemas/checklist.schema';
 import { Company, CompanySchema } from '../companies/schemas/company.schema';
 import {
   Department,
@@ -16,7 +19,10 @@ import {
   InternalMessageSchema,
 } from '../internal-messages/schemas/internal-message.schema';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
-import { MenuItem, MenuItemSchema } from '../menu-items/schemas/menu-item.schema';
+import {
+  MenuItem,
+  MenuItemSchema,
+} from '../menu-items/schemas/menu-item.schema';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import {
   Reservation,
@@ -27,10 +33,7 @@ import {
   RestaurantTable,
   RestaurantTableSchema,
 } from '../tables/schemas/table.schema';
-import {
-  StockItem,
-  StockItemSchema,
-} from '../stock/schemas/stock-item.schema';
+import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
 import {
   StockMovement,
   StockMovementSchema,
@@ -44,9 +47,15 @@ import {
   PurchaseOrder,
   PurchaseOrderSchema,
 } from '../stock/schemas/purchase-order.schema';
-import { TimeEntry, TimeEntrySchema } from '../time-tracking/schemas/time-entry.schema';
+import {
+  TimeEntry,
+  TimeEntrySchema,
+} from '../time-tracking/schemas/time-entry.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
-import { WeeklyMenu, WeeklyMenuSchema } from '../weekly-menus/schemas/weekly-menu.schema';
+import {
+  WeeklyMenu,
+  WeeklyMenuSchema,
+} from '../weekly-menus/schemas/weekly-menu.schema';
 import { DemoDataController } from './demo-data.controller';
 import { DemoDataService } from './demo-data.service';
 

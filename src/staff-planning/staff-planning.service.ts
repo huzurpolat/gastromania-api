@@ -10,7 +10,10 @@ import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { hasAnyRole } from '../auth/role-utils';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { Location, LocationDocument } from '../locations/schemas/location.schema';
+import {
+  Location,
+  LocationDocument,
+} from '../locations/schemas/location.schema';
 import { RealtimeService } from '../realtime/realtime.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateAbsenceDto } from './dto/absence.dto';
@@ -140,7 +143,11 @@ export class StaffPlanningService {
     return shift;
   }
 
-  async updateShift(id: string, payload: UpdateStaffShiftDto, actor: AuthenticatedUser) {
+  async updateShift(
+    id: string,
+    payload: UpdateStaffShiftDto,
+    actor: AuthenticatedUser,
+  ) {
     const shift = await this.getShiftOrThrow(id);
     await this.assertCanManageStaffAtLocation(actor, shift.locationId);
 
@@ -148,18 +155,24 @@ export class StaffPlanningService {
       shift.status === StaffShiftStatus.Published &&
       !this.canChangePublishedShifts(actor)
     ) {
-      throw new ForbiddenException('Veroeffentlichte Schichten duerfen nicht geaendert werden');
+      throw new ForbiddenException(
+        'Veroeffentlichte Schichten duerfen nicht geaendert werden',
+      );
     }
 
     const nextLocationId = payload.locationId ?? shift.locationId;
     await this.assertCanManageStaffAtLocation(actor, nextLocationId);
-    await this.validateDepartment(actor, payload.departmentId ?? shift.departmentId);
+    await this.validateDepartment(
+      actor,
+      payload.departmentId ?? shift.departmentId,
+    );
 
     const startTime = new Date(payload.startTime ?? shift.startTime);
     const endTime = new Date(payload.endTime ?? shift.endTime);
     this.assertValidDateRange(startTime, endTime);
 
-    const assignedUserIds = payload.assignedUserIds ?? shift.assignedUserIds ?? [];
+    const assignedUserIds =
+      payload.assignedUserIds ?? shift.assignedUserIds ?? [];
     for (const userId of assignedUserIds) {
       await this.assertUserCanBeAssigned({
         actor,
@@ -197,15 +210,25 @@ export class StaffPlanningService {
       previousValue,
       newValue: this.snapshot(updated),
     });
-    await this.notifyAssignedUsers(updated, 'staff.shift.changed', 'Eine Schicht wurde geaendert.');
+    await this.notifyAssignedUsers(
+      updated,
+      'staff.shift.changed',
+      'Eine Schicht wurde geaendert.',
+    );
 
     return updated;
   }
 
-  async assignShift(id: string, payload: AssignStaffShiftDto, actor: AuthenticatedUser) {
+  async assignShift(
+    id: string,
+    payload: AssignStaffShiftDto,
+    actor: AuthenticatedUser,
+  ) {
     const shift = await this.getShiftOrThrow(id);
     await this.assertCanManageStaffAtLocation(actor, shift.locationId);
-    const assignedUserIds = [...new Set([...(shift.assignedUserIds ?? []), ...payload.userIds])];
+    const assignedUserIds = [
+      ...new Set([...(shift.assignedUserIds ?? []), ...payload.userIds]),
+    ];
 
     for (const userId of payload.userIds) {
       await this.assertUserCanBeAssigned({
@@ -246,7 +269,11 @@ export class StaffPlanningService {
     return saved;
   }
 
-  async unassignShift(id: string, payload: UnassignStaffShiftDto, actor: AuthenticatedUser) {
+  async unassignShift(
+    id: string,
+    payload: UnassignStaffShiftDto,
+    actor: AuthenticatedUser,
+  ) {
     const shift = await this.getShiftOrThrow(id);
     await this.assertCanManageStaffAtLocation(actor, shift.locationId);
     const previousValue = this.snapshot(shift);
@@ -289,7 +316,12 @@ export class StaffPlanningService {
   }
 
   async completeShift(id: string, actor: AuthenticatedUser) {
-    return this.setShiftStatus(id, StaffShiftStatus.Completed, actor, 'staff.shift.completed');
+    return this.setShiftStatus(
+      id,
+      StaffShiftStatus.Completed,
+      actor,
+      'staff.shift.completed',
+    );
   }
 
   async cancelShift(id: string, actor: AuthenticatedUser) {
@@ -299,20 +331,34 @@ export class StaffPlanningService {
       actor,
       'staff.shift.cancelled',
     );
-    await this.notifyAssignedUsers(saved, 'staff.shift.cancelled', 'Eine Schicht wurde storniert.');
+    await this.notifyAssignedUsers(
+      saved,
+      'staff.shift.cancelled',
+      'Eine Schicht wurde storniert.',
+    );
     return saved;
   }
 
-  async findAvailability(actor: AuthenticatedUser, filters: { locationId?: string; userId?: string } = {}) {
+  async findAvailability(
+    actor: AuthenticatedUser,
+    filters: { locationId?: string; userId?: string } = {},
+  ) {
     const query: Record<string, unknown> = {};
 
     if (this.isStaffManager(actor)) {
       if (filters.locationId) {
-        await this.accessPolicy.assertCanAccessLocation(actor, filters.locationId);
+        await this.accessPolicy.assertCanAccessLocation(
+          actor,
+          filters.locationId,
+        );
         query.locationId = filters.locationId;
       } else {
-        const locationIds = await this.accessPolicy.getReadableLocationIds(actor);
-        query.$or = [{ locationId: { $in: locationIds } }, { locationId: { $exists: false } }];
+        const locationIds =
+          await this.accessPolicy.getReadableLocationIds(actor);
+        query.$or = [
+          { locationId: { $in: locationIds } },
+          { locationId: { $exists: false } },
+        ];
       }
       if (filters.userId) {
         query.userId = filters.userId;
@@ -321,14 +367,23 @@ export class StaffPlanningService {
       query.userId = actor.sub;
     }
 
-    return this.availabilityModel.find(query).sort({ date: 1, weekday: 1 }).exec();
+    return this.availabilityModel
+      .find(query)
+      .sort({ date: 1, weekday: 1 })
+      .exec();
   }
 
-  async createAvailability(payload: CreateAvailabilityDto, actor: AuthenticatedUser) {
+  async createAvailability(
+    payload: CreateAvailabilityDto,
+    actor: AuthenticatedUser,
+  ) {
     const userId = payload.userId ?? actor.sub;
     await this.assertCanWriteOwnOrManage(actor, userId);
     if (payload.locationId) {
-      await this.accessPolicy.assertCanAccessLocation(actor, payload.locationId);
+      await this.accessPolicy.assertCanAccessLocation(
+        actor,
+        payload.locationId,
+      );
     }
     this.assertTimeWindow(payload.availableFrom, payload.availableTo);
 
@@ -346,11 +401,18 @@ export class StaffPlanningService {
     return availability;
   }
 
-  async updateAvailability(id: string, payload: UpdateAvailabilityDto, actor: AuthenticatedUser) {
+  async updateAvailability(
+    id: string,
+    payload: UpdateAvailabilityDto,
+    actor: AuthenticatedUser,
+  ) {
     const availability = await this.getAvailabilityOrThrow(id);
     await this.assertCanWriteOwnOrManage(actor, availability.userId);
     if (payload.locationId) {
-      await this.accessPolicy.assertCanAccessLocation(actor, payload.locationId);
+      await this.accessPolicy.assertCanAccessLocation(
+        actor,
+        payload.locationId,
+      );
     }
     if (payload.availableFrom && payload.availableTo) {
       this.assertTimeWindow(payload.availableFrom, payload.availableTo);
@@ -360,7 +422,10 @@ export class StaffPlanningService {
     const updated = await this.availabilityModel
       .findByIdAndUpdate(
         id,
-        { ...payload, date: payload.date ? new Date(payload.date) : availability.date },
+        {
+          ...payload,
+          date: payload.date ? new Date(payload.date) : availability.date,
+        },
         { new: true, runValidators: true },
       )
       .exec();
@@ -384,7 +449,10 @@ export class StaffPlanningService {
     });
   }
 
-  async findAbsences(actor: AuthenticatedUser, filters: { userId?: string } = {}) {
+  async findAbsences(
+    actor: AuthenticatedUser,
+    filters: { userId?: string } = {},
+  ) {
     const query: Record<string, unknown> = {};
 
     if (this.isStaffManager(actor)) {
@@ -418,21 +486,40 @@ export class StaffPlanningService {
     await this.writeAudit(actor, 'staff.absence.requested', {
       newValue: this.snapshot(absence),
     });
-    await this.notifyManagersForUser(user, 'staff.absence.requested', 'Eine Abwesenheit wurde beantragt.');
+    await this.notifyManagersForUser(
+      user,
+      'staff.absence.requested',
+      'Eine Abwesenheit wurde beantragt.',
+    );
 
     return absence;
   }
 
   approveAbsence(id: string, actor: AuthenticatedUser) {
-    return this.setAbsenceStatus(id, StaffAbsenceStatus.Approved, actor, 'staff.absence.approved');
+    return this.setAbsenceStatus(
+      id,
+      StaffAbsenceStatus.Approved,
+      actor,
+      'staff.absence.approved',
+    );
   }
 
   rejectAbsence(id: string, actor: AuthenticatedUser) {
-    return this.setAbsenceStatus(id, StaffAbsenceStatus.Rejected, actor, 'staff.absence.rejected');
+    return this.setAbsenceStatus(
+      id,
+      StaffAbsenceStatus.Rejected,
+      actor,
+      'staff.absence.rejected',
+    );
   }
 
   cancelAbsence(id: string, actor: AuthenticatedUser) {
-    return this.setAbsenceStatus(id, StaffAbsenceStatus.Cancelled, actor, 'staff.absence.cancelled');
+    return this.setAbsenceStatus(
+      id,
+      StaffAbsenceStatus.Cancelled,
+      actor,
+      'staff.absence.cancelled',
+    );
   }
 
   async findShiftSwaps(actor: AuthenticatedUser) {
@@ -450,10 +537,15 @@ export class StaffPlanningService {
       .exec();
   }
 
-  async createShiftSwap(payload: CreateShiftSwapRequestDto, actor: AuthenticatedUser) {
+  async createShiftSwap(
+    payload: CreateShiftSwapRequestDto,
+    actor: AuthenticatedUser,
+  ) {
     const shift = await this.findShift(payload.shiftId, actor);
     if (!shift.assignedUserIds.includes(actor.sub)) {
-      throw new ForbiddenException('Nur zugewiesene Mitarbeiter koennen Schichttausch anfragen');
+      throw new ForbiddenException(
+        'Nur zugewiesene Mitarbeiter koennen Schichttausch anfragen',
+      );
     }
     if (payload.targetUserId) {
       await this.assertUserCanBeAssigned({
@@ -482,7 +574,11 @@ export class StaffPlanningService {
       shiftId: shift._id.toString(),
       newValue: this.snapshot(swap),
     });
-    await this.notifyManagersForShift(shift, 'staff.shiftSwap.requested', 'Ein Schichttausch wurde angefragt.');
+    await this.notifyManagersForShift(
+      shift,
+      'staff.shiftSwap.requested',
+      'Ein Schichttausch wurde angefragt.',
+    );
 
     return swap;
   }
@@ -530,7 +626,11 @@ export class StaffPlanningService {
     await this.assertCanManageUserForStaff(actor, user);
     const previousValue = this.snapshot(absence);
     absence.status = status;
-    if ([StaffAbsenceStatus.Approved, StaffAbsenceStatus.Rejected].includes(status)) {
+    if (
+      [StaffAbsenceStatus.Approved, StaffAbsenceStatus.Rejected].includes(
+        status,
+      )
+    ) {
       absence.approvedBy = actor.sub;
       absence.approvedAt = new Date();
     }
@@ -561,7 +661,9 @@ export class StaffPlanningService {
     if (requireManager) {
       await this.assertCanManageStaffAtLocation(actor, shift.locationId);
     } else if (swap.targetUserId !== actor.sub) {
-      throw new ForbiddenException('Nur Zielmitarbeiter koennen diese Anfrage annehmen');
+      throw new ForbiddenException(
+        'Nur Zielmitarbeiter koennen diese Anfrage annehmen',
+      );
     }
 
     const previousValue = this.snapshot(swap);
@@ -570,7 +672,9 @@ export class StaffPlanningService {
 
     if (status === ShiftSwapStatus.Approved && swap.targetUserId) {
       shift.assignedUserIds = [
-        ...shift.assignedUserIds.filter((userId) => userId !== swap.requestedBy),
+        ...shift.assignedUserIds.filter(
+          (userId) => userId !== swap.requestedBy,
+        ),
         swap.targetUserId,
       ];
       await shift.save();
@@ -619,7 +723,10 @@ export class StaffPlanningService {
     return query;
   }
 
-  private async canReadShift(actor: AuthenticatedUser, shift: StaffShiftDocument) {
+  private async canReadShift(
+    actor: AuthenticatedUser,
+    shift: StaffShiftDocument,
+  ) {
     return (
       (await this.accessPolicy.canAccessLocation(actor, shift.locationId)) &&
       (this.isStaffManager(actor) || shift.assignedUserIds.includes(actor.sub))
@@ -640,16 +747,38 @@ export class StaffPlanningService {
     await this.assertCanManageUserForStaff(options.actor, user);
     const locationIds = this.getUserLocationIds(user);
     if (locationIds.length && !locationIds.includes(options.locationId)) {
-      throw new BadRequestException('Mitarbeiter ist diesem Standort nicht zugewiesen');
+      throw new BadRequestException(
+        'Mitarbeiter ist diesem Standort nicht zugewiesen',
+      );
     }
-    if (options.departmentId && user.departmentIds?.length && !user.departmentIds.includes(options.departmentId)) {
-      throw new BadRequestException('Mitarbeiter gehoert nicht zum benoetigten Department');
+    if (
+      options.departmentId &&
+      user.departmentIds?.length &&
+      !user.departmentIds.includes(options.departmentId)
+    ) {
+      throw new BadRequestException(
+        'Mitarbeiter gehoert nicht zum benoetigten Department',
+      );
     }
-    if (user.roles?.length && !this.roleMatches(user.roles, options.roleNeeded)) {
-      throw new BadRequestException('Mitarbeiter passt nicht zur benoetigten Rolle');
+    if (
+      user.roles?.length &&
+      !this.roleMatches(user.roles, options.roleNeeded)
+    ) {
+      throw new BadRequestException(
+        'Mitarbeiter passt nicht zur benoetigten Rolle',
+      );
     }
-    await this.assertNoOverlappingShift(options.userId, options.startTime, options.endTime, options.ignoreShiftId);
-    await this.assertNoApprovedAbsence(options.userId, options.startTime, options.endTime);
+    await this.assertNoOverlappingShift(
+      options.userId,
+      options.startTime,
+      options.endTime,
+      options.ignoreShiftId,
+    );
+    await this.assertNoApprovedAbsence(
+      options.userId,
+      options.startTime,
+      options.endTime,
+    );
   }
 
   private async assertNoOverlappingShift(
@@ -670,11 +799,17 @@ export class StaffPlanningService {
 
     const conflict = await this.shiftModel.exists(query);
     if (conflict) {
-      throw new BadRequestException('Mitarbeiter ist in diesem Zeitraum bereits eingeplant');
+      throw new BadRequestException(
+        'Mitarbeiter ist in diesem Zeitraum bereits eingeplant',
+      );
     }
   }
 
-  private async assertNoApprovedAbsence(userId: string, startTime: Date, endTime: Date) {
+  private async assertNoApprovedAbsence(
+    userId: string,
+    startTime: Date,
+    endTime: Date,
+  ) {
     const absence = await this.absenceModel.exists({
       userId,
       status: StaffAbsenceStatus.Approved,
@@ -682,37 +817,58 @@ export class StaffPlanningService {
       endDate: { $gt: startTime },
     });
     if (absence) {
-      throw new BadRequestException('Mitarbeiter ist im genehmigten Urlaub oder krank');
+      throw new BadRequestException(
+        'Mitarbeiter ist im genehmigten Urlaub oder krank',
+      );
     }
   }
 
-  private async assertCanManageStaffAtLocation(actor: AuthenticatedUser, locationId: string) {
+  private async assertCanManageStaffAtLocation(
+    actor: AuthenticatedUser,
+    locationId: string,
+  ) {
     if (!this.isStaffManager(actor)) {
       throw new ForbiddenException('Keine Berechtigung fuer Dienstplanung');
     }
     await this.accessPolicy.assertCanManageLocation(actor, locationId);
   }
 
-  private async assertCanWriteOwnOrManage(actor: AuthenticatedUser, userId: string) {
+  private async assertCanWriteOwnOrManage(
+    actor: AuthenticatedUser,
+    userId: string,
+  ) {
     if (actor.sub === userId) return;
     const user = await this.getUserOrThrow(userId);
     await this.assertCanManageUserForStaff(actor, user);
   }
 
-  private async assertCanManageUserForStaff(actor: AuthenticatedUser, user: UserDocument) {
+  private async assertCanManageUserForStaff(
+    actor: AuthenticatedUser,
+    user: UserDocument,
+  ) {
     if (!this.isStaffManager(actor)) {
-      throw new ForbiddenException('Keine Berechtigung fuer Mitarbeiterplanung');
+      throw new ForbiddenException(
+        'Keine Berechtigung fuer Mitarbeiterplanung',
+      );
     }
     await this.accessPolicy.assertCanManageUser(actor, user);
   }
 
-  private async validateDepartment(actor: AuthenticatedUser, departmentId?: string) {
-    if (departmentId && !(await this.accessPolicy.canAssignDepartment(actor, departmentId))) {
+  private async validateDepartment(
+    actor: AuthenticatedUser,
+    departmentId?: string,
+  ) {
+    if (
+      departmentId &&
+      !(await this.accessPolicy.canAssignDepartment(actor, departmentId))
+    ) {
       throw new ForbiddenException('Keine Berechtigung fuer dieses Department');
     }
   }
 
-  private async getManageableUserIds(actor: AuthenticatedUser): Promise<string[]> {
+  private async getManageableUserIds(
+    actor: AuthenticatedUser,
+  ): Promise<string[]> {
     const query = await this.accessPolicy.getManageableUsersFilter(actor);
     const users = await this.userModel.find(query).select('_id').exec();
     return users.map((user) => user._id.toString());
@@ -728,7 +884,8 @@ export class StaffPlanningService {
   private async getUserOrThrow(userId: string) {
     this.validateObjectId(userId, 'Benutzer-ID');
     const user = await this.userModel.findById(userId).exec();
-    if (!user || !user.isActive) throw new NotFoundException('Mitarbeiter nicht gefunden');
+    if (!user || !user.isActive)
+      throw new NotFoundException('Mitarbeiter nicht gefunden');
     return user;
   }
 
@@ -742,7 +899,8 @@ export class StaffPlanningService {
   private async getAvailabilityOrThrow(id: string) {
     this.validateObjectId(id, 'Verfuegbarkeit-ID');
     const availability = await this.availabilityModel.findById(id).exec();
-    if (!availability) throw new NotFoundException('Verfuegbarkeit nicht gefunden');
+    if (!availability)
+      throw new NotFoundException('Verfuegbarkeit nicht gefunden');
     return availability;
   }
 
@@ -785,7 +943,11 @@ export class StaffPlanningService {
     });
   }
 
-  private async notifyAssignedUsers(shift: StaffShiftDocument, type: string, message: string) {
+  private async notifyAssignedUsers(
+    shift: StaffShiftDocument,
+    type: string,
+    message: string,
+  ) {
     await Promise.all(
       (shift.assignedUserIds ?? []).map((userId) =>
         this.notify({
@@ -811,7 +973,11 @@ export class StaffPlanningService {
     );
   }
 
-  private async notifyManagersForShift(shift: StaffShiftDocument, type: string, message: string) {
+  private async notifyManagersForShift(
+    shift: StaffShiftDocument,
+    type: string,
+    message: string,
+  ) {
     await this.notify({
       companyId: shift.companyId,
       locationId: shift.locationId,
@@ -822,7 +988,11 @@ export class StaffPlanningService {
     });
   }
 
-  private async notifyManagersForUser(user: UserDocument, type: string, message: string) {
+  private async notifyManagersForUser(
+    user: UserDocument,
+    type: string,
+    message: string,
+  ) {
     for (const locationId of this.getUserLocationIds(user)) {
       await this.notify({
         companyId: user.companyId,
@@ -864,10 +1034,17 @@ export class StaffPlanningService {
   private roleMatches(userRoles: string[], roleNeeded: string): boolean {
     if (!roleNeeded) return true;
     const normalizedNeed = this.normalizeRole(roleNeeded);
-    return userRoles.some((role) => this.normalizeRole(role) === normalizedNeed);
+    return userRoles.some(
+      (role) => this.normalizeRole(role) === normalizedNeed,
+    );
   }
 
-  private getUserLocationIds(user: Pick<UserDocument, 'locationId' | 'locationIds' | 'managedLocationIds'>): string[] {
+  private getUserLocationIds(
+    user: Pick<
+      UserDocument,
+      'locationId' | 'locationIds' | 'managedLocationIds'
+    >,
+  ): string[] {
     return [
       ...(user.locationIds ?? []),
       ...(user.managedLocationIds ?? []),
@@ -878,7 +1055,10 @@ export class StaffPlanningService {
   private assertValidDateRange(start: string | Date, end: string | Date) {
     const startDate = new Date(start);
     const endDate = new Date(end);
-    if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
+    if (
+      !Number.isFinite(startDate.getTime()) ||
+      !Number.isFinite(endDate.getTime())
+    ) {
       throw new BadRequestException('Ungueltiger Zeitraum');
     }
     if (startDate.getTime() >= endDate.getTime()) {
@@ -892,12 +1072,18 @@ export class StaffPlanningService {
     }
   }
 
-  private snapshot(document: { toObject?: () => Record<string, unknown> }): Record<string, unknown> {
+  private snapshot(document: {
+    toObject?: () => Record<string, unknown>;
+  }): Record<string, unknown> {
     return document.toObject ? document.toObject() : { ...document };
   }
 
   private normalizeRole(role: string): string {
-    return role.toLowerCase().replaceAll('Ã¼', 'ue').replaceAll('ü', 'ue').trim();
+    return role
+      .toLowerCase()
+      .replaceAll('Ã¼', 'ue')
+      .replaceAll('ü', 'ue')
+      .trim();
   }
 
   private validateObjectId(id: string, label: string) {

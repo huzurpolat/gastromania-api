@@ -23,7 +23,20 @@ import { TimeTrackingService } from './time-tracking.service';
 
 @Controller('time-tracking')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
-@Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Kueche, Role.Lager, Role.Tellerwaescher)
+@Roles(
+  Role.PlatformAdmin,
+  Role.SuperAdmin,
+  Role.CompanyAdmin,
+  Role.RegionAdmin,
+  Role.Admin,
+  Role.Regionalleiter,
+  Role.Bereichsleiter,
+  Role.Filialleiter,
+  Role.Service,
+  Role.Kueche,
+  Role.Lager,
+  Role.Tellerwaescher,
+)
 export class TimeTrackingController {
   constructor(private readonly timeTrackingService: TimeTrackingService) {}
 
@@ -63,7 +76,16 @@ export class TimeTrackingController {
 
   @Patch(':id')
   @Permissions('employees.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
   update(
     @Param('id') id: string,
     @Body() updateTimeEntryDto: UpdateTimeEntryDto,
@@ -74,7 +96,16 @@ export class TimeTrackingController {
 
   @Delete(':id')
   @Permissions('employees.delete')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.timeTrackingService.remove(id, user);
   }

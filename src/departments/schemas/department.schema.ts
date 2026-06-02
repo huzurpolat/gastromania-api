@@ -28,7 +28,12 @@ export class Department {
   @Prop({ required: true, trim: true, index: true })
   name!: string;
 
-  @Prop({ required: true, trim: true, enum: Object.values(DepartmentType), index: true })
+  @Prop({
+    required: true,
+    trim: true,
+    enum: Object.values(DepartmentType),
+    index: true,
+  })
   type!: DepartmentType;
 
   @Prop({ default: true, index: true })
@@ -37,4 +42,7 @@ export class Department {
 
 export const DepartmentSchema = SchemaFactory.createForClass(Department);
 
-DepartmentSchema.index({ companyId: 1, locationId: 1, type: 1 }, { unique: true });
+DepartmentSchema.index(
+  { companyId: 1, locationId: 1, type: 1 },
+  { unique: true },
+);

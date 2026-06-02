@@ -25,7 +25,9 @@ export class RegionsService {
       !this.accessPolicy.isPlatformAdmin(actor) &&
       !(await this.accessPolicy.canAccessCompany(actor, dto.companyId))
     ) {
-      throw new ForbiddenException('Keine Berechtigung fuer dieses Unternehmen');
+      throw new ForbiddenException(
+        'Keine Berechtigung fuer dieses Unternehmen',
+      );
     }
 
     return this.regionModel.create(dto);
@@ -44,7 +46,10 @@ export class RegionsService {
     }
 
     if (actor.companyId) {
-      return this.regionModel.find({ companyId: actor.companyId }).sort({ name: 1 }).exec();
+      return this.regionModel
+        .find({ companyId: actor.companyId })
+        .sort({ name: 1 })
+        .exec();
     }
 
     return [];

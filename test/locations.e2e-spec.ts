@@ -81,13 +81,16 @@ describe('LocationsController (e2e)', () => {
       .expect(201)
       .expect(responseBody);
 
-    expect(locationsService.create).toHaveBeenCalledWith({
-      name: 'Gastromania Mitte',
-      street: 'Hauptstrasse 1',
-      zip: '10115',
-      city: 'Berlin',
-      icon: 'restaurant',
-    }, undefined);
+    expect(locationsService.create).toHaveBeenCalledWith(
+      {
+        name: 'Gastromania Mitte',
+        street: 'Hauptstrasse 1',
+        zip: '10115',
+        city: 'Berlin',
+        icon: 'restaurant',
+      },
+      undefined,
+    );
   });
 
   it('POST /api/locations rejects unknown properties', async () => {

@@ -63,7 +63,7 @@ export class CounterController {
 
   @Get('dashboard')
   @Roles(...COUNTER_VIEW_ROLES)
-  @Permissions('counter.view')
+  @Permissions('counter.orders.view')
   dashboard(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -71,9 +71,33 @@ export class CounterController {
     return this.counterService.dashboard(user, locationId);
   }
 
+  @Get('reports/summary')
+  @Roles(...COUNTER_VIEW_ROLES, Role.Buchhaltung)
+  @Permissions('counter.reports.view')
+  report(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.counterService.report(user, { locationId, from, to });
+  }
+
+  @Get('reports/export')
+  @Roles(...COUNTER_VIEW_ROLES, Role.Buchhaltung)
+  @Permissions('counter.reports.export')
+  exportReport(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.counterService.reportCsv(user, { locationId, from, to });
+  }
+
   @Get('orders')
   @Roles(...COUNTER_VIEW_ROLES)
-  @Permissions('counter.view')
+  @Permissions('counter.orders.view')
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -93,14 +117,21 @@ export class CounterController {
 
   @Get('orders/:id')
   @Roles(...COUNTER_VIEW_ROLES)
-  @Permissions('counter.view')
+  @Permissions('counter.orders.view')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.counterService.findOne(id, user);
   }
 
+  @Get('orders/:id/history')
+  @Roles(...COUNTER_VIEW_ROLES)
+  @Permissions('counter.orders.view')
+  history(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.counterService.history(id, user);
+  }
+
   @Post('orders')
   @Roles(...COUNTER_WRITE_ROLES)
-  @Permissions('counter.create')
+  @Permissions('counter.orders.create')
   create(
     @Body() dto: CreateCounterOrderDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -110,7 +141,7 @@ export class CounterController {
 
   @Patch('orders/:id/status')
   @Roles(...COUNTER_VIEW_ROLES)
-  @Permissions('counter.update')
+  @Permissions('counter.orders.update')
   updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateCounterStatusDto,
@@ -121,14 +152,14 @@ export class CounterController {
 
   @Post('orders/:id/call')
   @Roles(...COUNTER_VIEW_ROLES)
-  @Permissions('counter.update')
+  @Permissions('counter.orders.update')
   call(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.counterService.call(id, user);
   }
 
   @Post('orders/:id/pay')
   @Roles(...COUNTER_WRITE_ROLES)
-  @Permissions('counter.pay')
+  @Permissions('counter.orders.pay')
   pay(
     @Param('id') id: string,
     @Body() dto: PayCounterOrderDto,
@@ -139,14 +170,14 @@ export class CounterController {
 
   @Post('orders/:id/complete')
   @Roles(...COUNTER_WRITE_ROLES)
-  @Permissions('counter.complete')
+  @Permissions('counter.orders.complete')
   complete(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.counterService.complete(id, user);
   }
 
   @Post('orders/:id/cancel')
   @Roles(...COUNTER_WRITE_ROLES)
-  @Permissions('counter.cancel')
+  @Permissions('counter.orders.cancel')
   cancel(
     @Param('id') id: string,
     @Body() dto: CancelCounterOrderDto,
@@ -157,7 +188,7 @@ export class CounterController {
 
   @Get('pickup-display')
   @Roles(...COUNTER_VIEW_ROLES)
-  @Permissions('counter.view')
+  @Permissions('counter.pickupDisplay.view')
   pickupDisplay(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,

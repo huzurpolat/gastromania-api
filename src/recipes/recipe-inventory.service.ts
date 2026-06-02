@@ -4,12 +4,19 @@ import { Model, Types } from 'mongoose';
 import { Order, OrderItem } from '../orders/schemas/order.schema';
 import { InventoryBatch } from '../stock/schemas/inventory-batch.schema';
 import { StockAlert } from '../stock/schemas/stock-alert.schema';
-import { StockItem, StockItemDocument } from '../stock/schemas/stock-item.schema';
+import {
+  StockItem,
+  StockItemDocument,
+} from '../stock/schemas/stock-item.schema';
 import {
   StockMovement,
   StockMovementType,
 } from '../stock/schemas/stock-movement.schema';
-import { Recipe, RecipeDocument, RecipeIngredient } from './schemas/recipe.schema';
+import {
+  Recipe,
+  RecipeDocument,
+  RecipeIngredient,
+} from './schemas/recipe.schema';
 
 type InventoryOrder = Order & {
   _id?: unknown;
@@ -35,7 +42,8 @@ interface ConsumptionPlanLine {
 @Injectable()
 export class RecipeInventoryService {
   constructor(
-    @InjectModel(Recipe.name) private readonly recipeModel: Model<RecipeDocument>,
+    @InjectModel(Recipe.name)
+    private readonly recipeModel: Model<RecipeDocument>,
     @InjectModel(StockItem.name)
     private readonly stockItemModel: Model<StockItemDocument>,
     @InjectModel(InventoryBatch.name)
@@ -93,7 +101,10 @@ export class RecipeInventoryService {
     nextOrder: InventoryOrder,
     actorId: string,
   ): Promise<InventoryConsumptionResult> {
-    if (!previousOrder.inventoryDeducted && !previousOrder.inventoryConsumedAt) {
+    if (
+      !previousOrder.inventoryDeducted &&
+      !previousOrder.inventoryConsumedAt
+    ) {
       return { movementIds: [], warnings: [] };
     }
 
@@ -115,7 +126,8 @@ export class RecipeInventoryService {
         continue;
       }
 
-      const difference = (next?.requiredQuantity ?? 0) - (previous?.requiredQuantity ?? 0);
+      const difference =
+        (next?.requiredQuantity ?? 0) - (previous?.requiredQuantity ?? 0);
 
       if (difference === 0) {
         continue;
@@ -138,11 +150,17 @@ export class RecipeInventoryService {
     };
   }
 
-  async checkAvailability(recipe: RecipeDocument, locationId: string, portions = 1) {
+  async checkAvailability(
+    recipe: RecipeDocument,
+    locationId: string,
+    portions = 1,
+  ) {
     const missing = [];
 
     for (const ingredient of recipe.ingredients) {
-      const item = await this.stockItemModel.findById(ingredient.stockItemId).exec();
+      const item = await this.stockItemModel
+        .findById(ingredient.stockItemId)
+        .exec();
       const required = this.requiredQuantity(ingredient, portions);
 
       if (!item || item.locationId !== locationId || item.quantity < required) {
@@ -211,7 +229,10 @@ export class RecipeInventoryService {
           stockItem,
           orderItemId: this.stringifyId(orderItem._id),
           orderItemName: orderItem.name,
-          requiredQuantity: this.requiredQuantity(ingredient, orderItem.quantity),
+          requiredQuantity: this.requiredQuantity(
+            ingredient,
+            orderItem.quantity,
+          ),
         });
       }
     }
@@ -219,7 +240,9 @@ export class RecipeInventoryService {
     return { lines, warnings };
   }
 
-  private async findRecipe(orderItem: OrderItem): Promise<RecipeDocument | null> {
+  private async findRecipe(
+    orderItem: OrderItem,
+  ): Promise<RecipeDocument | null> {
     const menuItemId = orderItem.menuItemId ?? orderItem.productId;
 
     return this.recipeModel
@@ -234,7 +257,9 @@ export class RecipeInventoryService {
       .exec();
   }
 
-  private aggregatePlan(lines: ConsumptionPlanLine[]): Map<string, ConsumptionPlanLine> {
+  private aggregatePlan(
+    lines: ConsumptionPlanLine[],
+  ): Map<string, ConsumptionPlanLine> {
     const aggregate = new Map<string, ConsumptionPlanLine>();
 
     for (const line of lines) {
@@ -243,7 +268,8 @@ export class RecipeInventoryService {
 
       aggregate.set(key, {
         ...line,
-        requiredQuantity: (current?.requiredQuantity ?? 0) + line.requiredQuantity,
+        requiredQuantity:
+          (current?.requiredQuantity ?? 0) + line.requiredQuantity,
       });
     }
 
@@ -267,9 +293,13 @@ export class RecipeInventoryService {
       item.quantity = before + quantityChange;
       await item.save();
 
-      const batchIds = quantityChange < 0
-        ? await this.consumeBatches(item._id.toString(), Math.abs(quantityChange))
-        : [];
+      const batchIds =
+        quantityChange < 0
+          ? await this.consumeBatches(
+              item._id.toString(),
+              Math.abs(quantityChange),
+            )
+          : [];
       const movement = await this.movementModel.create({
         locationId: order.locationId,
         stockItemId: item._id.toString(),
@@ -282,7 +312,8 @@ export class RecipeInventoryService {
         quantityChange,
         quantityBefore: before,
         quantityAfter: item.quantity,
-        unitPriceNet: item.purchasePriceNet ?? line.ingredient.purchasePriceNet ?? 0,
+        unitPriceNet:
+          item.purchasePriceNet ?? line.ingredient.purchasePriceNet ?? 0,
         valueNet:
           Math.abs(quantityChange) *
           (item.purchasePriceNet ?? line.ingredient.purchasePriceNet ?? 0),
@@ -297,11 +328,17 @@ export class RecipeInventoryService {
     return movementIds.filter(Boolean);
   }
 
-  private requiredQuantity(ingredient: RecipeIngredient, portions: number): number {
+  private requiredQuantity(
+    ingredient: RecipeIngredient,
+    portions: number,
+  ): number {
     return ingredient.quantity * portions * (ingredient.wasteFactor ?? 1);
   }
 
-  private async consumeBatches(stockItemId: string, quantity: number): Promise<string[]> {
+  private async consumeBatches(
+    stockItemId: string,
+    quantity: number,
+  ): Promise<string[]> {
     let remaining = quantity;
     const usedBatchIds: string[] = [];
     const batches = await this.batchModel
@@ -329,7 +366,11 @@ export class RecipeInventoryService {
   private async syncLowStockAlert(item: StockItemDocument): Promise<void> {
     const stockItemId = item._id.toString();
 
-    if (item.isActive && !item.isArchived && item.quantity <= item.minQuantity) {
+    if (
+      item.isActive &&
+      !item.isArchived &&
+      item.quantity <= item.minQuantity
+    ) {
       await this.stockAlertModel.findOneAndUpdate(
         { stockItemId, type: 'Mindestbestand', isResolved: false },
         {
@@ -338,7 +379,10 @@ export class RecipeInventoryService {
           stockItemName: item.name,
           type: 'Mindestbestand',
           message: `${item.name} liegt mit ${item.quantity} ${item.unit} am oder unter dem Mindestbestand von ${item.minQuantity} ${item.unit}.`,
-          severity: item.quantity <= (item.criticalQuantity ?? 0) || item.quantity < 0 ? 'critical' : 'warning',
+          severity:
+            item.quantity <= (item.criticalQuantity ?? 0) || item.quantity < 0
+              ? 'critical'
+              : 'warning',
           isResolved: false,
         },
         { upsert: true, new: true },

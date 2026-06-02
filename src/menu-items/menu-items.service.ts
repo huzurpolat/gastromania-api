@@ -43,7 +43,10 @@ export class MenuItemsService {
     return this.menuItemModel.find().sort({ category: 1, name: 1 }).exec();
   }
 
-  async findOne(id: string, _actor?: AuthenticatedUser): Promise<MenuItemDocument> {
+  async findOne(
+    id: string,
+    _actor?: AuthenticatedUser,
+  ): Promise<MenuItemDocument> {
     this.validateObjectId(id);
 
     const menuItem = await this.menuItemModel.findById(id).exec();
@@ -87,7 +90,10 @@ export class MenuItemsService {
     }
   }
 
-  async remove(id: string, actor: AuthenticatedUser): Promise<MenuItemDocument> {
+  async remove(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<MenuItemDocument> {
     this.assertManagementActor(actor);
     this.validateObjectId(id);
 
@@ -110,7 +116,9 @@ export class MenuItemsService {
 
   private assertManagementActor(actor: AuthenticatedUser): void {
     if (!this.accessPolicy.isManagementRole(actor)) {
-      throw new BadRequestException('Globale Speisekartenpflege ist Management vorbehalten');
+      throw new BadRequestException(
+        'Globale Speisekartenpflege ist Management vorbehalten',
+      );
     }
   }
 

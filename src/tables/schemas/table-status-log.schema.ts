@@ -24,7 +24,12 @@ export class TableStatusLog {
   @Prop({ type: String, enum: Object.values(TableStatus), index: true })
   previousStatus?: TableStatus;
 
-  @Prop({ type: String, enum: Object.values(TableStatus), required: true, index: true })
+  @Prop({
+    type: String,
+    enum: Object.values(TableStatus),
+    required: true,
+    index: true,
+  })
   nextStatus!: TableStatus;
 
   @Prop({ trim: true, index: true })
@@ -46,7 +51,8 @@ export class TableStatusLog {
   changedAt!: Date;
 }
 
-export const TableStatusLogSchema = SchemaFactory.createForClass(TableStatusLog);
+export const TableStatusLogSchema =
+  SchemaFactory.createForClass(TableStatusLog);
 
 TableStatusLogSchema.index({ tableId: 1, changedAt: -1 });
 TableStatusLogSchema.index({ locationId: 1, changedAt: -1 });

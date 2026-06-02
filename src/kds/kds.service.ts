@@ -159,7 +159,10 @@ export class KdsService {
     }
 
     const saved = await order.save();
-    if (dto.status === OrderStatus.Accepted && !this.hasInventoryDeduction(saved)) {
+    if (
+      dto.status === OrderStatus.Accepted &&
+      !this.hasInventoryDeduction(saved)
+    ) {
       await this.deductOrderInventory(saved, actor.sub);
     }
     if (
@@ -243,7 +246,10 @@ export class KdsService {
       changedAt: changedAt.toISOString(),
       orderStatus: saved.status,
       order: saved,
-      channels: this.eventChannels(saved.companyId ?? actor.companyId, saved.locationId),
+      channels: this.eventChannels(
+        saved.companyId ?? actor.companyId,
+        saved.locationId,
+      ),
     };
 
     this.realtimeService.publish('order.item.status.changed', payload);
@@ -260,7 +266,10 @@ export class KdsService {
         changedByRole: actor.roles?.[0] ?? 'unknown',
         changedAt: changedAt.toISOString(),
         order: saved,
-        channels: this.eventChannels(saved.companyId ?? actor.companyId, saved.locationId),
+        channels: this.eventChannels(
+          saved.companyId ?? actor.companyId,
+          saved.locationId,
+        ),
       });
     }
 
@@ -422,8 +431,14 @@ export class KdsService {
     return Boolean(order.inventoryDeducted || order.inventoryConsumedAt);
   }
 
-  private async deductOrderInventory(order: OrderDocument, actorId: string): Promise<void> {
-    const result = await this.recipeInventoryService.consumeOrder(order, actorId);
+  private async deductOrderInventory(
+    order: OrderDocument,
+    actorId: string,
+  ): Promise<void> {
+    const result = await this.recipeInventoryService.consumeOrder(
+      order,
+      actorId,
+    );
     order.inventoryDeducted = true;
     order.inventoryDeductedAt = new Date();
     order.inventoryConsumedAt = order.inventoryDeductedAt;
@@ -438,8 +453,14 @@ export class KdsService {
     await order.save();
   }
 
-  private async reverseOrderInventory(order: OrderDocument, actorId: string): Promise<void> {
-    const result = await this.recipeInventoryService.reverseOrder(order, actorId);
+  private async reverseOrderInventory(
+    order: OrderDocument,
+    actorId: string,
+  ): Promise<void> {
+    const result = await this.recipeInventoryService.reverseOrder(
+      order,
+      actorId,
+    );
     order.inventoryReversedAt = new Date();
     order.inventoryMovementIds = [
       ...(order.inventoryMovementIds ?? []),
@@ -457,13 +478,17 @@ export class KdsService {
   }
 
   private aggregateOrderStatus(order: OrderDocument): OrderStatus {
-    const statuses = order.items.map((item) => item.status ?? OrderItemStatus.Open);
+    const statuses = order.items.map(
+      (item) => item.status ?? OrderItemStatus.Open,
+    );
 
     if (!statuses.length) {
       return order.status;
     }
 
-    const activeStatuses = statuses.filter((status) => status !== OrderItemStatus.Cancelled);
+    const activeStatuses = statuses.filter(
+      (status) => status !== OrderItemStatus.Cancelled,
+    );
 
     if (!activeStatuses.length) {
       return OrderStatus.Cancelled;
@@ -550,9 +575,14 @@ export class KdsService {
         order.tableId,
         {
           status,
-          activeOrderIds: activeOrders.map((activeOrder) => activeOrder._id.toString()),
+          activeOrderIds: activeOrders.map((activeOrder) =>
+            activeOrder._id.toString(),
+          ),
           currentTotal: this.roundMoney(
-            activeOrders.reduce((sum, activeOrder) => sum + (activeOrder.total ?? 0), 0),
+            activeOrders.reduce(
+              (sum, activeOrder) => sum + (activeOrder.total ?? 0),
+              0,
+            ),
           ),
           guestCount: activeOrders.reduce(
             (sum, activeOrder) => sum + (activeOrder.guestCount ?? 0),
@@ -560,8 +590,8 @@ export class KdsService {
           ),
           waitingSince: this.getTableWaitingSince(activeOrders),
           assignedWaiterId:
-            activeOrders.find((activeOrder) => activeOrder.assignedWaiterId)?.assignedWaiterId ??
-            undefined,
+            activeOrders.find((activeOrder) => activeOrder.assignedWaiterId)
+              ?.assignedWaiterId ?? undefined,
           lastStatusChange: changedAt,
         },
         { new: true },
@@ -589,7 +619,15 @@ export class KdsService {
       });
     }
 
-    this.publishTableStatusEvent(eventName, updatedTable, table.status, status, actor, order, changedAt);
+    this.publishTableStatusEvent(
+      eventName,
+      updatedTable,
+      table.status,
+      status,
+      actor,
+      order,
+      changedAt,
+    );
 
     if (eventName !== 'table.status.changed') {
       this.publishTableStatusEvent(
@@ -643,13 +681,16 @@ export class KdsService {
     return TableStatus.Ordering;
   }
 
-  private getTableWaitingSince(activeOrders: OrderDocument[]): Date | undefined {
+  private getTableWaitingSince(
+    activeOrders: OrderDocument[],
+  ): Date | undefined {
     const timestamps = activeOrders
-      .map((order) =>
-        order.statusTimestamps?.[OrderStatus.Accepted] ??
-        order.statusTimestamps?.[OrderStatus.Preparing] ??
-        order.statusTimestamps?.[OrderStatus.New] ??
-        (order as OrderDocument & { createdAt?: Date }).createdAt,
+      .map(
+        (order) =>
+          order.statusTimestamps?.[OrderStatus.Accepted] ??
+          order.statusTimestamps?.[OrderStatus.Preparing] ??
+          order.statusTimestamps?.[OrderStatus.New] ??
+          (order as OrderDocument & { createdAt?: Date }).createdAt,
       )
       .filter((value): value is Date => Boolean(value))
       .sort((first, second) => first.getTime() - second.getTime());
@@ -698,7 +739,10 @@ export class KdsService {
       changedBy: actor.sub,
       changedByRole: actor.roles?.[0] ?? 'unknown',
       changedAt,
-      channels: this.eventChannels(table.companyId ?? actor.companyId, table.locationId),
+      channels: this.eventChannels(
+        table.companyId ?? actor.companyId,
+        table.locationId,
+      ),
     });
   }
 
@@ -733,7 +777,10 @@ export class KdsService {
     });
   }
 
-  private eventChannels(companyId: string | undefined, locationId: string): string[] {
+  private eventChannels(
+    companyId: string | undefined,
+    locationId: string,
+  ): string[] {
     return [
       ...(companyId ? [`company:${companyId}`] : []),
       `location:${locationId}`,

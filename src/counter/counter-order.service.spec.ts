@@ -51,7 +51,9 @@ describe('CounterOrderService', () => {
   const locationId = '64f000000000000000000001';
   const menuItemId = '64f000000000000000000101';
 
-  const execResult = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
+  const execResult = <T>(value: T) => ({
+    exec: jest.fn().mockResolvedValue(value),
+  });
 
   const service = () =>
     new CounterOrderService(
@@ -135,7 +137,10 @@ describe('CounterOrderService', () => {
     };
 
     expect(() =>
-      counterService.assertStatusTransition(OrderStatus.Closed, OrderStatus.Ready),
+      counterService.assertStatusTransition(
+        OrderStatus.Closed,
+        OrderStatus.Ready,
+      ),
     ).toThrow(BadRequestException);
   });
 });

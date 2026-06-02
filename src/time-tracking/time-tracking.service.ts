@@ -9,7 +9,10 @@ import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { Location, LocationDocument } from '../locations/schemas/location.schema';
+import {
+  Location,
+  LocationDocument,
+} from '../locations/schemas/location.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateTimeEntryDto } from './dto/create-time-entry.dto';
 import { UpdateTimeEntryDto } from './dto/update-time-entry.dto';
@@ -31,20 +34,25 @@ export class TimeTrackingService {
     createTimeEntryDto: CreateTimeEntryDto,
     actor: AuthenticatedUser,
   ): Promise<TimeEntryDocument> {
-    const employeeId =
-      this.accessPolicy.isManagementRole(actor)
-        ? createTimeEntryDto.employeeId ?? actor.sub
-        : actor.sub;
+    const employeeId = this.accessPolicy.isManagementRole(actor)
+      ? (createTimeEntryDto.employeeId ?? actor.sub)
+      : actor.sub;
 
     await this.assertCanAccessEmployee(actor, employeeId);
-    await this.assertCanUseLocation(actor, createTimeEntryDto.locationId, employeeId);
+    await this.assertCanUseLocation(
+      actor,
+      createTimeEntryDto.locationId,
+      employeeId,
+    );
 
     const openEntry = await this.timeEntryModel
       .findOne({ employeeId, clockOut: { $exists: false } })
       .exec();
 
     if (openEntry) {
-      throw new BadRequestException('Es gibt bereits eine offene Zeiterfassung');
+      throw new BadRequestException(
+        'Es gibt bereits eine offene Zeiterfassung',
+      );
     }
 
     return this.timeEntryModel.create({
@@ -56,7 +64,10 @@ export class TimeTrackingService {
     });
   }
 
-  async clockOut(id: string, actor: AuthenticatedUser): Promise<TimeEntryDocument> {
+  async clockOut(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<TimeEntryDocument> {
     this.validateObjectId(id);
     const entry = await this.timeEntryModel.findById(id).exec();
 
@@ -100,7 +111,10 @@ export class TimeTrackingService {
     if (this.accessPolicy.isManagementRole(actor)) {
       Object.assign(
         query,
-        await this.accessPolicy.getScopedResourceFilter(actor, filters.locationId),
+        await this.accessPolicy.getScopedResourceFilter(
+          actor,
+          filters.locationId,
+        ),
       );
       if (filters.employeeId) {
         await this.assertCanAccessEmployee(actor, filters.employeeId);
@@ -109,7 +123,10 @@ export class TimeTrackingService {
     } else {
       query.employeeId = actor.sub;
       if (filters.locationId) {
-        await this.accessPolicy.assertCanAccessLocation(actor, filters.locationId);
+        await this.accessPolicy.assertCanAccessLocation(
+          actor,
+          filters.locationId,
+        );
         query.locationId = filters.locationId;
       }
     }
@@ -131,8 +148,10 @@ export class TimeTrackingService {
 
     await this.assertCanAccessEmployee(actor, existingEntry.employeeId);
 
-    const employeeId = updateTimeEntryDto.employeeId ?? existingEntry.employeeId;
-    const locationId = updateTimeEntryDto.locationId ?? existingEntry.locationId;
+    const employeeId =
+      updateTimeEntryDto.employeeId ?? existingEntry.employeeId;
+    const locationId =
+      updateTimeEntryDto.locationId ?? existingEntry.locationId;
 
     await this.assertCanAccessEmployee(actor, employeeId);
     await this.assertCanUseLocation(actor, locationId, employeeId);
@@ -145,7 +164,9 @@ export class TimeTrackingService {
       : existingEntry.clockOut;
 
     if (clockOut && clockIn.getTime() >= clockOut.getTime()) {
-      throw new BadRequestException('Arbeitsende muss nach Arbeitsbeginn liegen');
+      throw new BadRequestException(
+        'Arbeitsende muss nach Arbeitsbeginn liegen',
+      );
     }
 
     const updatedEntry = await this.timeEntryModel
@@ -213,7 +234,10 @@ export class TimeTrackingService {
 
     const employeeLocationIds = this.getUserLocationIds(employee);
 
-    if (employeeLocationIds.length && !employeeLocationIds.includes(locationId)) {
+    if (
+      employeeLocationIds.length &&
+      !employeeLocationIds.includes(locationId)
+    ) {
       throw new BadRequestException(
         'Mitarbeiter ist dieser Filiale nicht zugewiesen',
       );

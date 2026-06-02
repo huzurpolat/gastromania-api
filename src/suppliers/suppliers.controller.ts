@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -13,19 +23,36 @@ import { SuppliersService } from './suppliers.service';
 
 @Controller('suppliers')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
-@Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Lager, Role.Einkauf)
+@Roles(
+  Role.PlatformAdmin,
+  Role.SuperAdmin,
+  Role.CompanyAdmin,
+  Role.RegionAdmin,
+  Role.Admin,
+  Role.Regionalleiter,
+  Role.Bereichsleiter,
+  Role.Filialleiter,
+  Role.Lager,
+  Role.Einkauf,
+)
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
   @Post()
   @Permissions('suppliers.create')
-  create(@Body() payload: CreateSupplierDto, @CurrentUser() user: AuthenticatedUser) {
+  create(
+    @Body() payload: CreateSupplierDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.suppliersService.create(payload, user);
   }
 
   @Get()
   @Permissions('suppliers.view')
-  findAll(@CurrentUser() user: AuthenticatedUser, @Query('locationId') locationId?: string) {
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+  ) {
     return this.suppliersService.findAll(user, locationId);
   }
 

@@ -15,7 +15,9 @@ export class RealtimeService {
     return this.events.asObservable();
   }
 
-  streamWhere(predicate: (event: MessageEvent) => boolean): Observable<MessageEvent> {
+  streamWhere(
+    predicate: (event: MessageEvent) => boolean,
+  ): Observable<MessageEvent> {
     return this.events.asObservable().pipe(filter(predicate));
   }
 

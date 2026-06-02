@@ -1,4 +1,10 @@
-import { IsEnum, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { StockMovementType } from '../schemas/stock-movement.schema';
 
 export class AdjustStockDto {

@@ -185,15 +185,18 @@ export class MobileService {
 
   async createOrder(actor: AuthenticatedUser, payload: CreateMobileOrderDto) {
     this.assertCanUseLocation(actor, payload.locationId);
-    return this.ordersService.create({
-      ...payload,
-      status: OrderStatus.New,
-      priority: payload.priority ?? OrderPriority.Normal,
-      paymentStatus: PaymentStatus.Open,
-      employeeId: actor.sub,
-      employeeName: actor.email,
-      items: payload.items,
-    }, actor);
+    return this.ordersService.create(
+      {
+        ...payload,
+        status: OrderStatus.New,
+        priority: payload.priority ?? OrderPriority.Normal,
+        paymentStatus: PaymentStatus.Open,
+        employeeId: actor.sub,
+        employeeName: actor.email,
+        items: payload.items,
+      },
+      actor,
+    );
   }
 
   async updateOrder(
@@ -383,7 +386,8 @@ export class MobileService {
     const day = query.date ? new Date(query.date) : new Date();
     const range = this.dayRange(day);
     const canSeeAll =
-      actor.roles.includes(Role.PlatformAdmin) || actor.roles.includes(Role.SuperAdmin);
+      actor.roles.includes(Role.PlatformAdmin) ||
+      actor.roles.includes(Role.SuperAdmin);
 
     if (canSeeAll) {
       return {
@@ -406,7 +410,10 @@ export class MobileService {
   }
 
   private assertCanUseLocation(actor: AuthenticatedUser, locationId: string) {
-    if (actor.roles.includes(Role.PlatformAdmin) || actor.roles.includes(Role.SuperAdmin))
+    if (
+      actor.roles.includes(Role.PlatformAdmin) ||
+      actor.roles.includes(Role.SuperAdmin)
+    )
       return;
     if (!(actor.locationIds ?? []).includes(locationId)) {
       throw new ForbiddenException('Kein Zugriff auf diese Filiale');
@@ -414,7 +421,10 @@ export class MobileService {
   }
 
   private actorLocationFilter(actor: AuthenticatedUser) {
-    if (actor.roles.includes(Role.PlatformAdmin) || actor.roles.includes(Role.SuperAdmin))
+    if (
+      actor.roles.includes(Role.PlatformAdmin) ||
+      actor.roles.includes(Role.SuperAdmin)
+    )
       return {};
     return { _id: { $in: actor.locationIds ?? [] } };
   }

@@ -9,7 +9,10 @@ import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { Location, LocationDocument } from '../locations/schemas/location.schema';
+import {
+  Location,
+  LocationDocument,
+} from '../locations/schemas/location.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateDutyShiftDto } from './dto/create-duty-shift.dto';
 import { UpdateDutyShiftDto } from './dto/update-duty-shift.dto';
@@ -36,7 +39,10 @@ export class DutySchedulesService {
       createDutyShiftDto.employeeId,
       createDutyShiftDto.locationId,
     );
-    this.assertValidTimeRange(createDutyShiftDto.startTime, createDutyShiftDto.endTime);
+    this.assertValidTimeRange(
+      createDutyShiftDto.startTime,
+      createDutyShiftDto.endTime,
+    );
 
     return this.dutyShiftModel.create({
       ...createDutyShiftDto,
@@ -61,13 +67,19 @@ export class DutySchedulesService {
     if (this.accessPolicy.isManagementRole(actor)) {
       Object.assign(
         query,
-        await this.accessPolicy.getScopedResourceFilter(actor, filters.locationId),
+        await this.accessPolicy.getScopedResourceFilter(
+          actor,
+          filters.locationId,
+        ),
       );
     } else {
       query.employeeId = actor.sub;
 
       if (filters.locationId) {
-        await this.accessPolicy.assertCanAccessLocation(actor, filters.locationId);
+        await this.accessPolicy.assertCanAccessLocation(
+          actor,
+          filters.locationId,
+        );
         query.locationId = filters.locationId;
       }
     }
@@ -90,14 +102,18 @@ export class DutySchedulesService {
 
     await this.assertCanManageShift(actor, existingShift.locationId);
 
-    const locationId = updateDutyShiftDto.locationId ?? existingShift.locationId;
-    const employeeId = updateDutyShiftDto.employeeId ?? existingShift.employeeId;
+    const locationId =
+      updateDutyShiftDto.locationId ?? existingShift.locationId;
+    const employeeId =
+      updateDutyShiftDto.employeeId ?? existingShift.employeeId;
 
     await this.assertCanManageShift(actor, locationId);
     await this.assertEmployeeCanWorkAtLocation(employeeId, locationId);
 
-    const startTime = updateDutyShiftDto.startTime ?? existingShift.startTime.toISOString();
-    const endTime = updateDutyShiftDto.endTime ?? existingShift.endTime.toISOString();
+    const startTime =
+      updateDutyShiftDto.startTime ?? existingShift.startTime.toISOString();
+    const endTime =
+      updateDutyShiftDto.endTime ?? existingShift.endTime.toISOString();
     this.assertValidTimeRange(startTime, endTime);
 
     const updatedShift = await this.dutyShiftModel
@@ -159,7 +175,10 @@ export class DutySchedulesService {
       ...(employee.locationId ? [employee.locationId] : []),
     ];
 
-    if (employeeLocationIds.length && !employeeLocationIds.includes(locationId)) {
+    if (
+      employeeLocationIds.length &&
+      !employeeLocationIds.includes(locationId)
+    ) {
       throw new BadRequestException(
         'Mitarbeiter ist dieser Filiale nicht zugewiesen',
       );
@@ -168,7 +187,9 @@ export class DutySchedulesService {
 
   private assertValidTimeRange(startTime: string, endTime: string): void {
     if (new Date(startTime).getTime() >= new Date(endTime).getTime()) {
-      throw new BadRequestException('Schichtende muss nach Schichtbeginn liegen');
+      throw new BadRequestException(
+        'Schichtende muss nach Schichtbeginn liegen',
+      );
     }
   }
 

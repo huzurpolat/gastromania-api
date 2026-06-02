@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AccessModule } from '../access/access.module';
-import { Checklist, ChecklistSchema } from '../checklists/schemas/checklist.schema';
+import {
+  Checklist,
+  ChecklistSchema,
+} from '../checklists/schemas/checklist.schema';
 import {
   DashboardNotification,
   DashboardNotificationSchema,

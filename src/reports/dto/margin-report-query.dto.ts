@@ -1,5 +1,11 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsIn, IsMongoId, IsOptional, IsString } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsMongoId,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export const marginReportRanges = [
   'today',

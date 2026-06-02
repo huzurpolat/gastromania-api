@@ -141,7 +141,10 @@ describe('RecipeInventoryService', () => {
       }),
     );
     expect(stockAlertModel.findOneAndUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stockItemId: 'stock-1', type: 'Mindestbestand' }),
+      expect.objectContaining({
+        stockItemId: 'stock-1',
+        type: 'Mindestbestand',
+      }),
       expect.objectContaining({ severity: 'critical' }),
       expect.objectContaining({ upsert: true }),
     );
@@ -180,7 +183,14 @@ describe('RecipeInventoryService', () => {
       {
         _id: 'order-2',
         locationId: 'loc-1',
-        items: [{ menuItemId: 'menu-cheeseburger', productId: 'legacy-id', name: 'Cheeseburger', quantity: 2 }],
+        items: [
+          {
+            menuItemId: 'menu-cheeseburger',
+            productId: 'legacy-id',
+            name: 'Cheeseburger',
+            quantity: 2,
+          },
+        ],
       } as never,
       'user-1',
     );

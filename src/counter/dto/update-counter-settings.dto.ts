@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { Transform, Type, type TransformFnParams } from 'class-transformer';
 import {
   IsBoolean,
   IsInt,
@@ -16,7 +16,7 @@ const optionalTrimString = (value: unknown): unknown => {
 };
 
 export class UpdateCounterSettingsDto {
-  @Transform(({ value }) =>
+  @Transform(({ value }: TransformFnParams): unknown =>
     typeof value === 'string' ? value.trim().toUpperCase() : value,
   )
   @IsOptional()
@@ -49,7 +49,9 @@ export class UpdateCounterSettingsDto {
   @IsBoolean()
   receiptPrinterEnabled?: boolean;
 
-  @Transform(({ value }) => optionalTrimString(value))
+  @Transform(({ value }: TransformFnParams): unknown =>
+    optionalTrimString(value),
+  )
   @IsOptional()
   @IsString()
   receiptFooter?: string;

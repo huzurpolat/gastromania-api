@@ -8,7 +8,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { Location, LocationDocument } from '../locations/schemas/location.schema';
+import {
+  Location,
+  LocationDocument,
+} from '../locations/schemas/location.schema';
 import { CreateWeeklyMenuDto } from './dto/create-weekly-menu.dto';
 import { UpdateWeeklyMenuDto } from './dto/update-weekly-menu.dto';
 import { WeeklyMenu, WeeklyMenuDocument } from './schemas/weekly-menu.schema';
@@ -52,7 +55,10 @@ export class WeeklyMenusService {
     filters: { locationId?: string; start?: string; end?: string },
   ): Promise<WeeklyMenuDocument[]> {
     const query: Record<string, unknown> =
-      await this.accessPolicy.getScopedResourceFilter(actor, filters.locationId);
+      await this.accessPolicy.getScopedResourceFilter(
+        actor,
+        filters.locationId,
+      );
 
     if (filters.start || filters.end) {
       query.weekStart = {
@@ -76,7 +82,10 @@ export class WeeklyMenusService {
       throw new NotFoundException('Wochenkarte nicht gefunden');
     }
 
-    await this.accessPolicy.assertCanManageLocation(actor, existingMenu.locationId);
+    await this.accessPolicy.assertCanManageLocation(
+      actor,
+      existingMenu.locationId,
+    );
     await this.accessPolicy.assertCanManageLocation(
       actor,
       updateWeeklyMenuDto.locationId ?? existingMenu.locationId,

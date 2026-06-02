@@ -13,7 +13,9 @@ describe('PickupNumberService', () => {
     assertCanManageLocation: jest.fn(),
   };
 
-  const execResult = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
+  const execResult = <T>(value: T) => ({
+    exec: jest.fn().mockResolvedValue(value),
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -43,7 +45,9 @@ describe('PickupNumberService', () => {
       }),
     );
 
-    await expect(service.nextPickupNumber('location-1', 'company-1')).resolves.toBe('B0007');
+    await expect(
+      service.nextPickupNumber('location-1', 'company-1'),
+    ).resolves.toBe('B0007');
   });
 
   it('creates default settings for a location', async () => {
@@ -56,15 +60,18 @@ describe('PickupNumberService', () => {
     settingsModel.findOneAndUpdate.mockReturnValue(execResult(settings));
 
     await expect(service.getSettings('location-1')).resolves.toBe(settings);
-    expect(settingsModel.findOneAndUpdate).toHaveBeenCalledWith(
-      { locationId: 'location-1' },
-      expect.objectContaining({
-        $setOnInsert: expect.objectContaining({
-          pickupPrefix: 'A',
-          dailyResetEnabled: true,
-        }),
-      }),
-      expect.objectContaining({ upsert: true }),
-    );
+    const [query, update, options] = settingsModel.findOneAndUpdate.mock
+      .calls[0] as [
+      { locationId: string },
+      { $setOnInsert: { pickupPrefix: string; dailyResetEnabled: boolean } },
+      { upsert: boolean },
+    ];
+
+    expect(query).toEqual({ locationId: 'location-1' });
+    expect(update.$setOnInsert).toMatchObject({
+      pickupPrefix: 'A',
+      dailyResetEnabled: true,
+    });
+    expect(options).toMatchObject({ upsert: true });
   });
 });

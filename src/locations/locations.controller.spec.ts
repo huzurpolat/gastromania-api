@@ -79,9 +79,9 @@ describe('LocationsController', () => {
   it('returns one location', async () => {
     locationsService.findOne.mockResolvedValue(location);
 
-    await expect(controller.findOne('6627d9a2c6f2d8f3e2b1a001', actor)).resolves.toBe(
-      location,
-    );
+    await expect(
+      controller.findOne('6627d9a2c6f2d8f3e2b1a001', actor),
+    ).resolves.toBe(location);
   });
 
   it('updates a location', async () => {
@@ -105,8 +105,8 @@ describe('LocationsController', () => {
   it('removes a location', async () => {
     locationsService.remove.mockResolvedValue(location);
 
-    await expect(controller.remove('6627d9a2c6f2d8f3e2b1a001', actor)).resolves.toBe(
-      location,
-    );
+    await expect(
+      controller.remove('6627d9a2c6f2d8f3e2b1a001', actor),
+    ).resolves.toBe(location);
   });
 });

@@ -98,9 +98,9 @@ describe('LocationsService', () => {
       exec: jest.fn().mockResolvedValue(location),
     });
 
-    await expect(service.findOne('6627d9a2c6f2d8f3e2b1a001', actor)).resolves.toBe(
-      location,
-    );
+    await expect(
+      service.findOne('6627d9a2c6f2d8f3e2b1a001', actor),
+    ).resolves.toBe(location);
   });
 
   it('throws BadRequestException for an invalid id', async () => {
@@ -129,9 +129,9 @@ describe('LocationsService', () => {
       exec: jest.fn().mockResolvedValue(location),
     });
 
-    await expect(service.update('6627d9a2c6f2d8f3e2b1a001', dto, actor)).resolves.toBe(
-      location,
-    );
+    await expect(
+      service.update('6627d9a2c6f2d8f3e2b1a001', dto, actor),
+    ).resolves.toBe(location);
     expect(locationModel.findByIdAndUpdate).toHaveBeenCalledWith(
       '6627d9a2c6f2d8f3e2b1a001',
       dto,
@@ -147,9 +147,9 @@ describe('LocationsService', () => {
       exec: jest.fn().mockResolvedValue(location),
     });
 
-    await expect(service.remove('6627d9a2c6f2d8f3e2b1a001', actor)).resolves.toBe(
-      location,
-    );
+    await expect(
+      service.remove('6627d9a2c6f2d8f3e2b1a001', actor),
+    ).resolves.toBe(location);
   });
 
   it('returns NotFoundException for locations outside the actor scope', async () => {

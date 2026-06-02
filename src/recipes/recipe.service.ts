@@ -8,7 +8,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { StockItem, StockItemDocument } from '../stock/schemas/stock-item.schema';
+import {
+  StockItem,
+  StockItemDocument,
+} from '../stock/schemas/stock-item.schema';
 import { CreateRecipeDto, UpdateRecipeDto } from './dto/recipe.dto';
 import { RecipeCalculationService } from './recipe-calculation.service';
 import { RecipeInventoryService } from './recipe-inventory.service';
@@ -54,7 +57,10 @@ export class RecipeService {
     }));
   }
 
-  async findOne(id: string, actor?: AuthenticatedUser): Promise<RecipeDocument> {
+  async findOne(
+    id: string,
+    actor?: AuthenticatedUser,
+  ): Promise<RecipeDocument> {
     const recipe = await this.recipeModel.findById(id).exec();
     if (!recipe || (actor && !(await this.canReadRecipe(recipe, actor)))) {
       throw new NotFoundException('Rezept nicht gefunden');
@@ -228,11 +234,19 @@ export class RecipeService {
 
     if (locationId) {
       await this.accessPolicy.assertCanAccessLocation(actor, locationId);
-      await this.assertIngredientsInLocation(payload.ingredients ?? [], locationId);
+      await this.assertIngredientsInLocation(
+        payload.ingredients ?? [],
+        locationId,
+      );
     }
 
-    if (payload.companyId && !(await this.accessPolicy.canAccessCompany(actor, payload.companyId))) {
-      throw new ForbiddenException('Keine Berechtigung fuer dieses Unternehmen');
+    if (
+      payload.companyId &&
+      !(await this.accessPolicy.canAccessCompany(actor, payload.companyId))
+    ) {
+      throw new ForbiddenException(
+        'Keine Berechtigung fuer dieses Unternehmen',
+      );
     }
 
     return {
@@ -251,7 +265,9 @@ export class RecipeService {
         .select('locationId')
         .exec();
       if (!item || item.locationId !== locationId) {
-        throw new BadRequestException('Alle Rezeptzutaten muessen zum Rezeptstandort gehoeren');
+        throw new BadRequestException(
+          'Alle Rezeptzutaten muessen zum Rezeptstandort gehoeren',
+        );
       }
     }
   }
@@ -284,12 +300,19 @@ export class RecipeService {
       return true;
     }
 
-    const readableLocationIds = await this.accessPolicy.getReadableLocationIds(actor);
+    const readableLocationIds =
+      await this.accessPolicy.getReadableLocationIds(actor);
     const stockItems = await this.stockItemModel
-      .find({ _id: { $in: recipe.ingredients.map((ingredient) => ingredient.stockItemId) } })
+      .find({
+        _id: {
+          $in: recipe.ingredients.map((ingredient) => ingredient.stockItemId),
+        },
+      })
       .select('locationId')
       .exec();
 
-    return stockItems.every((item) => readableLocationIds.includes(item.locationId));
+    return stockItems.every((item) =>
+      readableLocationIds.includes(item.locationId),
+    );
   }
 }

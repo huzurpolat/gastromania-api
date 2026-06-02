@@ -10,7 +10,10 @@ import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { hasAnyRole } from '../auth/role-utils';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { MenuItem, MenuItemDocument } from '../menu-items/schemas/menu-item.schema';
+import {
+  MenuItem,
+  MenuItemDocument,
+} from '../menu-items/schemas/menu-item.schema';
 import {
   CourseType,
   Order,
@@ -45,6 +48,12 @@ export interface CounterOrderFilters {
   paymentStatus?: PaymentStatus;
   date?: string;
   q?: string;
+}
+
+export interface CounterReportFilters {
+  locationId?: string;
+  from?: string;
+  to?: string;
 }
 
 @Injectable()
@@ -93,7 +102,9 @@ export class CounterOrderService {
       const menuItem = menuItemById.get(item.menuItemId);
 
       if (!menuItem) {
-        throw new BadRequestException(`Menueartikel ${item.menuItemId} ist nicht verfuegbar`);
+        throw new BadRequestException(
+          `Menueartikel ${item.menuItemId} ist nicht verfuegbar`,
+        );
       }
 
       const price = menuItem.sellingPrice ?? menuItem.price;
@@ -114,7 +125,9 @@ export class CounterOrderService {
         status: OrderItemStatus.Open,
         productionArea:
           item.productionArea ??
-          (menuItem.isKitchenItem ? ProductionArea.Kitchen : ProductionArea.Counter),
+          (menuItem.isKitchenItem
+            ? ProductionArea.Kitchen
+            : ProductionArea.Counter),
         courseType: item.courseType ?? this.courseTypeFor(menuItem.category),
         specialRequests,
         allergens: item.allergens ?? [],
@@ -213,21 +226,46 @@ export class CounterOrderService {
     if (dto.status === OrderStatus.Ready) {
       order.calledAt = undefined;
     }
-    if (dto.status === OrderStatus.Served || dto.status === OrderStatus.Closed) {
+    if (
+      dto.status === OrderStatus.Served ||
+      dto.status === OrderStatus.Closed
+    ) {
       order.completedAt = new Date();
       order.completedBy = actor.sub;
     }
     if (dto.status === OrderStatus.Cancelled) {
-      await this.cancel(id, { reason: dto.reason ?? 'Statuswechsel auf Storniert' }, actor);
+      await this.cancel(
+        id,
+        { reason: dto.reason ?? 'Statuswechsel auf Storniert' },
+        actor,
+      );
       return this.findOne(id, actor);
     }
 
     const saved = await order.save();
-    await this.log(saved, previousStatus, dto.status, 'counter.order.status.changed', actor, dto.reason);
+    await this.log(
+      saved,
+      previousStatus,
+      dto.status,
+      'counter.order.status.changed',
+      actor,
+      dto.reason,
+    );
     this.publish('counter.order.status.changed', saved, actor, {
       previousStatus,
       nextStatus: dto.status,
     });
+    this.publish('counter.order.statusChanged', saved, actor, {
+      previousStatus,
+      nextStatus: dto.status,
+    });
+    this.publish('counter.order.updated', saved, actor, {
+      previousStatus,
+      nextStatus: dto.status,
+    });
+    if (dto.status === OrderStatus.Ready) {
+      this.publish('counter.order.ready', saved, actor, { previousStatus });
+    }
     this.publish('order.status.changed', saved, actor, {
       previousStatus,
       nextStatus: dto.status,
@@ -236,16 +274,33 @@ export class CounterOrderService {
     return saved;
   }
 
+  async history(id: string, actor: AuthenticatedUser) {
+    const order = await this.findOne(id, actor);
+
+    return this.logModel
+      .find({ orderId: order._id.toString() })
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
   async call(id: string, actor: AuthenticatedUser): Promise<OrderDocument> {
     const order = await this.findOne(id, actor);
 
     if (order.status !== OrderStatus.Ready) {
-      throw new BadRequestException('Nur ausgabebereite Bestellungen koennen aufgerufen werden');
+      throw new BadRequestException(
+        'Nur ausgabebereite Bestellungen koennen aufgerufen werden',
+      );
     }
 
     order.calledAt = new Date();
     const saved = await order.save();
-    await this.log(saved, order.status, order.status, 'counter.order.called', actor);
+    await this.log(
+      saved,
+      order.status,
+      order.status,
+      'counter.order.called',
+      actor,
+    );
     this.publish('counter.order.called', saved, actor);
     this.publish('order.called', saved, actor);
 
@@ -266,13 +321,23 @@ export class CounterOrderService {
 
   async complete(id: string, actor: AuthenticatedUser): Promise<OrderDocument> {
     const order = await this.findOne(id, actor);
-    const settings = await this.pickupNumbers.getSettings(order.locationId, actor);
+    const settings = await this.pickupNumbers.getSettings(
+      order.locationId,
+      actor,
+    );
 
-    if (settings.requirePaymentBeforeComplete && order.paymentStatus !== PaymentStatus.Paid) {
-      throw new BadRequestException('Bestellung muss vor Abschluss bezahlt sein');
+    if (
+      settings.requirePaymentBeforeComplete &&
+      order.paymentStatus !== PaymentStatus.Paid
+    ) {
+      throw new BadRequestException(
+        'Bestellung muss vor Abschluss bezahlt sein',
+      );
     }
     if (![OrderStatus.Ready, OrderStatus.Served].includes(order.status)) {
-      throw new BadRequestException('Nur fertige Bestellungen koennen abgeschlossen werden');
+      throw new BadRequestException(
+        'Nur fertige Bestellungen koennen abgeschlossen werden',
+      );
     }
 
     const previousStatus = order.status;
@@ -285,7 +350,13 @@ export class CounterOrderService {
     };
 
     const saved = await order.save();
-    await this.log(saved, previousStatus, saved.status, 'counter.order.completed', actor);
+    await this.log(
+      saved,
+      previousStatus,
+      saved.status,
+      'counter.order.completed',
+      actor,
+    );
     this.publish('counter.order.completed', saved, actor, { previousStatus });
     this.publish('order.completed', saved, actor, { previousStatus });
 
@@ -300,12 +371,20 @@ export class CounterOrderService {
     const order = await this.findOne(id, actor);
 
     if ([OrderStatus.Closed, OrderStatus.Cancelled].includes(order.status)) {
-      throw new BadRequestException('Bestellung kann nicht mehr storniert werden');
+      throw new BadRequestException(
+        'Bestellung kann nicht mehr storniert werden',
+      );
     }
 
     const previousStatus = order.status;
-    if ((order.inventoryDeducted || order.inventoryConsumedAt) && !order.inventoryReversedAt) {
-      const result = await this.recipeInventoryService.reverseOrder(order, actor.sub);
+    if (
+      (order.inventoryDeducted || order.inventoryConsumedAt) &&
+      !order.inventoryReversedAt
+    ) {
+      const result = await this.recipeInventoryService.reverseOrder(
+        order,
+        actor.sub,
+      );
       order.inventoryReversedAt = new Date();
       order.inventoryMovementIds = [
         ...(order.inventoryMovementIds ?? []),
@@ -323,7 +402,8 @@ export class CounterOrderService {
     order.cancelledBy = actor.sub;
     order.cancelReason = dto.reason;
     order.refundTotal = paidAmount;
-    order.paymentStatus = paidAmount > 0 ? PaymentStatus.Refunded : PaymentStatus.Cancelled;
+    order.paymentStatus =
+      paidAmount > 0 ? PaymentStatus.Refunded : PaymentStatus.Cancelled;
     order.items = order.items.map((item) => ({
       ...item,
       status: OrderItemStatus.Cancelled,
@@ -332,7 +412,14 @@ export class CounterOrderService {
     }));
 
     const saved = await order.save();
-    await this.log(saved, previousStatus, OrderStatus.Cancelled, 'counter.order.cancelled', actor, dto.reason);
+    await this.log(
+      saved,
+      previousStatus,
+      OrderStatus.Cancelled,
+      'counter.order.cancelled',
+      actor,
+      dto.reason,
+    );
     this.publish('counter.order.cancelled', saved, actor, { previousStatus });
     this.publish('order.cancelled', saved, actor, { previousStatus });
 
@@ -342,11 +429,16 @@ export class CounterOrderService {
   async pickupDisplay(actor: AuthenticatedUser, locationId?: string) {
     const query = await this.baseQuery(actor, locationId);
     query.status = { $in: this.activeStatuses };
-    const orders = await this.orderModel.find(query).sort({ createdAt: 1 }).exec();
+    const orders = await this.orderModel
+      .find(query)
+      .sort({ createdAt: 1 })
+      .exec();
 
     return {
       preparing: orders.filter((order) =>
-        [OrderStatus.New, OrderStatus.Accepted, OrderStatus.Preparing].includes(order.status),
+        [OrderStatus.New, OrderStatus.Accepted, OrderStatus.Preparing].includes(
+          order.status,
+        ),
       ),
       ready: orders.filter((order) => order.status === OrderStatus.Ready),
       called: orders.filter((order) => Boolean(order.calledAt)),
@@ -358,21 +450,144 @@ export class CounterOrderService {
     const todayQuery = await this.baseQuery(actor, locationId);
     todayQuery.createdAt = this.dayRange(new Date().toISOString());
     const orders = await this.orderModel.find(todayQuery).exec();
-    const openOrders = orders.filter((order) => this.activeStatuses.includes(order.status));
-    const readyOrders = orders.filter((order) => order.status === OrderStatus.Ready);
-    const unpaidOrders = orders.filter((order) => order.paymentStatus !== PaymentStatus.Paid);
+    const openOrders = orders.filter((order) =>
+      this.activeStatuses.includes(order.status),
+    );
+    const readyOrders = orders.filter(
+      (order) => order.status === OrderStatus.Ready,
+    );
+    const unpaidOrders = orders.filter(
+      (order) => order.paymentStatus !== PaymentStatus.Paid,
+    );
+    const cancelledOrders = orders.filter(
+      (order) => order.status === OrderStatus.Cancelled,
+    );
 
     return {
       orderCount: orders.length,
       openOrders: openOrders.length,
       readyOrders: readyOrders.length,
       unpaidOrders: unpaidOrders.length,
+      cancelledOrders: cancelledOrders.length,
       revenue: this.roundMoney(
         orders
           .filter((order) => order.paymentStatus === PaymentStatus.Paid)
           .reduce((sum, order) => sum + (order.total ?? 0), 0),
       ),
       averageWaitMinutes: this.averageWaitMinutes(openOrders),
+    };
+  }
+
+  async report(actor: AuthenticatedUser, filters: CounterReportFilters = {}) {
+    const query = await this.baseQuery(actor, filters.locationId);
+    query.createdAt = this.dateRange(filters.from, filters.to);
+    const orders = await this.orderModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .exec();
+    const paidOrders = orders.filter(
+      (order) => order.paymentStatus === PaymentStatus.Paid,
+    );
+    const cancelledOrders = orders.filter(
+      (order) => order.status === OrderStatus.Cancelled,
+    );
+    const itemStats = new Map<
+      string,
+      { name: string; quantity: number; revenue: number }
+    >();
+    const paymentMethods = new Map<string, { count: number; amount: number }>();
+
+    for (const order of orders) {
+      for (const item of order.items ?? []) {
+        const key = item.menuItemId ?? item.productId ?? item.name;
+        const current = itemStats.get(key) ?? {
+          name: item.name,
+          quantity: 0,
+          revenue: 0,
+        };
+        current.quantity += item.quantity;
+        current.revenue += item.totalPrice ?? item.price * item.quantity;
+        itemStats.set(key, current);
+      }
+
+      if (order.paymentStatus === PaymentStatus.Paid) {
+        const method = order.paymentMethod ?? 'unknown';
+        const current = paymentMethods.get(method) ?? { count: 0, amount: 0 };
+        current.count += 1;
+        current.amount += order.total ?? 0;
+        paymentMethods.set(method, current);
+      }
+    }
+
+    return {
+      filters,
+      summary: {
+        orderCount: orders.length,
+        revenue: this.roundMoney(
+          paidOrders.reduce((sum, order) => sum + (order.total ?? 0), 0),
+        ),
+        averageWaitMinutes: this.averageWaitMinutes(orders),
+        cancellationRate: orders.length
+          ? cancelledOrders.length / orders.length
+          : 0,
+        cancelledOrders: cancelledOrders.length,
+        unpaidOrders: orders.filter(
+          (order) => order.paymentStatus !== PaymentStatus.Paid,
+        ).length,
+      },
+      paymentMethods: [...paymentMethods.entries()].map(([method, stat]) => ({
+        method,
+        count: stat.count,
+        amount: this.roundMoney(stat.amount),
+      })),
+      topItems: [...itemStats.entries()]
+        .map(([menuItemId, stat]) => ({
+          menuItemId,
+          name: stat.name,
+          quantity: stat.quantity,
+          revenue: this.roundMoney(stat.revenue),
+        }))
+        .sort((first, second) => second.revenue - first.revenue)
+        .slice(0, 10),
+      orders,
+    };
+  }
+
+  async reportCsv(
+    actor: AuthenticatedUser,
+    filters: CounterReportFilters = {},
+  ) {
+    const report = await this.report(actor, filters);
+    const header = [
+      'Abholnummer',
+      'Status',
+      'Zahlungsstatus',
+      'Betrag',
+      'Artikel',
+      'Erstellt',
+    ];
+    const rows = report.orders.map((order) => [
+      order.pickupNumber ?? order.orderNumber,
+      order.status,
+      order.paymentStatus ?? '',
+      this.roundMoney(order.total ?? 0).toFixed(2),
+      (order.items ?? [])
+        .map((item) => `${item.quantity}x ${item.name}`)
+        .join(' | '),
+      (
+        order as OrderDocument & { createdAt?: Date }
+      ).createdAt?.toISOString() ?? '',
+    ]);
+    const content = [header, ...rows]
+      .map((row) =>
+        row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(';'),
+      )
+      .join('\n');
+
+    return {
+      filename: `gastromania-counter-${new Date().toISOString().slice(0, 10)}.csv`,
+      contentType: 'text/csv',
+      content,
     };
   }
 
@@ -393,7 +608,10 @@ export class CounterOrderService {
     locationId?: string,
   ): Promise<CounterOrderQuery> {
     if (locationId) this.validateObjectId(locationId, 'Standort-ID');
-    const query = await this.accessPolicy.getScopedResourceFilter(actor, locationId);
+    const query = await this.accessPolicy.getScopedResourceFilter(
+      actor,
+      locationId,
+    );
 
     query.source = OrderSource.Counter;
     return query;
@@ -422,7 +640,10 @@ export class CounterOrderService {
     throw new ForbiddenException('Keine Berechtigung fuer Thekenbestellungen');
   }
 
-  private assertCanSetStatus(actor: AuthenticatedUser, status: OrderStatus): void {
+  private assertCanSetStatus(
+    actor: AuthenticatedUser,
+    status: OrderStatus,
+  ): void {
     if (
       hasAnyRole(actor.roles, [
         Role.PlatformAdmin,
@@ -441,7 +662,9 @@ export class CounterOrderService {
     }
 
     if (
-      [OrderStatus.Accepted, OrderStatus.Preparing, OrderStatus.Ready].includes(status) &&
+      [OrderStatus.Accepted, OrderStatus.Preparing, OrderStatus.Ready].includes(
+        status,
+      ) &&
       hasAnyRole(actor.roles, [Role.Kueche, Role.Bar, Role.Theke])
     ) {
       return;
@@ -460,10 +683,22 @@ export class CounterOrderService {
   private assertStatusTransition(from: OrderStatus, to: OrderStatus): void {
     const allowed: Record<OrderStatus, OrderStatus[]> = {
       [OrderStatus.Draft]: [OrderStatus.New, OrderStatus.Cancelled],
-      [OrderStatus.New]: [OrderStatus.Accepted, OrderStatus.Preparing, OrderStatus.Cancelled],
-      [OrderStatus.Accepted]: [OrderStatus.Preparing, OrderStatus.Ready, OrderStatus.Cancelled],
+      [OrderStatus.New]: [
+        OrderStatus.Accepted,
+        OrderStatus.Preparing,
+        OrderStatus.Cancelled,
+      ],
+      [OrderStatus.Accepted]: [
+        OrderStatus.Preparing,
+        OrderStatus.Ready,
+        OrderStatus.Cancelled,
+      ],
       [OrderStatus.Preparing]: [OrderStatus.Ready, OrderStatus.Cancelled],
-      [OrderStatus.Ready]: [OrderStatus.Served, OrderStatus.Closed, OrderStatus.Cancelled],
+      [OrderStatus.Ready]: [
+        OrderStatus.Served,
+        OrderStatus.Closed,
+        OrderStatus.Cancelled,
+      ],
       [OrderStatus.Served]: [OrderStatus.Closed],
       [OrderStatus.Closed]: [],
       [OrderStatus.Cancelled]: [],
@@ -471,7 +706,9 @@ export class CounterOrderService {
 
     if (from === to) return;
     if (!allowed[from]?.includes(to)) {
-      throw new BadRequestException(`Statuswechsel von ${from} zu ${to} ist nicht erlaubt`);
+      throw new BadRequestException(
+        `Statuswechsel von ${from} zu ${to} ist nicht erlaubt`,
+      );
     }
   }
 
@@ -480,7 +717,10 @@ export class CounterOrderService {
     actor: AuthenticatedUser,
   ): Promise<void> {
     if (order.inventoryDeducted || order.inventoryConsumedAt) return;
-    const result = await this.recipeInventoryService.consumeOrder(order, actor.sub);
+    const result = await this.recipeInventoryService.consumeOrder(
+      order,
+      actor.sub,
+    );
 
     order.inventoryDeducted = true;
     order.inventoryDeductedAt = new Date();
@@ -533,14 +773,19 @@ export class CounterOrderService {
       companyId: order.companyId ?? actor.companyId,
       changedBy: actor.sub,
       changedByRole: actor.roles?.[0] ?? 'unknown',
-      channels: this.channels(order.companyId ?? actor.companyId, order.locationId),
+      channels: this.channels(
+        order.companyId ?? actor.companyId,
+        order.locationId,
+      ),
       ...extra,
     });
   }
 
-  private calculateTotals(
-    items: Pick<OrderItem, 'quantity' | 'price'>[],
-  ): { subtotal: number; tax: number; total: number } {
+  private calculateTotals(items: Pick<OrderItem, 'quantity' | 'price'>[]): {
+    subtotal: number;
+    tax: number;
+    total: number;
+  } {
     const subtotal = items.reduce(
       (sum, item) => sum + this.roundMoney(item.quantity * item.price),
       0,
@@ -555,8 +800,10 @@ export class CounterOrderService {
 
   private courseTypeFor(category: string): CourseType {
     const normalized = category.toLowerCase();
-    if (normalized.includes('getraenk') || normalized.includes('drink')) return CourseType.Drink;
-    if (normalized.includes('vorspeise') || normalized.includes('starter')) return CourseType.Starter;
+    if (normalized.includes('getraenk') || normalized.includes('drink'))
+      return CourseType.Drink;
+    if (normalized.includes('vorspeise') || normalized.includes('starter'))
+      return CourseType.Starter;
     if (normalized.includes('dessert')) return CourseType.Dessert;
     return CourseType.Main;
   }
@@ -566,6 +813,20 @@ export class CounterOrderService {
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
+    return { $gte: start, $lt: end };
+  }
+
+  private dateRange(from?: string, to?: string): { $gte: Date; $lt: Date } {
+    const start = from ? new Date(from) : new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = to ? new Date(to) : new Date(start);
+
+    if (to) {
+      end.setHours(23, 59, 59, 999);
+    } else {
+      end.setDate(end.getDate() + 1);
+    }
+
     return { $gte: start, $lt: end };
   }
 
@@ -583,14 +844,18 @@ export class CounterOrderService {
     if (!orders.length) return 0;
     const now = Date.now();
     const total = orders.reduce((sum, order) => {
-      const createdAt = (order as OrderDocument & { createdAt?: Date }).createdAt;
+      const createdAt = (order as OrderDocument & { createdAt?: Date })
+        .createdAt;
       return sum + (createdAt ? now - createdAt.getTime() : 0);
     }, 0);
 
     return Math.round(total / orders.length / 60000);
   }
 
-  private channels(companyId: string | undefined, locationId: string): string[] {
+  private channels(
+    companyId: string | undefined,
+    locationId: string,
+  ): string[] {
     return [
       ...(companyId ? [`company:${companyId}`] : []),
       `location:${locationId}`,

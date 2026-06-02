@@ -38,7 +38,8 @@ export class CounterOrderStatusLog {
   userRole?: string;
 }
 
-export const CounterOrderStatusLogSchema =
-  SchemaFactory.createForClass(CounterOrderStatusLog);
+export const CounterOrderStatusLogSchema = SchemaFactory.createForClass(
+  CounterOrderStatusLog,
+);
 
 CounterOrderStatusLogSchema.index({ locationId: 1, createdAt: -1 });

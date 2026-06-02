@@ -329,7 +329,10 @@ export class UsersService {
     }
 
     const roles = payload.roles ?? existingUser?.roles ?? [];
-    if (!roles.length || roles.some((role) => !this.accessPolicy.canAssignRole(actor, role))) {
+    if (
+      !roles.length ||
+      roles.some((role) => !this.accessPolicy.canAssignRole(actor, role))
+    ) {
       throw new ForbiddenException('Diese Rolle darf nicht vergeben werden');
     }
   }

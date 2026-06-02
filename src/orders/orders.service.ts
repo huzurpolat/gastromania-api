@@ -67,7 +67,10 @@ export class OrdersService {
     actor: AuthenticatedUser,
   ): Promise<OrderDocument> {
     this.validateObjectId(createOrderDto.locationId, 'Standort-ID');
-    await this.accessPolicy.assertCanAccessLocation(actor, createOrderDto.locationId);
+    await this.accessPolicy.assertCanAccessLocation(
+      actor,
+      createOrderDto.locationId,
+    );
     if (createOrderDto.tableId) {
       this.validateObjectId(createOrderDto.tableId, 'Tisch-ID');
     }
@@ -167,7 +170,8 @@ export class OrdersService {
 
     if (
       !order ||
-      (actor && !(await this.accessPolicy.canAccessLocation(actor, order.locationId)))
+      (actor &&
+        !(await this.accessPolicy.canAccessLocation(actor, order.locationId)))
     ) {
       throw new NotFoundException('Bestellung nicht gefunden');
     }
@@ -182,11 +186,17 @@ export class OrdersService {
   ): Promise<OrderDocument> {
     this.validateObjectId(id, 'Bestell-ID');
     const currentOrder = await this.findOne(id, actor);
-    await this.accessPolicy.assertCanAccessLocation(actor, currentOrder.locationId);
+    await this.accessPolicy.assertCanAccessLocation(
+      actor,
+      currentOrder.locationId,
+    );
 
     if (updateOrderDto.locationId) {
       this.validateObjectId(updateOrderDto.locationId, 'Standort-ID');
-      await this.accessPolicy.assertCanAccessLocation(actor, updateOrderDto.locationId);
+      await this.accessPolicy.assertCanAccessLocation(
+        actor,
+        updateOrderDto.locationId,
+      );
     }
 
     if (updateOrderDto.tableId) {
@@ -252,7 +262,10 @@ export class OrdersService {
       await this.reverseOrderInventory(updatedOrder, actor.sub);
     } else if (this.shouldDeductInventory(currentOrder, updatedOrder)) {
       await this.deductOrderInventory(updatedOrder, actor.sub);
-    } else if (updateOrderDto.items && this.hasInventoryDeduction(currentOrder)) {
+    } else if (
+      updateOrderDto.items &&
+      this.hasInventoryDeduction(currentOrder)
+    ) {
       await this.adjustOrderInventory(currentOrder, updatedOrder, actor.sub);
     }
 
@@ -281,10 +294,7 @@ export class OrdersService {
     return this.update(id, { status: OrderStatus.Accepted }, actor);
   }
 
-  async markPaid(
-    id: string,
-    actor: AuthenticatedUser,
-  ): Promise<OrderDocument> {
+  async markPaid(id: string, actor: AuthenticatedUser): Promise<OrderDocument> {
     return this.update(
       id,
       { paymentStatus: PaymentStatus.Paid, status: OrderStatus.Closed },
@@ -292,10 +302,7 @@ export class OrdersService {
     );
   }
 
-  async close(
-    id: string,
-    actor: AuthenticatedUser,
-  ): Promise<OrderDocument> {
+  async close(id: string, actor: AuthenticatedUser): Promise<OrderDocument> {
     return this.update(id, { status: OrderStatus.Closed }, actor);
   }
 
@@ -365,7 +372,14 @@ export class OrdersService {
 
     const saved = await order.save();
     await this.syncTableStatus(saved, false, actor, 'table.status.changed');
-    await this.writeItemStatusLog(saved, itemId, previousStatus, dto.status, actor, note);
+    await this.writeItemStatusLog(
+      saved,
+      itemId,
+      previousStatus,
+      dto.status,
+      actor,
+      note,
+    );
 
     const eventPayload = {
       companyId: saved.companyId ?? actor.companyId,
@@ -381,7 +395,10 @@ export class OrdersService {
       changedAt: changedAt.toISOString(),
       orderStatus: saved.status,
       order: saved,
-      channels: this.eventChannels(saved.companyId ?? actor.companyId, saved.locationId),
+      channels: this.eventChannels(
+        saved.companyId ?? actor.companyId,
+        saved.locationId,
+      ),
     };
 
     this.realtimeService.publish('order.item.status.changed', eventPayload);
@@ -397,7 +414,10 @@ export class OrdersService {
         changedByRole,
         changedAt: changedAt.toISOString(),
         order: saved,
-        channels: this.eventChannels(saved.companyId ?? actor.companyId, saved.locationId),
+        channels: this.eventChannels(
+          saved.companyId ?? actor.companyId,
+          saved.locationId,
+        ),
       });
     }
 
@@ -420,7 +440,12 @@ export class OrdersService {
     }
 
     this.realtimeService.publish('order.cancelled', deletedOrder);
-    await this.syncTableStatus(deletedOrder, true, actor, 'table.status.changed');
+    await this.syncTableStatus(
+      deletedOrder,
+      true,
+      actor,
+      'table.status.changed',
+    );
 
     return deletedOrder;
   }
@@ -436,7 +461,9 @@ export class OrdersService {
     );
   }
 
-  private hasInventoryDeduction(order: Pick<OrderDocument, 'inventoryDeducted' | 'inventoryConsumedAt'>): boolean {
+  private hasInventoryDeduction(
+    order: Pick<OrderDocument, 'inventoryDeducted' | 'inventoryConsumedAt'>,
+  ): boolean {
     return Boolean(order.inventoryDeducted || order.inventoryConsumedAt);
   }
 
@@ -444,7 +471,10 @@ export class OrdersService {
     order: OrderDocument,
     actorId: string,
   ): Promise<void> {
-    const result = await this.recipeInventoryService.consumeOrder(order, actorId);
+    const result = await this.recipeInventoryService.consumeOrder(
+      order,
+      actorId,
+    );
     order.inventoryDeducted = true;
     order.inventoryDeductedAt = new Date();
     order.inventoryConsumedAt = order.inventoryDeductedAt;
@@ -463,7 +493,10 @@ export class OrdersService {
     order: OrderDocument,
     actorId: string,
   ): Promise<void> {
-    const result = await this.recipeInventoryService.reverseOrder(order, actorId);
+    const result = await this.recipeInventoryService.reverseOrder(
+      order,
+      actorId,
+    );
     order.inventoryReversedAt = new Date();
     order.inventoryMovementIds = [
       ...(order.inventoryMovementIds ?? []),
@@ -506,9 +539,11 @@ export class OrdersService {
     return [...new Set(values.filter(Boolean))];
   }
 
-  private calculateTotals(
-    items: Pick<OrderItem, 'quantity' | 'price'>[],
-  ): { subtotal: number; tax: number; total: number } {
+  private calculateTotals(items: Pick<OrderItem, 'quantity' | 'price'>[]): {
+    subtotal: number;
+    tax: number;
+    total: number;
+  } {
     const subtotal = items.reduce(
       (sum, item) => sum + this.calculateItemTotal(item),
       0,
@@ -562,7 +597,9 @@ export class OrdersService {
 
     const activeOrders = await this.getActiveOrdersForTable(order.tableId);
     const status = this.getTableStatusForOrders(activeOrders, order, removed);
-    const activeOrderIds = activeOrders.map((activeOrder) => activeOrder._id.toString());
+    const activeOrderIds = activeOrders.map((activeOrder) =>
+      activeOrder._id.toString(),
+    );
     const currentTotal = activeOrders.reduce(
       (sum, activeOrder) => sum + (activeOrder.total ?? 0),
       0,
@@ -573,8 +610,8 @@ export class OrdersService {
     );
     const waitingSince = this.getTableWaitingSince(activeOrders);
     const assignedWaiterId =
-      activeOrders.find((activeOrder) => activeOrder.assignedWaiterId)?.assignedWaiterId ??
-      undefined;
+      activeOrders.find((activeOrder) => activeOrder.assignedWaiterId)
+        ?.assignedWaiterId ?? undefined;
     const changedAt = new Date();
 
     const updatedTable = await this.tableModel
@@ -598,19 +635,32 @@ export class OrdersService {
     }
 
     if (table.status !== status) {
-      await this.writeTableStatusLog(updatedTable, table.status, status, actor, {
-        orderId: order._id?.toString(),
-        reason: eventName,
-        changedAt,
-      });
+      await this.writeTableStatusLog(
+        updatedTable,
+        table.status,
+        status,
+        actor,
+        {
+          orderId: order._id?.toString(),
+          reason: eventName,
+          changedAt,
+        },
+      );
     }
 
-    this.publishTableStatusEvent(eventName, updatedTable, table.status, status, actor, {
-      orderId: order._id?.toString(),
-      orderStatus: order.status,
-      paymentStatus: order.paymentStatus,
-      changedAt,
-    });
+    this.publishTableStatusEvent(
+      eventName,
+      updatedTable,
+      table.status,
+      status,
+      actor,
+      {
+        orderId: order._id?.toString(),
+        orderStatus: order.status,
+        paymentStatus: order.paymentStatus,
+        changedAt,
+      },
+    );
 
     if (eventName !== 'table.status.changed') {
       this.publishTableStatusEvent(
@@ -628,14 +678,24 @@ export class OrdersService {
       );
     }
 
-    const mappedEvent = this.getTableEventForOrderStatus(order.status, order.paymentStatus);
+    const mappedEvent = this.getTableEventForOrderStatus(
+      order.status,
+      order.paymentStatus,
+    );
     if (mappedEvent && mappedEvent !== eventName) {
-      this.publishTableStatusEvent(mappedEvent, updatedTable, table.status, status, actor, {
-        orderId: order._id?.toString(),
-        orderStatus: order.status,
-        paymentStatus: order.paymentStatus,
-        changedAt,
-      });
+      this.publishTableStatusEvent(
+        mappedEvent,
+        updatedTable,
+        table.status,
+        status,
+        actor,
+        {
+          orderId: order._id?.toString(),
+          orderStatus: order.status,
+          paymentStatus: order.paymentStatus,
+          changedAt,
+        },
+      );
     }
   }
 
@@ -666,7 +726,9 @@ export class OrdersService {
     }
   }
 
-  private async getActiveOrdersForTable(tableId: string): Promise<OrderDocument[]> {
+  private async getActiveOrdersForTable(
+    tableId: string,
+  ): Promise<OrderDocument[]> {
     return this.orderModel
       .find({
         tableId,
@@ -691,7 +753,9 @@ export class OrdersService {
         : TableStatus.Free;
     }
 
-    if (activeOrders.some((order) => order.paymentStatus === PaymentStatus.Paid)) {
+    if (
+      activeOrders.some((order) => order.paymentStatus === PaymentStatus.Paid)
+    ) {
       return TableStatus.Paid;
     }
     if (activeOrders.some((order) => order.status === OrderStatus.Served)) {
@@ -706,20 +770,30 @@ export class OrdersService {
     if (activeOrders.some((order) => order.status === OrderStatus.Accepted)) {
       return TableStatus.OrderSent;
     }
-    if (activeOrders.some((order) => [OrderStatus.Draft, OrderStatus.New].includes(order.status))) {
+    if (
+      activeOrders.some((order) =>
+        [OrderStatus.Draft, OrderStatus.New].includes(order.status),
+      )
+    ) {
       return TableStatus.Ordering;
     }
 
-    return this.getTableStatusForOrder(fallbackOrder.status, fallbackOrder.paymentStatus);
+    return this.getTableStatusForOrder(
+      fallbackOrder.status,
+      fallbackOrder.paymentStatus,
+    );
   }
 
-  private getTableWaitingSince(activeOrders: OrderDocument[]): Date | undefined {
+  private getTableWaitingSince(
+    activeOrders: OrderDocument[],
+  ): Date | undefined {
     const timestamps = activeOrders
-      .map((order) =>
-        order.statusTimestamps?.[OrderStatus.Accepted] ??
-        order.statusTimestamps?.[OrderStatus.Preparing] ??
-        order.statusTimestamps?.[OrderStatus.New] ??
-        (order as OrderDocument & { createdAt?: Date }).createdAt,
+      .map(
+        (order) =>
+          order.statusTimestamps?.[OrderStatus.Accepted] ??
+          order.statusTimestamps?.[OrderStatus.Preparing] ??
+          order.statusTimestamps?.[OrderStatus.New] ??
+          (order as OrderDocument & { createdAt?: Date }).createdAt,
       )
       .filter((value): value is Date => Boolean(value))
       .sort((first, second) => first.getTime() - second.getTime());
@@ -759,7 +833,10 @@ export class OrdersService {
       return 'table.status.changed';
     }
 
-    return this.getTableEventForOrderStatus(status, paymentStatus) ?? 'table.status.changed';
+    return (
+      this.getTableEventForOrderStatus(status, paymentStatus) ??
+      'table.status.changed'
+    );
   }
 
   private async writeTableStatusLog(
@@ -808,19 +885,26 @@ export class OrdersService {
       lastStatusChange: table.lastStatusChange,
       changedBy: actor?.sub,
       changedByRole: actor ? this.primaryRole(actor) : 'system',
-      channels: this.eventChannels(table.companyId ?? actor?.companyId, table.locationId),
+      channels: this.eventChannels(
+        table.companyId ?? actor?.companyId,
+        table.locationId,
+      ),
       ...metadata,
     });
   }
 
   private aggregateOrderStatus(order: OrderDocument): OrderStatus {
-    const statuses = order.items.map((item) => item.status ?? OrderItemStatus.Open);
+    const statuses = order.items.map(
+      (item) => item.status ?? OrderItemStatus.Open,
+    );
 
     if (!statuses.length) {
       return order.status;
     }
 
-    const activeStatuses = statuses.filter((status) => status !== OrderItemStatus.Cancelled);
+    const activeStatuses = statuses.filter(
+      (status) => status !== OrderItemStatus.Cancelled,
+    );
 
     if (!activeStatuses.length) {
       return OrderStatus.Cancelled;
@@ -878,13 +962,19 @@ export class OrdersService {
     }
 
     if (
-      [OrderItemStatus.Started, OrderItemStatus.Preparing, OrderItemStatus.Ready].includes(status) &&
+      [
+        OrderItemStatus.Started,
+        OrderItemStatus.Preparing,
+        OrderItemStatus.Ready,
+      ].includes(status) &&
       hasAnyRole(actor.roles, [Role.Kueche, Role.Bar, Role.Theke])
     ) {
       return;
     }
 
-    throw new ForbiddenException('Keine Berechtigung fuer diesen Artikelstatus');
+    throw new ForbiddenException(
+      'Keine Berechtigung fuer diesen Artikelstatus',
+    );
   }
 
   private applyItemStatusAuditFields(
@@ -942,7 +1032,10 @@ export class OrdersService {
     return actor.roles?.[0] ?? 'unknown';
   }
 
-  private eventChannels(companyId: string | undefined, locationId: string): string[] {
+  private eventChannels(
+    companyId: string | undefined,
+    locationId: string,
+  ): string[] {
     return [
       ...(companyId ? [`company:${companyId}`] : []),
       `location:${locationId}`,

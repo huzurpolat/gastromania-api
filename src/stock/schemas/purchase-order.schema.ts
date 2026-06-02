@@ -54,7 +54,12 @@ export class PurchaseOrder {
   @Prop({ required: true, trim: true, index: true })
   orderNumber!: string;
 
-  @Prop({ type: String, enum: Object.values(PurchaseOrderStatus), default: PurchaseOrderStatus.Draft, index: true })
+  @Prop({
+    type: String,
+    enum: Object.values(PurchaseOrderStatus),
+    default: PurchaseOrderStatus.Draft,
+    index: true,
+  })
   status!: PurchaseOrderStatus;
 
   @Prop({ type: [PurchaseOrderLineSchema], default: [] })

@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
-import { StockAlert, StockAlertSchema } from '../stock/schemas/stock-alert.schema';
+import {
+  StockAlert,
+  StockAlertSchema,
+} from '../stock/schemas/stock-alert.schema';
 import {
   InventoryBatch,
   InventoryBatchSchema,

@@ -44,7 +44,9 @@ describe('permissions catalog', () => {
     expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).toContain('RegionAdmin');
     expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).toContain('Bereichsleiter');
     expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).not.toContain('Kueche');
-    expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).not.toContain('Tellerwaescher');
+    expect(Object.keys(DEFAULT_ROLE_PERMISSIONS)).not.toContain(
+      'Tellerwaescher',
+    );
 
     const invalidPermissions = Object.values(DEFAULT_ROLE_PERMISSIONS)
       .flat()
@@ -126,7 +128,11 @@ describe('permissions catalog', () => {
     );
 
     expect(DEFAULT_ROLE_PERMISSIONS.Schichtleiter).toEqual(
-      expect.not.arrayContaining(['users.create', 'users.update', 'roles.view']),
+      expect.not.arrayContaining([
+        'users.create',
+        'users.update',
+        'roles.view',
+      ]),
     );
   });
 });

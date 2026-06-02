@@ -32,11 +32,15 @@ export class CounterPaymentService {
     actor: AuthenticatedUser,
   ): Promise<OrderDocument> {
     if (order.status === OrderStatus.Cancelled) {
-      throw new BadRequestException('Stornierte Bestellung kann nicht bezahlt werden');
+      throw new BadRequestException(
+        'Stornierte Bestellung kann nicht bezahlt werden',
+      );
     }
 
     const alreadyPaid = this.paidAmount(order);
-    const amount = this.roundMoney(dto.amount ?? Math.max(order.total - alreadyPaid, 0));
+    const amount = this.roundMoney(
+      dto.amount ?? Math.max(order.total - alreadyPaid, 0),
+    );
 
     if (amount <= 0) {
       throw new BadRequestException('Zahlbetrag muss groesser als 0 sein');
@@ -58,9 +62,12 @@ export class CounterPaymentService {
     this.applyPaymentAmount(order, dto.method, amount);
     const nextPaid = this.paidAmount(order);
     order.paymentStatus =
-      nextPaid >= order.total ? PaymentStatus.Paid : PaymentStatus.PartiallyPaid;
+      nextPaid >= order.total
+        ? PaymentStatus.Paid
+        : PaymentStatus.PartiallyPaid;
     order.paymentMethod = this.resolvePaymentMethod(order, dto.method);
-    order.paidAt = order.paymentStatus === PaymentStatus.Paid ? new Date() : order.paidAt;
+    order.paidAt =
+      order.paymentStatus === PaymentStatus.Paid ? new Date() : order.paidAt;
     order.paidBy = actor.sub;
 
     const saved = await this.orderModel
@@ -74,8 +81,14 @@ export class CounterPaymentService {
       throw new BadRequestException('Zahlung konnte nicht gespeichert werden');
     }
 
-    this.realtimeService.publish('counter.order.paid', this.eventPayload(saved, actor));
-    this.realtimeService.publish('order.payment.changed', this.eventPayload(saved, actor));
+    this.realtimeService.publish(
+      'counter.order.paid',
+      this.eventPayload(saved, actor),
+    );
+    this.realtimeService.publish(
+      'order.payment.changed',
+      this.eventPayload(saved, actor),
+    );
 
     return saved;
   }
@@ -95,10 +108,16 @@ export class CounterPaymentService {
     method: PaymentMethod,
     amount: number,
   ): void {
-    if (method === PaymentMethod.Cash) order.cashAmount = this.roundMoney((order.cashAmount ?? 0) + amount);
-    else if (method === PaymentMethod.Card) order.cardAmount = this.roundMoney((order.cardAmount ?? 0) + amount);
-    else if (method === PaymentMethod.Online || method === PaymentMethod.Paypal) order.onlineAmount = this.roundMoney((order.onlineAmount ?? 0) + amount);
-    else if (method === PaymentMethod.Voucher) order.voucherAmount = this.roundMoney((order.voucherAmount ?? 0) + amount);
+    if (method === PaymentMethod.Cash)
+      order.cashAmount = this.roundMoney((order.cashAmount ?? 0) + amount);
+    else if (method === PaymentMethod.Card)
+      order.cardAmount = this.roundMoney((order.cardAmount ?? 0) + amount);
+    else if (method === PaymentMethod.Online || method === PaymentMethod.Paypal)
+      order.onlineAmount = this.roundMoney((order.onlineAmount ?? 0) + amount);
+    else if (method === PaymentMethod.Voucher)
+      order.voucherAmount = this.roundMoney(
+        (order.voucherAmount ?? 0) + amount,
+      );
     else order.otherAmount = this.roundMoney((order.otherAmount ?? 0) + amount);
   }
 
@@ -125,11 +144,17 @@ export class CounterPaymentService {
       locationId: order.locationId,
       companyId: order.companyId ?? actor.companyId,
       changedBy: actor.sub,
-      channels: this.channels(order.companyId ?? actor.companyId, order.locationId),
+      channels: this.channels(
+        order.companyId ?? actor.companyId,
+        order.locationId,
+      ),
     };
   }
 
-  private channels(companyId: string | undefined, locationId: string): string[] {
+  private channels(
+    companyId: string | undefined,
+    locationId: string,
+  ): string[] {
     return [
       ...(companyId ? [`company:${companyId}`] : []),
       `location:${locationId}`,

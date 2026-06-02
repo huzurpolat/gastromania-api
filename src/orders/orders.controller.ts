@@ -29,8 +29,22 @@ export class OrdersController {
 
   @Post()
   @Permissions('orders.create')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Theke)
-  create(@Body() createOrderDto: CreateOrderDto, @CurrentUser() user: AuthenticatedUser) {
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Theke,
+  )
+  create(
+    @Body() createOrderDto: CreateOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.ordersService.create(createOrderDto, user);
   }
 
@@ -177,35 +191,94 @@ export class OrdersController {
 
   @Post(':id/send-to-kitchen')
   @Permissions('orders.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Theke)
-  sendToKitchen(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Theke,
+  )
+  sendToKitchen(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.ordersService.sendToKitchen(id, user);
   }
 
   @Post(':id/mark-paid')
   @Permissions('orders.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Theke)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Theke,
+  )
   markPaid(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.markPaid(id, user);
   }
 
   @Post(':id/close')
   @Permissions('orders.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Theke)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Theke,
+  )
   close(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.close(id, user);
   }
 
   @Post(':id/release-table')
   @Permissions('orders.update')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter, Role.Service, Role.Theke)
-  releaseTable(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Service,
+    Role.Theke,
+  )
+  releaseTable(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.ordersService.releaseTable(id, user);
   }
 
   @Delete(':id')
   @Permissions('orders.cancel')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.RegionAdmin, Role.Admin, Role.Regionalleiter, Role.Bereichsleiter, Role.Filialleiter)
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.remove(id, user);
   }

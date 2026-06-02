@@ -74,7 +74,8 @@ export class PaymentSummary {
   differenceNote?: string;
 }
 
-export const PaymentSummarySchema = SchemaFactory.createForClass(PaymentSummary);
+export const PaymentSummarySchema =
+  SchemaFactory.createForClass(PaymentSummary);
 
 @Schema({ _id: false })
 export class OrderSummary {
@@ -184,8 +185,9 @@ export class DailyClosingAuditEntry {
   note?: string;
 }
 
-export const DailyClosingAuditEntrySchema =
-  SchemaFactory.createForClass(DailyClosingAuditEntry);
+export const DailyClosingAuditEntrySchema = SchemaFactory.createForClass(
+  DailyClosingAuditEntry,
+);
 
 @Schema({ _id: true })
 export class DailyClosingStatusHistoryEntry {
@@ -295,8 +297,5 @@ export class DailyClosing {
 
 export const DailyClosingSchema = SchemaFactory.createForClass(DailyClosing);
 
-DailyClosingSchema.index(
-  { locationId: 1, businessDate: 1 },
-  { unique: true },
-);
+DailyClosingSchema.index({ locationId: 1, businessDate: 1 }, { unique: true });
 DailyClosingSchema.index({ companyId: 1, regionId: 1, businessDate: -1 });

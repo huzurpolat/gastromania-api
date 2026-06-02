@@ -7,7 +7,10 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Role } from '../auth/enums/role.enum';
-import { hasAnyRole as hasAnyNormalizedRole, normalizeRoles } from '../auth/role-utils';
+import {
+  hasAnyRole as hasAnyNormalizedRole,
+  normalizeRoles,
+} from '../auth/role-utils';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { Company, CompanyDocument } from '../companies/schemas/company.schema';
 import {
@@ -92,7 +95,8 @@ export class AccessPolicyService {
     }
 
     if (
-      (this.isRegionAdmin(user) || this.hasAnyRole(user, [Role.Regionalleiter])) &&
+      (this.isRegionAdmin(user) ||
+        this.hasAnyRole(user, [Role.Regionalleiter])) &&
       user.regionIds?.length
     ) {
       return this.unique([
@@ -146,7 +150,9 @@ export class AccessPolicyService {
 
     const locationIds = await this.getReadableLocationIds(user);
 
-    return locationIds.length ? { _id: { $in: locationIds } } : { _id: { $in: [] } };
+    return locationIds.length
+      ? { _id: { $in: locationIds } }
+      : { _id: { $in: [] } };
   }
 
   async getScopedResourceFilter(
@@ -175,10 +181,15 @@ export class AccessPolicyService {
     }
 
     if (this.isCompanyAdmin(user)) {
-      return user.companyId ? { companyId: user.companyId } : { _id: { $in: [] } };
+      return user.companyId
+        ? { companyId: user.companyId }
+        : { _id: { $in: [] } };
     }
 
-    if (this.isRegionAdmin(user) || this.hasAnyRole(user, [Role.Regionalleiter])) {
+    if (
+      this.isRegionAdmin(user) ||
+      this.hasAnyRole(user, [Role.Regionalleiter])
+    ) {
       return user.regionIds?.length
         ? { regionIds: { $in: user.regionIds } }
         : { _id: { $in: [] } };
@@ -225,7 +236,10 @@ export class AccessPolicyService {
       return false;
     }
 
-    const region = await this.regionModel.findById(regionId).select('companyId').exec();
+    const region = await this.regionModel
+      .findById(regionId)
+      .select('companyId')
+      .exec();
 
     return region?.companyId === user.companyId;
   }
@@ -344,7 +358,12 @@ export class AccessPolicyService {
     actor: AuthenticatedUser,
     target: Pick<
       UserDocument,
-      'roles' | 'companyId' | 'regionIds' | 'locationId' | 'locationIds' | 'managedLocationIds'
+      | 'roles'
+      | 'companyId'
+      | 'regionIds'
+      | 'locationId'
+      | 'locationIds'
+      | 'managedLocationIds'
     >,
   ): Promise<boolean> {
     if (this.isPlatformAdmin(actor)) {
@@ -435,8 +454,13 @@ export class AccessPolicyService {
     actor: AuthenticatedUser,
     payload: AssignableScope,
   ): Promise<void> {
-    if (payload.companyId && !(await this.canAccessCompany(actor, payload.companyId))) {
-      throw new ForbiddenException('Keine Berechtigung fuer dieses Unternehmen');
+    if (
+      payload.companyId &&
+      !(await this.canAccessCompany(actor, payload.companyId))
+    ) {
+      throw new ForbiddenException(
+        'Keine Berechtigung fuer dieses Unternehmen',
+      );
     }
 
     for (const regionId of payload.regionIds ?? []) {
@@ -453,7 +477,9 @@ export class AccessPolicyService {
 
     for (const departmentId of payload.departmentIds ?? []) {
       if (!(await this.canAssignDepartment(actor, departmentId))) {
-        throw new ForbiddenException('Keine Berechtigung fuer dieses Department');
+        throw new ForbiddenException(
+          'Keine Berechtigung fuer dieses Department',
+        );
       }
     }
 
@@ -499,7 +525,10 @@ export class AccessPolicyService {
   private async findLocationIds(
     filter: Record<string, unknown>,
   ): Promise<string[]> {
-    const locations = await this.locationModel.find(filter).select('_id').exec();
+    const locations = await this.locationModel
+      .find(filter)
+      .select('_id')
+      .exec();
 
     return locations.map((location) => location._id.toString());
   }
@@ -525,7 +554,10 @@ export class AccessPolicyService {
     ]);
   }
 
-  private hasAnyRole(user: AuthenticatedUser | undefined, roles: Role[]): boolean {
+  private hasAnyRole(
+    user: AuthenticatedUser | undefined,
+    roles: Role[],
+  ): boolean {
     return hasAnyNormalizedRole(user?.roles, roles);
   }
 
@@ -552,7 +584,9 @@ export class AccessPolicyService {
   }
 
   private unique(values: Array<string | undefined>): string[] {
-    return [...new Set(values.filter((value): value is string => Boolean(value)))];
+    return [
+      ...new Set(values.filter((value): value is string => Boolean(value))),
+    ];
   }
 
   private validateObjectId(id: string, label: string): void {

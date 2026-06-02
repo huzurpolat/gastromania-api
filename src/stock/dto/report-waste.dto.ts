@@ -1,4 +1,12 @@
-import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsMongoId,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { StockMovementType } from '../schemas/stock-movement.schema';
 
 export class ReportWasteDto {
@@ -10,7 +18,11 @@ export class ReportWasteDto {
   quantity!: number;
 
   @IsEnum(StockMovementType)
-  type!: StockMovementType.Shrinkage | StockMovementType.Spoilage | StockMovementType.Breakage | StockMovementType.Loss;
+  type!:
+    | StockMovementType.Shrinkage
+    | StockMovementType.Spoilage
+    | StockMovementType.Breakage
+    | StockMovementType.Loss;
 
   @IsString()
   @MaxLength(240)
