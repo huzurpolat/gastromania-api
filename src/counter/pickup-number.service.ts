@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { MongoServerError } from 'mongodb';
 import { Model } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
@@ -83,23 +84,22 @@ export class PickupNumberService {
       : 'global';
     const prefix = settings.pickupPrefix || 'A';
 
-    const sequence = await this.sequenceModel
-      .findOneAndUpdate(
-        { locationId, businessDate, prefix },
-        {
-          $inc: { currentNumber: 1 },
-          $setOnInsert: {
-            companyId,
-            locationId,
-            businessDate,
-            prefix,
-            currentNumber: settings.pickupStartNumber - 1,
-            minLength: settings.pickupNumberLength,
-          },
-        },
-        { new: true, upsert: true, runValidators: true },
-      )
-      .exec();
+    const sequence =
+      (await this.incrementExistingSequence(
+        locationId,
+        businessDate,
+        prefix,
+        settings.pickupNumberLength,
+        companyId,
+      )) ??
+      (await this.createInitialSequence(
+        locationId,
+        businessDate,
+        prefix,
+        settings.pickupStartNumber,
+        settings.pickupNumberLength,
+        companyId,
+      ));
 
     const pickupNumber = `${prefix}${String(sequence.currentNumber).padStart(
       sequence.minLength,
@@ -114,5 +114,73 @@ export class PickupNumberService {
 
   private businessDate(date: Date): string {
     return date.toISOString().slice(0, 10);
+  }
+
+  private incrementExistingSequence(
+    locationId: string,
+    businessDate: string,
+    prefix: string,
+    minLength: number,
+    companyId?: string,
+  ): Promise<PickupNumberSequenceDocument | null> {
+    const update: {
+      $inc: { currentNumber: number };
+      $set: { minLength: number; companyId?: string };
+    } = {
+      $inc: { currentNumber: 1 },
+      $set: { minLength },
+    };
+
+    if (companyId) {
+      update.$set.companyId = companyId;
+    }
+
+    return this.sequenceModel
+      .findOneAndUpdate(
+        { locationId, businessDate, prefix },
+        update,
+        { new: true, runValidators: true },
+      )
+      .exec();
+  }
+
+  private async createInitialSequence(
+    locationId: string,
+    businessDate: string,
+    prefix: string,
+    startNumber: number,
+    minLength: number,
+    companyId?: string,
+  ): Promise<PickupNumberSequenceDocument> {
+    try {
+      return await this.sequenceModel.create({
+        companyId,
+        locationId,
+        businessDate,
+        prefix,
+        currentNumber: startNumber,
+        minLength,
+      });
+    } catch (error) {
+      if (this.isDuplicateKeyError(error)) {
+        const sequence = await this.incrementExistingSequence(
+          locationId,
+          businessDate,
+          prefix,
+          minLength,
+          companyId,
+        );
+
+        if (sequence) {
+          return sequence;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  private isDuplicateKeyError(error: unknown): boolean {
+    return error instanceof MongoServerError && error.code === 11000;
   }
 }
