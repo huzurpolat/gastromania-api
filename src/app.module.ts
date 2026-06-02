@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { AccessModule } from './access/access.module';
 import { ChecklistsModule } from './checklists/checklists.module';
 import { CompaniesModule } from './companies/companies.module';
+import { CounterModule } from './counter/counter.module';
 import { DemoDataModule } from './demo-data/demo-data.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DailyClosingsModule } from './daily-closings/daily-closings.module';
@@ -79,6 +80,7 @@ import { HealthController } from './health.controller';
     StockModule,
     SuppliersModule,
     ChecklistsModule,
+    CounterModule,
   ],
   controllers: [HealthController],
   providers: [],

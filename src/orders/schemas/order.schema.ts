@@ -43,12 +43,14 @@ export enum PaymentStatus {
   Paid = 'Bezahlt',
   PartiallyPaid = 'Teilbezahlt',
   Cancelled = 'Storniert',
+  Refunded = 'Erstattet',
 }
 
 export enum PaymentMethod {
   Cash = 'cash',
   Card = 'card',
   Online = 'online',
+  Paypal = 'paypal',
   Voucher = 'voucher',
   Other = 'other',
   Mixed = 'mixed',
@@ -57,6 +59,7 @@ export enum PaymentMethod {
 export enum OrderSource {
   Internal = 'internal',
   Qr = 'qr',
+  Counter = 'counter',
 }
 
 export enum CourseType {
@@ -302,6 +305,21 @@ export class Order {
 
   @Prop()
   cancelledAt?: Date;
+
+  @Prop()
+  paidAt?: Date;
+
+  @Prop({ trim: true })
+  paidBy?: string;
+
+  @Prop({ trim: true })
+  completedBy?: string;
+
+  @Prop({ trim: true })
+  cancelledBy?: string;
+
+  @Prop({ trim: true })
+  cancelReason?: string;
 
   @Prop({ index: true })
   inventoryConsumedAt?: Date;
