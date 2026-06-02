@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AccessModule } from '../access/access.module';
+import { AuthJwtModule } from '../auth/auth-jwt.module';
 import {
   Checklist,
   ChecklistSchema,
@@ -30,6 +31,7 @@ import {
 @Module({
   imports: [
     AccessModule,
+    AuthJwtModule,
     MongooseModule.forFeature([
       { name: DailyClosing.name, schema: DailyClosingSchema },
       { name: Location.name, schema: LocationSchema },
