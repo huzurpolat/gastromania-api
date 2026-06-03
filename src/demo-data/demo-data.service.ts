@@ -110,11 +110,188 @@ interface DemoRegionConfig {
   multiManagerLocationKeys: string[];
 }
 
+interface SalesDemoUserConfig {
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  departmentType?: DepartmentType;
+}
+
+interface SalesDemoMenuItemConfig {
+  name: string;
+  category: string;
+  description: string;
+  ingredients: string;
+  weight: string;
+  price: number;
+  isKitchenItem: boolean;
+  isVegan?: boolean;
+}
+
 @Injectable()
 export class DemoDataService {
   private readonly demoPrefix = '[Demo]';
   private readonly demoPassword = 'Gastromania2026!';
   private readonly demoCompanyName = 'Gastro Group Deutschland';
+  private readonly salesDemoPassword = 'Demo2026!';
+  private readonly salesDemoCompanyName = 'GastroWerk24 Demo Restaurant';
+  private readonly salesDemoLocationName = 'GastroWerk24 Demo Restaurant Köln';
+  private readonly salesDemoRegionCode = 'NRW';
+  private readonly salesDemoUsers: SalesDemoUserConfig[] = [
+    {
+      email: 'admin@gastromania-demo.de',
+      firstName: 'Admin',
+      lastName: 'Demo',
+      role: Role.Admin,
+    },
+    {
+      email: 'filialleiter@gastromania-demo.de',
+      firstName: 'Filialleiter',
+      lastName: 'Demo',
+      role: Role.Filialleiter,
+    },
+    {
+      email: 'service@gastromania-demo.de',
+      firstName: 'Service',
+      lastName: 'Demo',
+      role: Role.Service,
+      departmentType: DepartmentType.Service,
+    },
+    {
+      email: 'kueche@gastromania-demo.de',
+      firstName: 'Küche',
+      lastName: 'Demo',
+      role: Role.Kueche,
+      departmentType: DepartmentType.Kueche,
+    },
+    {
+      email: 'bar@gastromania-demo.de',
+      firstName: 'Bar',
+      lastName: 'Demo',
+      role: Role.Bar,
+      departmentType: DepartmentType.Service,
+    },
+    {
+      email: 'theke@gastromania-demo.de',
+      firstName: 'Theke',
+      lastName: 'Demo',
+      role: Role.Theke,
+      departmentType: DepartmentType.Service,
+    },
+  ];
+  private readonly salesDemoMenuItems: SalesDemoMenuItemConfig[] = [
+    {
+      name: 'Wasser 0,25',
+      category: 'Getränke',
+      description: 'Mineralwasser in der 0,25-l-Flasche',
+      ingredients: 'Mineralwasser',
+      weight: '0,25 l',
+      price: 2.5,
+      isKitchenItem: false,
+    },
+    {
+      name: 'Coca Cola 0,33',
+      category: 'Getränke',
+      description: 'Coca Cola in der 0,33-l-Flasche',
+      ingredients: 'Cola',
+      weight: '0,33 l',
+      price: 3.2,
+      isKitchenItem: false,
+    },
+    {
+      name: 'Fanta 0,33',
+      category: 'Getränke',
+      description: 'Fanta Orange in der 0,33-l-Flasche',
+      ingredients: 'Orangenlimonade',
+      weight: '0,33 l',
+      price: 3.2,
+      isKitchenItem: false,
+    },
+    {
+      name: 'Pils',
+      category: 'Getränke',
+      description: 'Frisch gezapftes Pils',
+      ingredients: 'Pils',
+      weight: '0,3 l',
+      price: 4.2,
+      isKitchenItem: false,
+    },
+    {
+      name: 'Weizen',
+      category: 'Getränke',
+      description: 'Weizenbier im Glas',
+      ingredients: 'Weizenbier',
+      weight: '0,5 l',
+      price: 4.9,
+      isKitchenItem: false,
+    },
+    {
+      name: 'Burger Classic',
+      category: 'Speisen',
+      description: 'Klassischer Burger mit Rindfleisch, Salat und Haussauce',
+      ingredients: 'Brioche, Rindfleisch, Salat, Tomate, Haussauce',
+      weight: '420 g',
+      price: 12.9,
+      isKitchenItem: true,
+    },
+    {
+      name: 'Cheeseburger',
+      category: 'Speisen',
+      description: 'Burger Classic mit Cheddar',
+      ingredients: 'Brioche, Rindfleisch, Cheddar, Salat, Tomate, Haussauce',
+      weight: '450 g',
+      price: 13.9,
+      isKitchenItem: true,
+    },
+    {
+      name: 'Pommes',
+      category: 'Speisen',
+      description: 'Knusprige Pommes frites mit Dip',
+      ingredients: 'Kartoffeln, Salz, Dip',
+      weight: '250 g',
+      price: 4.9,
+      isKitchenItem: true,
+      isVegan: true,
+    },
+    {
+      name: 'Salat',
+      category: 'Speisen',
+      description: 'Gemischter Salat mit saisonalem Gemüse',
+      ingredients: 'Blattsalat, Gurke, Tomate, Paprika, Dressing',
+      weight: '320 g',
+      price: 9.9,
+      isKitchenItem: true,
+      isVegan: true,
+    },
+    {
+      name: 'Kaffee',
+      category: 'Kaffee',
+      description: 'Frisch gebrühter Kaffee',
+      ingredients: 'Kaffee',
+      weight: '1 Tasse',
+      price: 2.8,
+      isKitchenItem: false,
+    },
+    {
+      name: 'Cappuccino',
+      category: 'Kaffee',
+      description: 'Espresso mit cremigem Milchschaum',
+      ingredients: 'Espresso, Milch',
+      weight: '1 Tasse',
+      price: 3.6,
+      isKitchenItem: false,
+    },
+    {
+      name: 'Espresso',
+      category: 'Kaffee',
+      description: 'Kräftiger Espresso',
+      ingredients: 'Espresso',
+      weight: '1 Tasse',
+      price: 2.4,
+      isKitchenItem: false,
+    },
+  ];
   private readonly demoRegions: DemoRegionConfig[] = [
     {
       key: 'nrw',
@@ -425,6 +602,332 @@ export class DemoDataService {
         role: user.roles[0],
       })),
     };
+  }
+
+  async seedSalesDemo(): Promise<DemoDataResult> {
+    const company = await this.companyModel
+      .findOneAndUpdate(
+        { name: this.salesDemoCompanyName },
+        {
+          $set: {
+            name: this.salesDemoCompanyName,
+            type: 'sales-demo-restaurant',
+            isActive: true,
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+    const companyId = company._id.toString();
+    const region = await this.regionModel
+      .findOneAndUpdate(
+        { companyId, code: this.salesDemoRegionCode },
+        {
+          $set: {
+            companyId,
+            name: 'Nordrhein-Westfalen',
+            code: this.salesDemoRegionCode,
+            isActive: true,
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+    const regionId = region._id.toString();
+    const location = await this.upsertSalesDemoLocation(companyId, regionId);
+    const locationId = location._id.toString();
+    const departments = await this.upsertSalesDemoDepartments(
+      companyId,
+      locationId,
+    );
+    const tables = await this.upsertSalesDemoTables(
+      companyId,
+      regionId,
+      locationId,
+    );
+    const menuItems = await this.upsertSalesDemoMenuItems();
+    const users = await this.upsertSalesDemoUsers(
+      companyId,
+      regionId,
+      locationId,
+      departments,
+    );
+
+    return {
+      locationId,
+      created: {
+        companies: 1,
+        regions: 1,
+        locations: 1,
+        departments: departments.length,
+        users: users.length,
+        tables: tables.length,
+        menuItems: menuItems.length,
+      },
+      demoUsers: users.map((user) => ({
+        email: user.email,
+        password: this.salesDemoPassword,
+        role: user.roles[0],
+      })),
+    };
+  }
+
+  private upsertSalesDemoLocation(
+    companyId: string,
+    regionId: string,
+  ): Promise<LocationDocument> {
+    return this.locationModel
+      .findOneAndUpdate(
+        { companyId, email: 'demo@gastrowerk24.de' },
+        {
+          $set: {
+            name: this.salesDemoLocationName,
+            street: 'Musterstraße 1',
+            zip: '50667',
+            city: 'Köln',
+            federalState: 'Nordrhein-Westfalen',
+            phone: '0221 123456',
+            email: 'demo@gastrowerk24.de',
+            icon: 'restaurant',
+            isActive: true,
+            companyId,
+            regionId,
+            tablePlanFloors: ['EG'],
+            tablePlanAreas: [
+              {
+                id: 'restaurantbereich',
+                label: 'Restaurantbereich',
+                category: 'restaurant',
+                icon: 'table_restaurant',
+                floor: 'EG',
+                x: 4,
+                y: 8,
+                width: 42,
+                height: 40,
+              },
+              {
+                id: 'terrasse',
+                label: 'Terrasse',
+                category: 'outdoor',
+                icon: 'deck',
+                floor: 'EG',
+                x: 52,
+                y: 8,
+                width: 40,
+                height: 34,
+              },
+              {
+                id: 'lounge',
+                label: 'Lounge',
+                category: 'lounge',
+                icon: 'weekend',
+                floor: 'EG',
+                x: 4,
+                y: 58,
+                width: 42,
+                height: 28,
+              },
+              {
+                id: 'theke',
+                label: 'Theke',
+                category: 'bar',
+                icon: 'local_bar',
+                floor: 'EG',
+                x: 52,
+                y: 58,
+                width: 32,
+                height: 22,
+              },
+            ],
+            tablePlanObjects: [
+              {
+                id: 'demo-theke',
+                label: 'Theke',
+                kind: 'counter',
+                icon: 'local_bar',
+                x: 60,
+                y: 66,
+                width: 18,
+                height: 8,
+                rotation: 0,
+                notes: 'Demo-Thekenbereich für Bar- und Thekenbestellungen',
+              },
+            ],
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+  }
+
+  private async upsertSalesDemoDepartments(
+    companyId: string,
+    locationId: string,
+  ): Promise<DepartmentDocument[]> {
+    const configs = [
+      { name: 'Service', type: DepartmentType.Service },
+      { name: 'Küche', type: DepartmentType.Kueche },
+      { name: 'Lager', type: DepartmentType.Lager },
+      { name: 'Spülküche', type: DepartmentType.Spuelkueche },
+      { name: 'Reinigung', type: DepartmentType.Reinigung },
+    ];
+
+    return Promise.all(
+      configs.map((config) =>
+        this.departmentModel
+          .findOneAndUpdate(
+            { companyId, locationId, type: config.type },
+            {
+              $set: {
+                companyId,
+                locationId,
+                name: config.name,
+                type: config.type,
+                isActive: true,
+              },
+            },
+            { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+          )
+          .exec(),
+      ),
+    );
+  }
+
+  private upsertSalesDemoTables(
+    companyId: string,
+    regionId: string,
+    locationId: string,
+  ): Promise<RestaurantTableDocument[]> {
+    return Promise.all(
+      Array.from({ length: 20 }, (_, index) => {
+        const tableNumber = index + 1;
+        const area =
+          tableNumber <= 10
+            ? 'Restaurantbereich'
+            : tableNumber <= 15
+              ? 'Terrasse'
+              : 'Lounge';
+        const areaIndex =
+          tableNumber <= 10
+            ? tableNumber - 1
+            : tableNumber <= 15
+              ? tableNumber - 11
+              : tableNumber - 16;
+        const baseX =
+          area === 'Restaurantbereich' ? 9 : area === 'Terrasse' ? 57 : 10;
+        const baseY =
+          area === 'Restaurantbereich' ? 16 : area === 'Terrasse' ? 16 : 66;
+        const columns = area === 'Restaurantbereich' ? 5 : 5;
+        const planX = baseX + (areaIndex % columns) * 7;
+        const planY = baseY + Math.floor(areaIndex / columns) * 12;
+        const isRound = tableNumber % 3 === 0 || area === 'Terrasse';
+
+        return this.tableModel
+          .findOneAndUpdate(
+            { locationId, name: `Tisch ${tableNumber}` },
+            {
+              $set: {
+                companyId,
+                regionId,
+                tableNumber: String(tableNumber),
+                tableName: `Tisch ${tableNumber}`,
+                name: `Tisch ${tableNumber}`,
+                locationId,
+                seats: area === 'Lounge' ? 6 : tableNumber % 2 === 0 ? 4 : 2,
+                area,
+                icon: area === 'Terrasse' ? 'deck' : 'table_restaurant',
+                status: TableStatus.Free,
+                isActive: true,
+                planX,
+                planY,
+                planWidth: isRound ? 9 : 12,
+                planHeight: isRound ? 9 : 10,
+                planRotation: 0,
+                planFloor: 'EG',
+                planShape: isRound ? TableShape.Round : TableShape.Rectangle,
+              },
+            },
+            { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+          )
+          .exec();
+      }),
+    );
+  }
+
+  private upsertSalesDemoMenuItems(): Promise<MenuItemDocument[]> {
+    return Promise.all(
+      this.salesDemoMenuItems.map((item) =>
+        this.menuItemModel
+          .findOneAndUpdate(
+            { name: item.name, category: item.category },
+            {
+              $set: {
+                name: item.name,
+                category: item.category,
+                description: item.description,
+                ingredients: item.ingredients,
+                weight: item.weight,
+                price: item.price,
+                sellingPrice: item.price,
+                isKitchenItem: item.isKitchenItem,
+                isVegan: item.isVegan ?? false,
+                containsNuts: false,
+                isActive: true,
+              },
+            },
+            { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+          )
+          .exec(),
+      ),
+    );
+  }
+
+  private async upsertSalesDemoUsers(
+    companyId: string,
+    regionId: string,
+    locationId: string,
+    departments: DepartmentDocument[],
+  ): Promise<UserDocument[]> {
+    const passwordHash = await bcrypt.hash(this.salesDemoPassword, 12);
+    const departmentIdsByType = new Map(
+      departments.map((department) => [
+        department.type,
+        department._id.toString(),
+      ]),
+    );
+
+    return Promise.all(
+      this.salesDemoUsers.map((user) => {
+        const isManager = [Role.Admin, Role.Filialleiter].includes(user.role);
+        const departmentId = user.departmentType
+          ? departmentIdsByType.get(user.departmentType)
+          : undefined;
+
+        return this.userModel
+          .findOneAndUpdate(
+            { email: user.email },
+            {
+              $set: {
+                email: user.email,
+                passwordHash,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                roles: [user.role],
+                isActive: true,
+                companyId,
+                regionIds: [regionId],
+                locationId,
+                locationIds: [locationId],
+                managedLocationIds: isManager ? [locationId] : [],
+                departmentIds: departmentId ? [departmentId] : [],
+                responsibilities: [],
+              },
+            },
+            { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+          )
+          .exec();
+      }),
+    );
   }
 
   private async clearExistingDemoData(): Promise<void> {

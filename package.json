@@ -12,6 +12,8 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "seed:sales-demo": "node dist/demo-data/seed-sales-demo.js",
+    "verify:sales-demo": "node dist/demo-data/verify-sales-demo.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

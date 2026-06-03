@@ -20,4 +20,11 @@ export class DemoDataController {
   seed(@CurrentUser() user: AuthenticatedUser): Promise<DemoDataResult> {
     return this.demoDataService.seed(user);
   }
+
+  @Post('seed/sales-demo')
+  @Permissions('settings.update')
+  @Roles(Role.PlatformAdmin, Role.SuperAdmin)
+  seedSalesDemo(): Promise<DemoDataResult> {
+    return this.demoDataService.seedSalesDemo();
+  }
 }
