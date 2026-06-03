@@ -27,6 +27,7 @@ pull_repo() {
 
 echo "=== Pull Gastromania Repositories ==="
 pull_repo "$APP_ROOT/gastromania"
+
 pull_repo "$APP_ROOT/gastromania-api"
 
 mkdir -p "$APP_ROOT/uploads"
