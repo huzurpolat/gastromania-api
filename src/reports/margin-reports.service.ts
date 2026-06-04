@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { hasAnyRole } from '../auth/role-utils';
@@ -583,7 +583,7 @@ export class MarginReportsService {
     const period = this.resolvePeriod(query);
     if (
       query.companyId &&
-      !(await this.accessPolicy.canAccessCompany(user, query.companyId))
+      !this.accessPolicy.canAccessCompany(user, query.companyId)
     ) {
       throw new ForbiddenException(
         'Keine Berechtigung fuer dieses Unternehmen',
@@ -782,11 +782,21 @@ export class MarginReportsService {
     if (typeof value === 'string') {
       return value;
     }
-    if (typeof value === 'object' && value !== null && 'toString' in value) {
-      return String(value.toString());
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    if (value instanceof Types.ObjectId) {
+      return value.toHexString();
+    }
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      value.toString !== Object.prototype.toString
+    ) {
+      return (value as { toString: () => string }).toString();
     }
 
-    return String(value);
+    return '';
   }
 
   private unique(values: Array<string | undefined>): string[] {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { RecipeInventoryService } from './recipe-inventory.service';
 import { StockMovementType } from '../stock/schemas/stock-movement.schema';
 

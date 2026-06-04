@@ -107,8 +107,8 @@ describe('QrOrdersService', () => {
       lean: jest.fn().mockResolvedValue([menuItem]),
     });
     orderModel.countDocuments.mockResolvedValue(0);
-    orderModel.create.mockImplementation(
-      async (payload: Record<string, unknown>) => ({
+    orderModel.create.mockImplementation((payload: Record<string, unknown>) =>
+      Promise.resolve({
         _id: { toString: () => 'order-1' },
         ...payload,
       }),

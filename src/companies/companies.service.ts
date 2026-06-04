@@ -47,7 +47,7 @@ export class CompaniesService {
 
   async findOne(id: string, actor: AuthenticatedUser) {
     this.validateObjectId(id);
-    if (!(await this.accessPolicy.canAccessCompany(actor, id))) {
+    if (!this.accessPolicy.canAccessCompany(actor, id)) {
       throw new NotFoundException('Unternehmen nicht gefunden');
     }
 

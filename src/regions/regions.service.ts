@@ -23,7 +23,7 @@ export class RegionsService {
   async create(dto: CreateRegionDto, actor: AuthenticatedUser) {
     if (
       !this.accessPolicy.isPlatformAdmin(actor) &&
-      !(await this.accessPolicy.canAccessCompany(actor, dto.companyId))
+      !this.accessPolicy.canAccessCompany(actor, dto.companyId)
     ) {
       throw new ForbiddenException(
         'Keine Berechtigung fuer dieses Unternehmen',

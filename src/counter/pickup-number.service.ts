@@ -136,11 +136,10 @@ export class PickupNumberService {
     }
 
     return this.sequenceModel
-      .findOneAndUpdate(
-        { locationId, businessDate, prefix },
-        update,
-        { new: true, runValidators: true },
-      )
+      .findOneAndUpdate({ locationId, businessDate, prefix }, update, {
+        new: true,
+        runValidators: true,
+      })
       .exec();
   }
 

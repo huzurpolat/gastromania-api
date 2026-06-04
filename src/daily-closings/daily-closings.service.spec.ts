@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Role } from '../auth/enums/role.enum';
 import { ChecklistStatus } from '../checklists/schemas/checklist.schema';

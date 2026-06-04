@@ -113,8 +113,8 @@ describe('StaffPlanningService', () => {
     });
     shiftModel.exists.mockResolvedValue(null);
     absenceModel.exists.mockResolvedValue(null);
-    shiftModel.create.mockImplementation(
-      async (payload: Record<string, unknown>) => ({
+    shiftModel.create.mockImplementation((payload: Record<string, unknown>) =>
+      Promise.resolve({
         _id: { toString: () => shiftId },
         ...payload,
         toObject: () => ({ _id: shiftId, ...payload }),
@@ -143,7 +143,7 @@ describe('StaffPlanningService', () => {
       }),
     });
     notificationModel.create.mockImplementation(
-      async (payload: Record<string, unknown>) => payload,
+      (payload: Record<string, unknown>) => Promise.resolve(payload),
     );
     auditModel.create.mockResolvedValue({});
     realtimeService.publish.mockReturnValue(undefined);
@@ -258,8 +258,8 @@ describe('StaffPlanningService', () => {
   });
 
   it('creates an absence request for vacation and notifies managers', async () => {
-    absenceModel.create.mockImplementation(
-      async (payload: Record<string, unknown>) => ({
+    absenceModel.create.mockImplementation((payload: Record<string, unknown>) =>
+      Promise.resolve({
         _id: { toString: () => 'absence-1' },
         ...payload,
         toObject: () => ({ _id: 'absence-1', ...payload }),

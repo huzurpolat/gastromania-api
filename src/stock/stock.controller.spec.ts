@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-floating-promises */
 import { StockController } from './stock.controller';
 
 describe('StockController', () => {

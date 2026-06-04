@@ -67,6 +67,8 @@ Erzeugte Demo-Daten:
 - Tische: 20 Tische, gruppiert nach Restaurantbereich, Terrasse und Lounge
 - Produkte: 12 Demo-Produkte aus Getraenke, Speisen und Kaffee
 - Benutzer: 6 Demo-Accounts mit Standort- und Rollenzuweisung
+- Dashboard-Daten: heutige Bestellungen, Reservierungen, Lagerwerte,
+  Lagerbewegungen, offene Zeiteintraege und Checklisten
 
 Demo-Logins:
 
@@ -85,6 +87,7 @@ Lokal ausfuehren:
 npm run build
 npm run seed:sales-demo
 npm run verify:sales-demo
+npm run verify:dashboard
 ```
 
 Im Docker/API-Container auf dem Server ausfuehren:
@@ -92,6 +95,7 @@ Im Docker/API-Container auf dem Server ausfuehren:
 ```bash
 docker compose exec gastromania-api npm run seed:sales-demo
 docker compose exec gastromania-api npm run verify:sales-demo
+docker compose exec gastromania-api npm run verify:dashboard
 ```
 
 Die Scripts verwenden keine lokalen Pfade und benoetigen im Container nur die

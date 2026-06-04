@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Company } from '../companies/schemas/company.schema';
 import { Location } from '../locations/schemas/location.schema';
 import { MenuItem } from '../menu-items/schemas/menu-item.schema';
@@ -325,11 +325,21 @@ export class QrOrdersService {
     if (typeof value === 'string') {
       return value;
     }
-    if (typeof value === 'object' && value !== null && 'toString' in value) {
-      return String(value.toString());
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    if (value instanceof Types.ObjectId) {
+      return value.toHexString();
+    }
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      value.toString !== Object.prototype.toString
+    ) {
+      return (value as { toString: () => string }).toString();
     }
 
-    return String(value);
+    return '';
   }
 
   private eventChannels(

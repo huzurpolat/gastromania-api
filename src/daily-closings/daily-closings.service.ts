@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { hasAnyRole } from '../auth/role-utils';
@@ -918,10 +918,34 @@ export class DailyClosingsService {
       message,
       severity,
       source: 'daily-closing',
-      referenceId: String(
-        (closing as DailyClosing & { _id?: unknown })._id ?? '',
+      referenceId: this.stringifyId(
+        (closing as DailyClosing & { _id?: unknown })._id,
       ),
       read: false,
     });
+  }
+
+  private stringifyId(value: unknown): string {
+    if (!value) {
+      return '';
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    if (value instanceof Types.ObjectId) {
+      return value.toHexString();
+    }
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      value.toString !== Object.prototype.toString
+    ) {
+      return (value as { toString: () => string }).toString();
+    }
+
+    return '';
   }
 }

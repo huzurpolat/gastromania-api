@@ -7,6 +7,7 @@ import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
   Checklist,
   ChecklistDocument,
+  ChecklistStatus,
 } from '../checklists/schemas/checklist.schema';
 import { Company, CompanyDocument } from '../companies/schemas/company.schema';
 import {
@@ -34,7 +35,10 @@ import {
 import {
   Order,
   OrderDocument,
+  OrderSource,
   OrderStatus,
+  PaymentStatus,
+  ProductionArea,
 } from '../orders/schemas/order.schema';
 import {
   Reservation,
@@ -652,6 +656,29 @@ export class DemoDataService {
       locationId,
       departments,
     );
+    await this.updateSalesDemoTableStatuses(locationId);
+    const orders = await this.recreateSalesDemoOrders(
+      companyId,
+      locationId,
+      tables,
+      menuItems,
+      users,
+    );
+    const reservations = await this.recreateSalesDemoReservations(
+      locationId,
+      tables,
+    );
+    const stockItems = await this.upsertSalesDemoStockItems(locationId);
+    const stockMovements = await this.recreateSalesDemoStockMovements(
+      locationId,
+      stockItems,
+      users[0]._id.toString(),
+    );
+    const timeEntries = await this.recreateSalesDemoTimeEntries(
+      locationId,
+      users,
+    );
+    const checklists = await this.upsertSalesDemoChecklists(locationId);
 
     return {
       locationId,
@@ -663,6 +690,12 @@ export class DemoDataService {
         users: users.length,
         tables: tables.length,
         menuItems: menuItems.length,
+        orders: orders.length,
+        reservations: reservations.length,
+        stockItems: stockItems.length,
+        stockMovements: stockMovements.length,
+        timeEntries: timeEntries.length,
+        checklists: checklists.length,
       },
       demoUsers: users.map((user) => ({
         email: user.email,
@@ -786,7 +819,11 @@ export class DemoDataService {
                 isActive: true,
               },
             },
-            { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
           )
           .exec(),
       ),
@@ -847,10 +884,510 @@ export class DemoDataService {
                 planShape: isRound ? TableShape.Round : TableShape.Rectangle,
               },
             },
-            { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
           )
           .exec();
       }),
+    );
+  }
+
+  private async updateSalesDemoTableStatuses(
+    locationId: string,
+  ): Promise<void> {
+    const occupiedTables = ['Tisch 1', 'Tisch 2', 'Tisch 3', 'Tisch 11'];
+    const reservedTables = ['Tisch 4', 'Tisch 12'];
+
+    await Promise.all([
+      this.tableModel
+        .updateMany(
+          { locationId, name: { $in: occupiedTables } },
+          {
+            $set: {
+              status: TableStatus.Occupied,
+              waitingSince: this.hoursAgo(1),
+              lastStatusChange: this.hoursAgo(1),
+            },
+          },
+        )
+        .exec(),
+      this.tableModel
+        .updateMany(
+          { locationId, name: { $in: reservedTables } },
+          {
+            $set: {
+              status: TableStatus.Reserved,
+              lastStatusChange: this.hoursAgo(2),
+            },
+          },
+        )
+        .exec(),
+      this.tableModel
+        .updateMany(
+          {
+            locationId,
+            name: { $nin: [...occupiedTables, ...reservedTables] },
+          },
+          {
+            $set: {
+              status: TableStatus.Free,
+              activeOrderIds: [],
+              currentTotal: 0,
+            },
+            $unset: { waitingSince: '', lastStatusChange: '' },
+          },
+        )
+        .exec(),
+    ]);
+  }
+
+  private async recreateSalesDemoOrders(
+    companyId: string,
+    locationId: string,
+    tables: RestaurantTableDocument[],
+    menuItems: MenuItemDocument[],
+    users: UserDocument[],
+  ): Promise<OrderDocument[]> {
+    await this.orderModel
+      .deleteMany({ locationId, orderNumber: /^DEMO-SALES-/ })
+      .exec();
+    const itemByName = new Map(menuItems.map((item) => [item.name, item]));
+    const tableByName = new Map(tables.map((table) => [table.name, table]));
+    const employee = users.find((user) => user.roles.includes(Role.Service));
+    const orders: Array<Record<string, unknown>> = [
+      this.salesDemoOrder({
+        companyId,
+        locationId,
+        orderNumber: 'DEMO-SALES-1001',
+        table: tableByName.get('Tisch 1'),
+        employee,
+        status: OrderStatus.Preparing,
+        paymentStatus: PaymentStatus.Open,
+        minutesAgo: 45,
+        items: [
+          { menuItem: itemByName.get('Cheeseburger'), quantity: 2 },
+          { menuItem: itemByName.get('Pommes'), quantity: 2 },
+          { menuItem: itemByName.get('Coca Cola 0,33'), quantity: 2 },
+        ],
+      }),
+      this.salesDemoOrder({
+        companyId,
+        locationId,
+        orderNumber: 'DEMO-SALES-1002',
+        table: tableByName.get('Tisch 2'),
+        employee,
+        status: OrderStatus.New,
+        paymentStatus: PaymentStatus.Open,
+        minutesAgo: 18,
+        items: [
+          { menuItem: itemByName.get('Burger Classic'), quantity: 1 },
+          { menuItem: itemByName.get('Salat'), quantity: 1 },
+          { menuItem: itemByName.get('Pils'), quantity: 2 },
+        ],
+      }),
+      this.salesDemoOrder({
+        companyId,
+        locationId,
+        orderNumber: 'DEMO-SALES-1003',
+        table: tableByName.get('Tisch 11'),
+        employee,
+        source: OrderSource.Counter,
+        status: OrderStatus.Ready,
+        paymentStatus: PaymentStatus.Open,
+        minutesAgo: 28,
+        items: [
+          { menuItem: itemByName.get('Cappuccino'), quantity: 2 },
+          { menuItem: itemByName.get('Espresso'), quantity: 1 },
+        ],
+      }),
+      this.salesDemoOrder({
+        companyId,
+        locationId,
+        orderNumber: 'DEMO-SALES-1004',
+        table: tableByName.get('Tisch 3'),
+        employee,
+        source: OrderSource.Counter,
+        status: OrderStatus.Closed,
+        paymentStatus: PaymentStatus.Paid,
+        minutesAgo: 95,
+        items: [
+          { menuItem: itemByName.get('Weizen'), quantity: 2 },
+          { menuItem: itemByName.get('Pommes'), quantity: 1 },
+        ],
+      }),
+    ];
+    const createdOrders = (await this.orderModel.insertMany(
+      orders,
+    )) as unknown as Array<OrderDocument & { createdAt?: Date }>;
+
+    await Promise.all(
+      createdOrders.map((order) =>
+        this.tableModel
+          .updateOne(
+            { _id: order.tableId },
+            {
+              $addToSet: { activeOrderIds: order._id.toString() },
+              $set: {
+                currentTotal: order.total,
+                waitingSince: order.createdAt,
+              },
+            },
+          )
+          .exec(),
+      ),
+    );
+
+    return createdOrders as OrderDocument[];
+  }
+
+  private salesDemoOrder(config: {
+    companyId: string;
+    locationId: string;
+    orderNumber: string;
+    table?: RestaurantTableDocument;
+    employee?: UserDocument;
+    source?: OrderSource;
+    status: OrderStatus;
+    paymentStatus: PaymentStatus;
+    minutesAgo: number;
+    items: Array<{ menuItem?: MenuItemDocument; quantity: number }>;
+  }): Record<string, unknown> {
+    const createdAt = this.minutesAgo(config.minutesAgo);
+    const items = config.items
+      .filter(
+        (item): item is { menuItem: MenuItemDocument; quantity: number } =>
+          Boolean(item.menuItem),
+      )
+      .map(({ menuItem, quantity }) => ({
+        menuItemId: menuItem._id.toString(),
+        name: menuItem.name,
+        quantity,
+        price: menuItem.price,
+        totalPrice: this.roundPrice(menuItem.price * quantity),
+        note: menuItem.name === 'Salat' ? 'Ohne Zwiebeln' : undefined,
+        isKitchenItem: menuItem.isKitchenItem,
+        productionArea: menuItem.isKitchenItem
+          ? ProductionArea.Kitchen
+          : ProductionArea.Bar,
+      }));
+    const subtotal = this.roundPrice(
+      items.reduce((sum, item) => sum + (item.totalPrice ?? 0), 0),
+    );
+    const total = subtotal;
+
+    return {
+      companyId: config.companyId,
+      locationId: config.locationId,
+      orderNumber: config.orderNumber,
+      source: config.source ?? OrderSource.Internal,
+      tableId: config.table?._id.toString(),
+      guestCount: config.table?.seats ?? 2,
+      status: config.status,
+      paymentStatus: config.paymentStatus,
+      items,
+      subtotal,
+      tax: this.roundPrice(total * 0.19),
+      total,
+      employeeId: config.employee?._id.toString(),
+      employeeName: config.employee
+        ? `${config.employee.firstName ?? ''} ${config.employee.lastName ?? ''}`.trim()
+        : 'Service Demo',
+      createdBy: config.employee?._id.toString(),
+      createdAt,
+      updatedAt: createdAt,
+      paidAt:
+        config.paymentStatus === PaymentStatus.Paid
+          ? this.minutesAgo(20)
+          : undefined,
+    };
+  }
+
+  private async recreateSalesDemoReservations(
+    locationId: string,
+    tables: RestaurantTableDocument[],
+  ): Promise<ReservationDocument[]> {
+    await this.reservationModel
+      .deleteMany({
+        locationId,
+        guestEmail: /@gastromania-demo\.de$/,
+      })
+      .exec();
+    const tableByName = new Map(tables.map((table) => [table.name, table]));
+    const baseDate = new Date();
+    const reservations: Array<Record<string, unknown>> = [
+      this.salesDemoReservation({
+        locationId,
+        table: tableByName.get('Tisch 4'),
+        guestName: 'Laura Schmitz',
+        guestEmail: 'laura.schmitz@gastromania-demo.de',
+        partySize: 4,
+        startHour: 18,
+        status: ReservationStatus.Confirmed,
+        baseDate,
+      }),
+      this.salesDemoReservation({
+        locationId,
+        table: tableByName.get('Tisch 12'),
+        guestName: 'David Becker',
+        guestEmail: 'david.becker@gastromania-demo.de',
+        partySize: 3,
+        startHour: 19,
+        status: ReservationStatus.Requested,
+        baseDate,
+      }),
+      this.salesDemoReservation({
+        locationId,
+        table: tableByName.get('Tisch 16'),
+        guestName: 'Mira Hoffmann',
+        guestEmail: 'mira.hoffmann@gastromania-demo.de',
+        partySize: 6,
+        startHour: 20,
+        status: ReservationStatus.Confirmed,
+        baseDate,
+      }),
+    ];
+
+    return this.reservationModel.insertMany(reservations) as unknown as Promise<
+      ReservationDocument[]
+    >;
+  }
+
+  private salesDemoReservation(config: {
+    locationId: string;
+    table?: RestaurantTableDocument;
+    guestName: string;
+    guestEmail: string;
+    partySize: number;
+    startHour: number;
+    status: ReservationStatus;
+    baseDate: Date;
+  }): Record<string, unknown> {
+    const startTime = new Date(config.baseDate);
+    startTime.setHours(config.startHour, 0, 0, 0);
+    const endTime = new Date(startTime);
+    endTime.setHours(startTime.getHours() + 2);
+
+    return {
+      locationId: config.locationId,
+      tableId: config.table?._id.toString() ?? '',
+      guestName: config.guestName,
+      guestEmail: config.guestEmail,
+      guestPhone: '0221 123456',
+      partySize: config.partySize,
+      startTime,
+      endTime,
+      status: config.status,
+      notes: 'Sales-Demo-Reservierung',
+    };
+  }
+
+  private upsertSalesDemoStockItems(
+    locationId: string,
+  ): Promise<StockItemDocument[]> {
+    const items = [
+      {
+        name: 'Burger Buns',
+        category: 'Trockenware',
+        unit: 'Stück',
+        quantity: 42,
+        minQuantity: 20,
+        purchasePriceNet: 0.65,
+        storageLocation: 'Lager Regal A',
+      },
+      {
+        name: 'Rinderhack',
+        category: 'Fleisch',
+        unit: 'kg',
+        quantity: 7.5,
+        minQuantity: 5,
+        purchasePriceNet: 11.8,
+        storageLocation: 'Kühlhaus 1',
+      },
+      {
+        name: 'Cheddar',
+        category: 'Molkerei',
+        unit: 'Scheiben',
+        quantity: 18,
+        minQuantity: 25,
+        purchasePriceNet: 0.28,
+        storageLocation: 'Kühlhaus 1',
+      },
+      {
+        name: 'Coca Cola 0,33',
+        category: 'Getränke',
+        unit: 'Flasche',
+        quantity: 36,
+        minQuantity: 24,
+        purchasePriceNet: 0.85,
+        storageLocation: 'Getränkelager',
+      },
+      {
+        name: 'Kaffeebohnen',
+        category: 'Kaffee',
+        unit: 'kg',
+        quantity: 3,
+        minQuantity: 2,
+        purchasePriceNet: 17.5,
+        storageLocation: 'Barlager',
+      },
+    ];
+
+    return Promise.all(
+      items.map((item) =>
+        this.stockItemModel
+          .findOneAndUpdate(
+            { locationId, name: item.name },
+            {
+              $set: {
+                locationId,
+                name: item.name,
+                category: item.category,
+                unit: item.unit,
+                quantity: item.quantity,
+                minQuantity: item.minQuantity,
+                criticalQuantity: Math.max(1, item.minQuantity / 2),
+                targetQuantity: item.minQuantity * 2,
+                purchasePriceNet: item.purchasePriceNet,
+                lastPurchasePrice: item.purchasePriceNet,
+                averageCost: item.purchasePriceNet,
+                unitCost: item.purchasePriceNet,
+                purchasePriceGross: this.roundPrice(
+                  item.purchasePriceNet * 1.19,
+                ),
+                storageLocation: item.storageLocation,
+                requiresExpiryDate: ['Fleisch', 'Molkerei'].includes(
+                  item.category,
+                ),
+                isActive: true,
+                isArchived: false,
+              },
+            },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec(),
+      ),
+    );
+  }
+
+  private async recreateSalesDemoStockMovements(
+    locationId: string,
+    stockItems: StockItemDocument[],
+    actorId: string,
+  ): Promise<StockMovementDocument[]> {
+    await this.stockMovementModel
+      .deleteMany({ locationId, note: /^Sales-Demo-/ })
+      .exec();
+
+    return this.stockMovementModel.insertMany(
+      stockItems.map((item, index) => ({
+        locationId,
+        stockItemId: item._id.toString(),
+        stockItemName: item.name,
+        type:
+          index === 3
+            ? StockMovementType.Shrinkage
+            : index % 2 === 0
+              ? StockMovementType.Receipt
+              : StockMovementType.Usage,
+        quantityChange: index % 2 === 0 ? 10 : -2,
+        quantityBefore:
+          index % 2 === 0 ? item.quantity - 10 : item.quantity + 2,
+        quantityAfter: item.quantity,
+        unitPriceNet: item.purchasePriceNet,
+        valueNet: this.roundPrice(
+          item.purchasePriceNet * (index % 2 === 0 ? 10 : 2),
+        ),
+        note: `Sales-Demo-${item.name}`,
+        actorId,
+      })),
+    );
+  }
+
+  private async recreateSalesDemoTimeEntries(
+    locationId: string,
+    users: UserDocument[],
+  ): Promise<TimeEntryDocument[]> {
+    await this.timeEntryModel
+      .deleteMany({ locationId, note: /^Sales-Demo-/ })
+      .exec();
+    const service = users.find((user) => user.roles.includes(Role.Service));
+    const kitchen = users.find((user) => user.roles.includes(Role.Kueche));
+    const manager = users.find((user) =>
+      user.roles.includes(Role.Filialleiter),
+    );
+
+    return this.timeEntryModel.insertMany(
+      [service, kitchen, manager]
+        .filter((user): user is UserDocument => Boolean(user))
+        .map((user, index) => ({
+          locationId,
+          employeeId: user._id.toString(),
+          clockIn: this.hoursAgo(index === 0 ? 3 : 2),
+          breakMinutes: index === 2 ? 30 : 15,
+          note: `Sales-Demo-${user.email}`,
+        })),
+    );
+  }
+
+  private upsertSalesDemoChecklists(
+    locationId: string,
+  ): Promise<ChecklistDocument[]> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checklists = [
+      {
+        title: 'Sales-Demo Service Start',
+        area: 'Service',
+        roles: [Role.Service, Role.Filialleiter],
+        tasks: [
+          { title: 'Terrasse eindecken', isDone: true },
+          { title: 'Reservierungen prüfen', isDone: false },
+        ],
+      },
+      {
+        title: 'Sales-Demo Küche Mise en Place',
+        area: 'Küche',
+        roles: [Role.Kueche, Role.Filialleiter],
+        tasks: [
+          { title: 'Burger-Station vorbereiten', isDone: true },
+          { title: 'Kühlbestand prüfen', isDone: false },
+          { title: 'Tagesangebot vorbereiten', isDone: false },
+        ],
+      },
+    ];
+
+    return Promise.all(
+      checklists.map((checklist) =>
+        this.checklistModel
+          .findOneAndUpdate(
+            { locationId, date: today, title: checklist.title },
+            {
+              $set: {
+                locationId,
+                date: today,
+                title: checklist.title,
+                area: checklist.area,
+                roles: checklist.roles,
+                status: ChecklistStatus.InProgress,
+                tasks: checklist.tasks,
+                note: 'Sales-Demo-Checkliste für Dashboard-Kennzahlen',
+              },
+            },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec(),
+      ),
     );
   }
 
@@ -875,7 +1412,11 @@ export class DemoDataService {
                 isActive: true,
               },
             },
-            { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
           )
           .exec(),
       ),
@@ -923,7 +1464,11 @@ export class DemoDataService {
                 responsibilities: [],
               },
             },
-            { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
           )
           .exec();
       }),
@@ -2512,6 +3057,18 @@ export class DemoDataService {
 
   private roundPrice(value: number): number {
     return Number(value.toFixed(2));
+  }
+
+  private minutesAgo(minutes: number): Date {
+    const date = new Date();
+    date.setMinutes(date.getMinutes() - minutes);
+    return date;
+  }
+
+  private hoursAgo(hours: number): Date {
+    const date = new Date();
+    date.setHours(date.getHours() - hours);
+    return date;
   }
 
   private atTime(date: Date, hours: number, minutes: number): Date {

@@ -242,7 +242,7 @@ export class RecipeService {
 
     if (
       payload.companyId &&
-      !(await this.accessPolicy.canAccessCompany(actor, payload.companyId))
+      !this.accessPolicy.canAccessCompany(actor, payload.companyId)
     ) {
       throw new ForbiddenException(
         'Keine Berechtigung fuer dieses Unternehmen',
@@ -290,7 +290,7 @@ export class RecipeService {
     actor: AuthenticatedUser,
   ): Promise<boolean> {
     if (
-      !(await this.accessPolicy.canAccessCompany(actor, recipe.companyId)) ||
+      !this.accessPolicy.canAccessCompany(actor, recipe.companyId) ||
       !(await this.accessPolicy.canAccessLocation(actor, recipe.locationId))
     ) {
       return false;

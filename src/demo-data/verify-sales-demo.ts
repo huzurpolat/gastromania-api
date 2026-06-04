@@ -3,7 +3,10 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AppModule } from '../app.module';
 import { AuthService } from '../auth/auth.service';
-import { Location, LocationDocument } from '../locations/schemas/location.schema';
+import {
+  Location,
+  LocationDocument,
+} from '../locations/schemas/location.schema';
 import {
   MenuItem,
   MenuItemDocument,

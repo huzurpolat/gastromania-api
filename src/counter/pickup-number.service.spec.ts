@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { PickupNumberService } from './pickup-number.service';
 
 describe('PickupNumberService', () => {

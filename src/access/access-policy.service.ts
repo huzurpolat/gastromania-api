@@ -209,10 +209,7 @@ export class AccessPolicyService {
     return { _id: { $in: [] } };
   }
 
-  async canAccessCompany(
-    user: AuthenticatedUser,
-    companyId?: string,
-  ): Promise<boolean> {
+  canAccessCompany(user: AuthenticatedUser, companyId?: string): boolean {
     if (!companyId || this.isPlatformAdmin(user)) {
       return true;
     }
@@ -295,7 +292,7 @@ export class AccessPolicyService {
     }
 
     return (
-      (await this.canAccessCompany(user, department.companyId)) &&
+      this.canAccessCompany(user, department.companyId) &&
       (await this.canAssignLocation(user, department.locationId))
     );
   }
@@ -454,10 +451,7 @@ export class AccessPolicyService {
     actor: AuthenticatedUser,
     payload: AssignableScope,
   ): Promise<void> {
-    if (
-      payload.companyId &&
-      !(await this.canAccessCompany(actor, payload.companyId))
-    ) {
+    if (payload.companyId && !this.canAccessCompany(actor, payload.companyId)) {
       throw new ForbiddenException(
         'Keine Berechtigung fuer dieses Unternehmen',
       );

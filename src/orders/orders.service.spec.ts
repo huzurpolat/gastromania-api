@@ -49,8 +49,8 @@ describe('OrdersService', () => {
     orderModel.countDocuments.mockReturnValue({
       exec: jest.fn().mockResolvedValue(0),
     });
-    orderModel.create.mockImplementation(
-      async (payload: Record<string, unknown>) => ({
+    orderModel.create.mockImplementation((payload: Record<string, unknown>) =>
+      Promise.resolve({
         _id: { toString: () => '507f1f77bcf86cd799439014' },
         ...payload,
         save: jest.fn().mockResolvedValue(undefined),

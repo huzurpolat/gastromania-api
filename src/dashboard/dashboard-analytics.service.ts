@@ -9,7 +9,14 @@ import {
 } from '../checklists/schemas/checklist.schema';
 import { DutyShift } from '../duty-schedules/schemas/duty-shift.schema';
 import { Location } from '../locations/schemas/location.schema';
-import { Order, OrderStatus } from '../orders/schemas/order.schema';
+import {
+  Order,
+  OrderItemStatus,
+  OrderSource,
+  OrderStatus,
+  PaymentStatus,
+  ProductionArea,
+} from '../orders/schemas/order.schema';
 import {
   Reservation,
   ReservationStatus,
@@ -149,6 +156,11 @@ export class DashboardAnalyticsService {
       ordersToday,
       ordersYesterday,
       openOrders,
+      kitchenOrders,
+      readyForPickupOrders,
+      counterOrdersToday,
+      openCounterOrders,
+      openPayments,
       reservationsToday,
       reservationsThisWeek,
       tablesTotal,
@@ -156,6 +168,7 @@ export class DashboardAnalyticsService {
       employeesInService,
       checklistOpenTasks,
       inventory,
+      shrinkageToday,
       dailyClosing,
       alerts,
     ] = await Promise.all([
@@ -167,6 +180,23 @@ export class DashboardAnalyticsService {
       this.orderModel.countDocuments({
         ...locationFilter,
         status: { $in: this.activeOrderStatuses() },
+      }),
+      this.countKitchenOrders(locationFilter),
+      this.countReadyForPickupOrders(locationFilter),
+      this.orderModel.countDocuments({
+        ...todayFilter,
+        source: OrderSource.Counter,
+        ...nonCancelled,
+      }),
+      this.orderModel.countDocuments({
+        ...locationFilter,
+        source: OrderSource.Counter,
+        status: { $in: this.activeOrderStatuses() },
+      }),
+      this.orderModel.countDocuments({
+        ...locationFilter,
+        paymentStatus: { $ne: PaymentStatus.Paid },
+        status: { $nin: [OrderStatus.Cancelled, OrderStatus.Closed] },
       }),
       this.reservationModel.countDocuments({
         ...locationFilter,
@@ -193,6 +223,21 @@ export class DashboardAnalyticsService {
       }),
       this.countOpenChecklistTasks(locationFilter, today.from, today.to),
       this.inventorySummary(locationFilter),
+      this.sumStockMovements(
+        {
+          ...locationFilter,
+          type: {
+            $in: [
+              StockMovementType.Shrinkage,
+              StockMovementType.Breakage,
+              StockMovementType.Spoilage,
+              StockMovementType.Loss,
+            ],
+          },
+          createdAt: { $gte: today.from, $lte: today.to },
+        },
+        '$valueNet',
+      ),
       this.dailyClosingSummary(locationFilter, today.from, today.to),
       this.alerts(user, resolved),
     ]);
@@ -209,6 +254,11 @@ export class DashboardAnalyticsService {
         ordersTrend: this.percentChange(ordersToday, ordersYesterday),
         averageOrderValue: ordersToday > 0 ? revenueToday / ordersToday : 0,
         openOrders,
+        kitchenOrders,
+        readyForPickupOrders,
+        counterOrdersToday,
+        openCounterOrders,
+        openPayments,
         reservationsToday,
         reservationsThisWeek,
         tableUtilization:
@@ -217,6 +267,7 @@ export class DashboardAnalyticsService {
         openChecklistTasks: checklistOpenTasks,
         inventoryValue: inventory.value,
         lowStockItems: inventory.lowStockItems,
+        shrinkageToday,
         dailyClosingOpen: dailyClosing.open,
         dailyClosingCompleted: dailyClosing.completed,
         dailyClosingIssues: dailyClosing.issues,
@@ -713,6 +764,43 @@ export class DashboardAnalyticsService {
     ]);
 
     return Number(result?.count ?? 0);
+  }
+
+  private async countKitchenOrders(locationFilter: Record<string, unknown>) {
+    return this.orderModel.countDocuments({
+      ...locationFilter,
+      status: {
+        $in: [OrderStatus.New, OrderStatus.Accepted, OrderStatus.Preparing],
+      },
+      items: {
+        $elemMatch: {
+          productionArea: {
+            $in: [
+              ProductionArea.Kitchen,
+              ProductionArea.Grill,
+              ProductionArea.Prep,
+              ProductionArea.Dessert,
+            ],
+          },
+          status: {
+            $in: [
+              OrderItemStatus.Open,
+              OrderItemStatus.Started,
+              OrderItemStatus.Preparing,
+            ],
+          },
+        },
+      },
+    });
+  }
+
+  private async countReadyForPickupOrders(
+    locationFilter: Record<string, unknown>,
+  ) {
+    return this.orderModel.countDocuments({
+      ...locationFilter,
+      status: OrderStatus.Ready,
+    });
   }
 
   private async orderTimeline(

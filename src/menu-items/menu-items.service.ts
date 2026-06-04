@@ -39,14 +39,16 @@ export class MenuItemsService {
     }
   }
 
-  async findAll(_actor: AuthenticatedUser): Promise<MenuItemDocument[]> {
+  async findAll(actor: AuthenticatedUser): Promise<MenuItemDocument[]> {
+    void actor;
     return this.menuItemModel.find().sort({ category: 1, name: 1 }).exec();
   }
 
   async findOne(
     id: string,
-    _actor?: AuthenticatedUser,
+    actor?: AuthenticatedUser,
   ): Promise<MenuItemDocument> {
+    void actor;
     this.validateObjectId(id);
 
     const menuItem = await this.menuItemModel.findById(id).exec();

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { ForbiddenException } from '@nestjs/common';
 import { Role } from '../auth/enums/role.enum';
 import { OrderStatus } from '../orders/schemas/order.schema';

@@ -405,7 +405,7 @@ export class RecipeInventoryService {
       'toString' in value &&
       value.toString !== Object.prototype.toString
     ) {
-      return String(value);
+      return (value as { toString: () => string }).toString();
     }
     return '';
   }

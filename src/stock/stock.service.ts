@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   MessageEvent,
   NotFoundException,
@@ -9,7 +8,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Observable, Subject, filter, from, map, switchMap } from 'rxjs';
 import { AccessPolicyService } from '../access/access-policy.service';
-import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
   Location,

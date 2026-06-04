@@ -29,12 +29,115 @@ class FakeModel {
     }
 
     return {
-      exec: async () => doc,
+      exec: () => Promise.resolve(doc),
     };
   }
 
+  updateMany(filter: Record<string, unknown>, update: Record<string, unknown>) {
+    const matched = this.rows.filter((row) => this.matches(row, filter));
+    matched.forEach((row) => this.applyUpdate(row, update));
+
+    return {
+      exec: () => Promise.resolve({ modifiedCount: matched.length }),
+    };
+  }
+
+  updateOne(filter: Record<string, unknown>, update: Record<string, unknown>) {
+    const row = this.rows.find((entry) => this.matches(entry, filter));
+    if (row) {
+      this.applyUpdate(row, update);
+    }
+
+    return {
+      exec: () => Promise.resolve({ modifiedCount: row ? 1 : 0 }),
+    };
+  }
+
+  deleteMany(filter: Record<string, unknown>) {
+    const remaining = this.rows.filter((row) => !this.matches(row, filter));
+    const deletedCount = this.rows.length - remaining.length;
+    this.rows.splice(0, this.rows.length, ...remaining);
+
+    return {
+      exec: () => Promise.resolve({ deletedCount }),
+    };
+  }
+
+  insertMany(docs: Array<Record<string, unknown>>) {
+    const inserted = docs.map((doc) => {
+      const insertedDoc = {
+        _id: `${this.prefix}-${this.sequence++}`,
+        createdAt: doc.createdAt ?? new Date(),
+        updatedAt: doc.updatedAt ?? new Date(),
+        ...doc,
+      } as DemoDoc;
+      this.rows.push(insertedDoc);
+      return insertedDoc;
+    });
+
+    return Promise.resolve(inserted);
+  }
+
   private matches(row: DemoDoc, filter: Record<string, unknown>): boolean {
-    return Object.entries(filter).every(([key, value]) => row[key] === value);
+    return Object.entries(filter).every(([key, value]) => {
+      if (value instanceof RegExp) {
+        return value.test(this.stringValue(row[key]));
+      }
+
+      if (this.isPlainObject(value)) {
+        const operators = value;
+        if ('$in' in operators) {
+          return (operators.$in as unknown[]).includes(row[key]);
+        }
+
+        if ('$nin' in operators) {
+          return !(operators.$nin as unknown[]).includes(row[key]);
+        }
+      }
+
+      if (value instanceof Date && row[key] instanceof Date) {
+        return value.getTime() === row[key].getTime();
+      }
+
+      return row[key] === value;
+    });
+  }
+
+  private applyUpdate(row: DemoDoc, update: Record<string, unknown>): void {
+    const set = (update.$set as Record<string, unknown> | undefined) ?? {};
+    Object.assign(row, set);
+
+    const addToSet = update.$addToSet as Record<string, unknown> | undefined;
+    if (addToSet) {
+      for (const [key, value] of Object.entries(addToSet)) {
+        const current = Array.isArray(row[key]) ? (row[key] as unknown[]) : [];
+        if (!current.includes(value)) {
+          row[key] = [...current, value];
+        }
+      }
+    }
+
+    const unset = update.$unset as Record<string, unknown> | undefined;
+    if (unset) {
+      for (const key of Object.keys(unset)) {
+        delete row[key];
+      }
+    }
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  private stringValue(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+
+    return JSON.stringify(value);
   }
 }
 
@@ -43,28 +146,39 @@ describe('DemoDataService sales demo seed', () => {
     const locationModel = new FakeModel('location');
     const tableModel = new FakeModel('table');
     const menuItemModel = new FakeModel('menu-item');
+    const orderModel = new FakeModel('order');
+    const reservationModel = new FakeModel('reservation');
     const userModel = new FakeModel('user');
+    const dutyShiftModel = new FakeModel('duty-shift');
+    const timeEntryModel = new FakeModel('time-entry');
+    const weeklyMenuModel = new FakeModel('weekly-menu');
+    const internalMessageModel = new FakeModel('internal-message');
+    const stockItemModel = new FakeModel('stock-item');
+    const stockMovementModel = new FakeModel('stock-movement');
+    const inventoryBatchModel = new FakeModel('inventory-batch');
+    const purchaseOrderModel = new FakeModel('purchase-order');
+    const supplierModel = new FakeModel('supplier');
+    const checklistModel = new FakeModel('checklist');
     const companyModel = new FakeModel('company');
     const departmentModel = new FakeModel('department');
     const regionModel = new FakeModel('region');
-    const unusedModel = new FakeModel('unused');
     const service = new DemoDataService(
       locationModel as never,
       tableModel as never,
       menuItemModel as never,
-      unusedModel as never,
-      unusedModel as never,
+      orderModel as never,
+      reservationModel as never,
       userModel as never,
-      unusedModel as never,
-      unusedModel as never,
-      unusedModel as never,
-      unusedModel as never,
-      unusedModel as never,
-      unusedModel as never,
-      unusedModel as never,
-      unusedModel as never,
-      unusedModel as never,
-      unusedModel as never,
+      dutyShiftModel as never,
+      timeEntryModel as never,
+      weeklyMenuModel as never,
+      internalMessageModel as never,
+      stockItemModel as never,
+      stockMovementModel as never,
+      inventoryBatchModel as never,
+      purchaseOrderModel as never,
+      supplierModel as never,
+      checklistModel as never,
       companyModel as never,
       departmentModel as never,
       regionModel as never,
@@ -75,7 +189,13 @@ describe('DemoDataService sales demo seed', () => {
       locationModel,
       tableModel,
       menuItemModel,
+      orderModel,
+      reservationModel,
       userModel,
+      stockItemModel,
+      stockMovementModel,
+      timeEntryModel,
+      checklistModel,
       companyModel,
       departmentModel,
       regionModel,
@@ -88,7 +208,13 @@ describe('DemoDataService sales demo seed', () => {
       locationModel,
       tableModel,
       menuItemModel,
+      orderModel,
+      reservationModel,
       userModel,
+      stockItemModel,
+      stockMovementModel,
+      timeEntryModel,
+      checklistModel,
       companyModel,
       departmentModel,
       regionModel,
@@ -104,6 +230,12 @@ describe('DemoDataService sales demo seed', () => {
       users: 6,
       tables: 20,
       menuItems: 12,
+      orders: 4,
+      reservations: 3,
+      stockItems: 5,
+      stockMovements: 5,
+      timeEntries: 3,
+      checklists: 2,
     });
     expect(companyModel.rows).toHaveLength(1);
     expect(companyModel.rows[0]).toMatchObject({
@@ -138,14 +270,17 @@ describe('DemoDataService sales demo seed', () => {
     expect(departmentModel.rows).toHaveLength(5);
     expect(tableModel.rows).toHaveLength(20);
     expect(
+      tableModel.rows.filter((table) => table.status === 'Occupied'),
+    ).toHaveLength(4);
+    expect(
       tableModel.rows.filter((table) => table.area === 'Restaurantbereich'),
     ).toHaveLength(10);
-    expect(tableModel.rows.filter((table) => table.area === 'Terrasse')).toHaveLength(
-      5,
-    );
-    expect(tableModel.rows.filter((table) => table.area === 'Lounge')).toHaveLength(
-      5,
-    );
+    expect(
+      tableModel.rows.filter((table) => table.area === 'Terrasse'),
+    ).toHaveLength(5);
+    expect(
+      tableModel.rows.filter((table) => table.area === 'Lounge'),
+    ).toHaveLength(5);
     expect(menuItemModel.rows.map((item) => item.name)).toEqual(
       expect.arrayContaining([
         'Wasser 0,25',
@@ -162,6 +297,22 @@ describe('DemoDataService sales demo seed', () => {
         'Espresso',
       ]),
     );
+    expect(orderModel.rows).toHaveLength(4);
+    expect(
+      orderModel.rows.reduce((sum, order) => sum + Number(order.total ?? 0), 0),
+    ).toBeGreaterThan(0);
+    expect(reservationModel.rows).toHaveLength(3);
+    expect(stockItemModel.rows).toHaveLength(5);
+    expect(
+      stockItemModel.rows.reduce(
+        (sum, item) =>
+          sum + Number(item.quantity ?? 0) * Number(item.purchasePriceNet ?? 0),
+        0,
+      ),
+    ).toBeGreaterThan(0);
+    expect(stockMovementModel.rows).toHaveLength(5);
+    expect(timeEntryModel.rows).toHaveLength(3);
+    expect(checklistModel.rows).toHaveLength(2);
     expect(userModel.rows.map((user) => user.email)).toEqual(
       expect.arrayContaining([
         'admin@gastromania-demo.de',
@@ -222,7 +373,13 @@ describe('DemoDataService sales demo seed', () => {
       locationModel,
       tableModel,
       menuItemModel,
+      orderModel,
+      reservationModel,
       userModel,
+      stockItemModel,
+      stockMovementModel,
+      timeEntryModel,
+      checklistModel,
       companyModel,
       departmentModel,
       regionModel,
@@ -237,6 +394,12 @@ describe('DemoDataService sales demo seed', () => {
     expect(departmentModel.rows).toHaveLength(5);
     expect(tableModel.rows).toHaveLength(20);
     expect(menuItemModel.rows).toHaveLength(12);
+    expect(orderModel.rows).toHaveLength(4);
+    expect(reservationModel.rows).toHaveLength(3);
+    expect(stockItemModel.rows).toHaveLength(5);
+    expect(stockMovementModel.rows).toHaveLength(5);
+    expect(timeEntryModel.rows).toHaveLength(3);
+    expect(checklistModel.rows).toHaveLength(2);
     expect(userModel.rows).toHaveLength(6);
   });
 });
