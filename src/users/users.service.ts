@@ -42,6 +42,10 @@ export class UsersService {
     actor?: AuthenticatedUser,
   ): Promise<UserResponse> {
     await this.assertCanManagePayload(actor, createUserDto);
+    await this.assertUniqueEmployeeNumber(
+      createUserDto.employeeNumber,
+      createUserDto.companyId ?? actor?.companyId,
+    );
 
     const passwordHash = await bcrypt.hash(
       createUserDto.password,
@@ -67,7 +71,31 @@ export class UsersService {
         vatId: createUserDto.vatId,
         taxOffice: createUserDto.taxOffice,
         employeeNumber: createUserDto.employeeNumber,
+        address: createUserDto.address,
+        street: createUserDto.street,
+        zip: createUserDto.zip,
+        city: createUserDto.city,
+        country: createUserDto.country,
+        birthDate: createUserDto.birthDate
+          ? new Date(createUserDto.birthDate)
+          : undefined,
+        hireDate: createUserDto.hireDate
+          ? new Date(createUserDto.hireDate)
+          : undefined,
+        terminationDate: createUserDto.terminationDate
+          ? new Date(createUserDto.terminationDate)
+          : undefined,
         department: createUserDto.department,
+        qualifications: createUserDto.qualifications ?? [],
+        employmentType: createUserDto.employmentType,
+        contractType: createUserDto.contractType,
+        weeklyHours: createUserDto.weeklyHours,
+        hourlyRate: createUserDto.hourlyRate,
+        monthlySalary: createUserDto.monthlySalary,
+        vacationDaysPerYear: createUserDto.vacationDaysPerYear,
+        remainingVacationDays: createUserDto.remainingVacationDays,
+        employeeStatus: createUserDto.employeeStatus,
+        notes: createUserDto.notes,
         profileImageUrl: createUserDto.profileImageUrl,
         roles: rolesOverride ?? createUserDto.roles,
         isActive: createUserDto.isActive,
@@ -134,6 +162,11 @@ export class UsersService {
 
     await this.assertCanManageUser(actor, existingUser);
     await this.assertCanManagePayload(actor, updateUserDto, existingUser);
+    await this.assertUniqueEmployeeNumber(
+      updateUserDto.employeeNumber,
+      updateUserDto.companyId ?? existingUser.companyId,
+      id,
+    );
 
     const update: Partial<User> = {};
     const locationIds = this.getUniqueLocationIds([
@@ -179,8 +212,80 @@ export class UsersService {
       update.employeeNumber = updateUserDto.employeeNumber;
     }
 
+    if (updateUserDto.address !== undefined) {
+      update.address = updateUserDto.address;
+    }
+
+    if (updateUserDto.street !== undefined) {
+      update.street = updateUserDto.street;
+    }
+
+    if (updateUserDto.zip !== undefined) {
+      update.zip = updateUserDto.zip;
+    }
+
+    if (updateUserDto.city !== undefined) {
+      update.city = updateUserDto.city;
+    }
+
+    if (updateUserDto.country !== undefined) {
+      update.country = updateUserDto.country;
+    }
+
+    if (updateUserDto.birthDate !== undefined) {
+      update.birthDate = new Date(updateUserDto.birthDate);
+    }
+
+    if (updateUserDto.hireDate !== undefined) {
+      update.hireDate = new Date(updateUserDto.hireDate);
+    }
+
+    if (updateUserDto.terminationDate !== undefined) {
+      update.terminationDate = new Date(updateUserDto.terminationDate);
+    }
+
     if (updateUserDto.department !== undefined) {
       update.department = updateUserDto.department;
+    }
+
+    if (updateUserDto.qualifications !== undefined) {
+      update.qualifications = updateUserDto.qualifications;
+    }
+
+    if (updateUserDto.employmentType !== undefined) {
+      update.employmentType = updateUserDto.employmentType;
+    }
+
+    if (updateUserDto.contractType !== undefined) {
+      update.contractType = updateUserDto.contractType;
+    }
+
+    if (updateUserDto.weeklyHours !== undefined) {
+      update.weeklyHours = updateUserDto.weeklyHours;
+    }
+
+    if (updateUserDto.hourlyRate !== undefined) {
+      update.hourlyRate = updateUserDto.hourlyRate;
+    }
+
+    if (updateUserDto.monthlySalary !== undefined) {
+      update.monthlySalary = updateUserDto.monthlySalary;
+    }
+
+    if (updateUserDto.vacationDaysPerYear !== undefined) {
+      update.vacationDaysPerYear = updateUserDto.vacationDaysPerYear;
+    }
+
+    if (updateUserDto.remainingVacationDays !== undefined) {
+      update.remainingVacationDays = updateUserDto.remainingVacationDays;
+    }
+
+    if (updateUserDto.employeeStatus !== undefined) {
+      update.employeeStatus = updateUserDto.employeeStatus;
+    }
+
+    if (updateUserDto.notes !== undefined) {
+      update.notes = updateUserDto.notes;
     }
 
     if (updateUserDto.profileImageUrl !== undefined) {
@@ -367,6 +472,31 @@ export class UsersService {
     return this.userModel
       .countDocuments({ roles: Role.SuperAdmin, isActive: true })
       .exec();
+  }
+
+  private async assertUniqueEmployeeNumber(
+    employeeNumber?: string,
+    companyId?: string,
+    ignoreUserId?: string,
+  ): Promise<void> {
+    if (!employeeNumber) {
+      return;
+    }
+
+    const query: Record<string, unknown> = { employeeNumber };
+    if (companyId) {
+      query.companyId = companyId;
+    }
+    if (ignoreUserId) {
+      query._id = { $ne: ignoreUserId };
+    }
+
+    const existing = await this.userModel.exists(query);
+    if (existing) {
+      throw new ConflictException(
+        'Benutzer mit dieser Personalnummer existiert bereits',
+      );
+    }
   }
 
   private getUniqueLocationIds(

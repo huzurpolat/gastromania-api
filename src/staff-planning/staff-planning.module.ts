@@ -24,7 +24,12 @@ import {
   StaffPlanningAudit,
   StaffPlanningAuditSchema,
 } from './schemas/staff-planning-audit.schema';
+import {
+  ShiftTemplate,
+  ShiftTemplateSchema,
+} from './schemas/shift-template.schema';
 import { StaffShift, StaffShiftSchema } from './schemas/staff-shift.schema';
+import { StaffScheduleController } from './staff-schedule.controller';
 import { StaffPlanningController } from './staff-planning.controller';
 import { StaffPlanningService } from './staff-planning.service';
 
@@ -37,13 +42,14 @@ import { StaffPlanningService } from './staff-planning.service';
       { name: StaffAvailability.name, schema: StaffAvailabilitySchema },
       { name: StaffAbsence.name, schema: StaffAbsenceSchema },
       { name: ShiftSwapRequest.name, schema: ShiftSwapRequestSchema },
+      { name: ShiftTemplate.name, schema: ShiftTemplateSchema },
       { name: StaffPlanningAudit.name, schema: StaffPlanningAuditSchema },
       { name: StaffNotification.name, schema: StaffNotificationSchema },
       { name: User.name, schema: UserSchema },
       { name: Location.name, schema: LocationSchema },
     ]),
   ],
-  controllers: [StaffPlanningController],
+  controllers: [StaffPlanningController, StaffScheduleController],
   providers: [StaffPlanningService],
   exports: [StaffPlanningService],
 })

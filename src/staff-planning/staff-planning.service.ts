@@ -23,6 +23,10 @@ import {
 } from './dto/availability.dto';
 import { CreateShiftSwapRequestDto } from './dto/shift-swap.dto';
 import {
+  CreateShiftTemplateDto,
+  UpdateShiftTemplateDto,
+} from './dto/shift-template.dto';
+import {
   AssignStaffShiftDto,
   CreateStaffShiftDto,
   UnassignStaffShiftDto,
@@ -33,6 +37,10 @@ import {
   ShiftSwapRequestDocument,
   ShiftSwapStatus,
 } from './schemas/shift-swap-request.schema';
+import {
+  ShiftTemplate,
+  ShiftTemplateDocument,
+} from './schemas/shift-template.schema';
 import {
   StaffAbsence,
   StaffAbsenceDocument,
@@ -77,6 +85,8 @@ export class StaffPlanningService {
     private readonly absenceModel: Model<StaffAbsenceDocument>,
     @InjectModel(ShiftSwapRequest.name)
     private readonly swapModel: Model<ShiftSwapRequestDocument>,
+    @InjectModel(ShiftTemplate.name)
+    private readonly templateModel: Model<ShiftTemplateDocument>,
     @InjectModel(StaffPlanningAudit.name)
     private readonly auditModel: Model<StaffPlanningAuditDocument>,
     @InjectModel(StaffNotification.name)
@@ -92,6 +102,107 @@ export class StaffPlanningService {
   async findShifts(actor: AuthenticatedUser, filters: StaffShiftFilters = {}) {
     const query = await this.getShiftQuery(actor, filters);
     return this.shiftModel.find(query).sort({ startTime: 1 }).exec();
+  }
+
+  async findTemplates(
+    actor: AuthenticatedUser,
+    filters: { locationId?: string } = {},
+  ) {
+    const query: Record<string, unknown> = {
+      $or: [{ locationId: { $exists: false } }],
+    };
+
+    if (filters.locationId) {
+      await this.accessPolicy.assertCanAccessLocation(
+        actor,
+        filters.locationId,
+      );
+      query.$or = [
+        { locationId: filters.locationId },
+        { locationId: { $exists: false } },
+      ];
+    } else if (!this.accessPolicy.isPlatformAdmin(actor)) {
+      const locationIds = await this.accessPolicy.getReadableLocationIds(actor);
+      query.$or = [
+        { locationId: { $in: locationIds } },
+        { locationId: { $exists: false } },
+      ];
+    }
+
+    return this.templateModel.find(query).sort({ name: 1 }).exec();
+  }
+
+  async createTemplate(
+    payload: CreateShiftTemplateDto,
+    actor: AuthenticatedUser,
+  ) {
+    if (payload.locationId) {
+      await this.assertCanManageStaffAtLocation(actor, payload.locationId);
+    } else if (!this.isStaffManager(actor)) {
+      throw new ForbiddenException('Keine Berechtigung fuer Schichtvorlagen');
+    }
+    this.assertTimeWindow(payload.startTime, payload.endTime);
+
+    const template = await this.templateModel.create({
+      ...payload,
+      companyId: actor.companyId,
+      breakMinutes: payload.breakMinutes ?? 0,
+      requiredStaffCount: payload.requiredStaffCount ?? 1,
+      isActive: payload.isActive ?? true,
+    });
+
+    await this.writeAudit(actor, 'staff.shiftTemplate.created', {
+      locationId: template.locationId,
+      newValue: this.snapshot(template),
+    });
+
+    return template;
+  }
+
+  async updateTemplate(
+    id: string,
+    payload: UpdateShiftTemplateDto,
+    actor: AuthenticatedUser,
+  ) {
+    const template = await this.getTemplateOrThrow(id);
+    if (template.locationId) {
+      await this.assertCanManageStaffAtLocation(actor, template.locationId);
+    } else if (!this.isStaffManager(actor)) {
+      throw new ForbiddenException('Keine Berechtigung fuer Schichtvorlagen');
+    }
+    if (payload.locationId) {
+      await this.assertCanManageStaffAtLocation(actor, payload.locationId);
+    }
+    if (payload.startTime && payload.endTime) {
+      this.assertTimeWindow(payload.startTime, payload.endTime);
+    }
+    const previousValue = this.snapshot(template);
+    const updated = await this.templateModel
+      .findByIdAndUpdate(id, payload, { new: true, runValidators: true })
+      .exec();
+    if (!updated) {
+      throw new NotFoundException('Schichtvorlage nicht gefunden');
+    }
+    await this.writeAudit(actor, 'staff.shiftTemplate.updated', {
+      locationId: updated.locationId,
+      previousValue,
+      newValue: this.snapshot(updated),
+    });
+    return updated;
+  }
+
+  async deleteTemplate(id: string, actor: AuthenticatedUser) {
+    const template = await this.getTemplateOrThrow(id);
+    if (template.locationId) {
+      await this.assertCanManageStaffAtLocation(actor, template.locationId);
+    } else if (!this.isStaffManager(actor)) {
+      throw new ForbiddenException('Keine Berechtigung fuer Schichtvorlagen');
+    }
+    await this.templateModel.findByIdAndDelete(id).exec();
+    await this.writeAudit(actor, 'staff.shiftTemplate.deleted', {
+      locationId: template.locationId,
+      previousValue: this.snapshot(template),
+    });
   }
 
   async findShift(id: string, actor: AuthenticatedUser) {
@@ -916,6 +1027,13 @@ export class StaffPlanningService {
     const swap = await this.swapModel.findById(id).exec();
     if (!swap) throw new NotFoundException('Schichttausch nicht gefunden');
     return swap;
+  }
+
+  private async getTemplateOrThrow(id: string) {
+    this.validateObjectId(id, 'Schichtvorlagen-ID');
+    const template = await this.templateModel.findById(id).exec();
+    if (!template) throw new NotFoundException('Schichtvorlage nicht gefunden');
+    return template;
   }
 
   private async writeAudit(

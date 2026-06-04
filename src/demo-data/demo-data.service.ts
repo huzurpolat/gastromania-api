@@ -1395,8 +1395,10 @@ export class DemoDataService {
 
   private upsertSalesDemoMenuItems(): Promise<MenuItemDocument[]> {
     return Promise.all(
-      this.salesDemoMenuItems.map((item) =>
-        this.menuItemModel
+      this.salesDemoMenuItems.map((item) => {
+        const theme = this.salesDemoCategoryTheme(item);
+
+        return this.menuItemModel
           .findOneAndUpdate(
             { name: item.name, category: item.category },
             {
@@ -1412,6 +1414,7 @@ export class DemoDataService {
                 isVegan: item.isVegan ?? false,
                 containsNuts: false,
                 isActive: true,
+                ...theme,
               },
             },
             {
@@ -1420,9 +1423,77 @@ export class DemoDataService {
               upsert: true,
             },
           )
-          .exec(),
-      ),
+          .exec();
+      }),
     );
+  }
+
+  private salesDemoCategoryTheme(item: SalesDemoMenuItemConfig): {
+    color: string;
+    icon: string;
+    backgroundColor: string;
+    textColor: string;
+    sortOrder: number;
+  } {
+    const name = item.name.toLocaleLowerCase('de-DE');
+
+    if (name.includes('burger')) {
+      return {
+        color: '#7a4a22',
+        icon: 'lunch_dining',
+        backgroundColor: '#fff7ef',
+        textColor: '#3b2412',
+        sortOrder: 10,
+      };
+    }
+
+    if (name.includes('salat')) {
+      return {
+        color: '#2e8b57',
+        icon: 'eco',
+        backgroundColor: '#f0fbf2',
+        textColor: '#173d24',
+        sortOrder: 40,
+      };
+    }
+
+    if (item.category === 'Kaffee') {
+      return {
+        color: '#4c2d1f',
+        icon: 'local_cafe',
+        backgroundColor: '#f8f1ea',
+        textColor: '#271306',
+        sortOrder: 60,
+      };
+    }
+
+    if (name.includes('pils') || name.includes('weizen')) {
+      return {
+        color: '#c99a13',
+        icon: 'sports_bar',
+        backgroundColor: '#fff9e8',
+        textColor: '#483400',
+        sortOrder: 80,
+      };
+    }
+
+    if (item.category === 'Getränke') {
+      return {
+        color: '#1478cf',
+        icon: 'local_drink',
+        backgroundColor: '#eff8ff',
+        textColor: '#08345d',
+        sortOrder: 70,
+      };
+    }
+
+    return {
+      color: '#7a4a22',
+      icon: 'restaurant',
+      backgroundColor: '#fff7ef',
+      textColor: '#3b2412',
+      sortOrder: 15,
+    };
   }
 
   private async upsertSalesDemoUsers(

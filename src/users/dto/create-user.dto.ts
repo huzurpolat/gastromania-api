@@ -1,12 +1,16 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
   IsBoolean,
+  IsDateString,
+  IsIn,
   IsEmail,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -16,6 +20,54 @@ const trimString = (value: unknown): unknown =>
 const optionalTrimString = (value: unknown): unknown => {
   return trimString(value);
 };
+
+export const CONTRACT_TYPES = [
+  'Vollzeit',
+  'Teilzeit',
+  'Minijob',
+  'Werkstudent',
+  'Aushilfe',
+  'Freelancer',
+  'Praktikant',
+] as const;
+
+export const EMPLOYEE_STATUSES = [
+  'Im Dienst',
+  'Frei',
+  'Pause',
+  'Krank',
+  'Urlaub',
+  'Inaktiv',
+  'Gekuendigt',
+] as const;
+
+export const QUALIFICATIONS = [
+  'Service',
+  'Küche',
+  'Kueche',
+  'Bar',
+  'Theke',
+  'Kasse',
+  'Schichtleitung',
+  'Lager',
+  'Reinigung',
+  'Lieferung',
+  'Eventservice',
+  'Sehr erfahren',
+  'Erfahren',
+  'Neuling',
+  'Fuehrungskraft',
+  'Junior-Fuehrungskraft',
+  'Englischkenntnisse',
+  'Spanischkenntnisse',
+  'Barista',
+  'Barkeeper',
+  'Kuechenhilfe',
+  'Koch',
+  'Kassenberechtigt',
+  'Hygieneschulung',
+  'Erste Hilfe',
+] as const;
 
 export class CreateUserDto {
   @Transform(({ value }) => {
@@ -76,7 +128,100 @@ export class CreateUserDto {
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()
   @IsString()
+  address?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  street?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  zip?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @IsOptional()
+  @IsDateString()
+  birthDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  hireDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  terminationDate?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
   department?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsIn(QUALIFICATIONS, { each: true })
+  qualifications?: string[];
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsIn(CONTRACT_TYPES)
+  employmentType?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsIn(CONTRACT_TYPES)
+  contractType?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  weeklyHours?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  hourlyRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  monthlySalary?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  vacationDaysPerYear?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  remainingVacationDays?: number;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsIn(EMPLOYEE_STATUSES)
+  employeeStatus?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  notes?: string;
 
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()

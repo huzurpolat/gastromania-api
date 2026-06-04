@@ -16,7 +16,25 @@ export interface UserResponse {
   vatId?: string;
   taxOffice?: string;
   employeeNumber?: string;
+  address?: string;
+  street?: string;
+  zip?: string;
+  city?: string;
+  country?: string;
+  birthDate?: Date;
+  hireDate?: Date;
+  terminationDate?: Date;
   department?: string;
+  qualifications?: string[];
+  employmentType?: string;
+  contractType?: string;
+  weeklyHours?: number;
+  hourlyRate?: number;
+  monthlySalary?: number;
+  vacationDaysPerYear?: number;
+  remainingVacationDays?: number;
+  employeeStatus?: string;
+  notes?: string;
   profileImageUrl?: string;
   lastLoginAt?: Date;
   role: string;
@@ -79,7 +97,61 @@ export class User {
   employeeNumber?: string;
 
   @Prop({ trim: true })
+  address?: string;
+
+  @Prop({ trim: true })
+  street?: string;
+
+  @Prop({ trim: true })
+  zip?: string;
+
+  @Prop({ trim: true })
+  city?: string;
+
+  @Prop({ trim: true, default: 'Deutschland' })
+  country?: string;
+
+  @Prop()
+  birthDate?: Date;
+
+  @Prop()
+  hireDate?: Date;
+
+  @Prop()
+  terminationDate?: Date;
+
+  @Prop({ trim: true })
   department?: string;
+
+  @Prop({ type: [String], default: [], index: true })
+  qualifications?: string[];
+
+  @Prop({ trim: true, index: true })
+  employmentType?: string;
+
+  @Prop({ trim: true, index: true })
+  contractType?: string;
+
+  @Prop({ min: 0 })
+  weeklyHours?: number;
+
+  @Prop({ min: 0 })
+  hourlyRate?: number;
+
+  @Prop({ min: 0 })
+  monthlySalary?: number;
+
+  @Prop({ min: 0 })
+  vacationDaysPerYear?: number;
+
+  @Prop({ min: 0 })
+  remainingVacationDays?: number;
+
+  @Prop({ trim: true, index: true })
+  employeeStatus?: string;
+
+  @Prop({ trim: true })
+  notes?: string;
 
   @Prop({ trim: true })
   profileImageUrl?: string;
@@ -142,7 +214,25 @@ export const toUserResponse = (user: UserDocument): UserResponse => {
     vatId: user.vatId,
     taxOffice: user.taxOffice,
     employeeNumber: user.employeeNumber,
+    address: user.address,
+    street: user.street,
+    zip: user.zip,
+    city: user.city,
+    country: user.country,
+    birthDate: user.birthDate,
+    hireDate: user.hireDate,
+    terminationDate: user.terminationDate,
     department: user.department,
+    qualifications: user.qualifications ?? [],
+    employmentType: user.employmentType,
+    contractType: user.contractType,
+    weeklyHours: user.weeklyHours,
+    hourlyRate: user.hourlyRate,
+    monthlySalary: user.monthlySalary,
+    vacationDaysPerYear: user.vacationDaysPerYear,
+    remainingVacationDays: user.remainingVacationDays,
+    employeeStatus: user.employeeStatus,
+    notes: user.notes,
     profileImageUrl: user.profileImageUrl,
     lastLoginAt: user.lastLoginAt,
     role: roles[0],

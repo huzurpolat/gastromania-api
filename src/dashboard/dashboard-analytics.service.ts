@@ -35,6 +35,12 @@ import {
   DailyClosing,
   DailyClosingStatus,
 } from '../daily-closings/schemas/daily-closing.schema';
+import { EmployeeDocumentRecord } from '../hr/schemas/employee-document.schema';
+import { EmployeeFeedback } from '../hr/schemas/employee-feedback.schema';
+import {
+  ApplicantStatus,
+  JobApplicant,
+} from '../hr/schemas/job-applicant.schema';
 
 export interface ResolvedDashboardQuery {
   locationIds?: string[];
@@ -93,6 +99,12 @@ export class DashboardAnalyticsService {
     private readonly stockMovementModel: Model<StockMovement>,
     @InjectModel(DailyClosing.name)
     private readonly dailyClosingModel: Model<DailyClosing>,
+    @InjectModel(EmployeeDocumentRecord.name)
+    private readonly employeeDocumentModel: Model<EmployeeDocumentRecord>,
+    @InjectModel(EmployeeFeedback.name)
+    private readonly employeeFeedbackModel: Model<EmployeeFeedback>,
+    @InjectModel(JobApplicant.name)
+    private readonly jobApplicantModel: Model<JobApplicant>,
   ) {}
 
   resolveQuery(
@@ -440,7 +452,8 @@ export class DashboardAnalyticsService {
     const resolved = this.resolveQuery(user, query);
     const locationFilter = this.locationFilter(resolved);
     const now = new Date();
-    const [activeUsers, inService, plannedShifts, openTimeEntries] =
+    const expiringDate = this.addDays(now, 30);
+    const [activeUsers, inService, plannedShifts, openTimeEntries, hr] =
       await Promise.all([
         this.userModel.countDocuments({
           isActive: true,
@@ -461,9 +474,10 @@ export class DashboardAnalyticsService {
         this.timeEntryModel
           .find({ ...locationFilter, clockOut: { $exists: false } })
           .lean(),
+        this.hrSummary(locationFilter, now, expiringDate),
       ]);
 
-    return { activeUsers, inService, plannedShifts, openTimeEntries };
+    return { activeUsers, inService, plannedShifts, openTimeEntries, hr };
   }
 
   async getFinance(user: AuthenticatedUser, query: DashboardQueryDto) {
@@ -743,6 +757,31 @@ export class DashboardAnalyticsService {
         (closing) => closing.status === DailyClosingStatus.CompletedWithIssues,
       ).length,
     };
+  }
+
+  private async hrSummary(
+    locationFilter: Record<string, unknown>,
+    now: Date,
+    expiringDate: Date,
+  ) {
+    const [documentsTotal, expiringDocuments, openApplicants, openGoals] =
+      await Promise.all([
+        this.employeeDocumentModel.countDocuments(locationFilter),
+        this.employeeDocumentModel.countDocuments({
+          ...locationFilter,
+          expiresAt: { $gte: now, $lte: expiringDate },
+        }),
+        this.jobApplicantModel.countDocuments({
+          ...locationFilter,
+          status: { $nin: [ApplicantStatus.Hired, ApplicantStatus.Rejected] },
+        }),
+        this.employeeFeedbackModel.countDocuments({
+          ...locationFilter,
+          dueDate: { $gte: now },
+        }),
+      ]);
+
+    return { documentsTotal, expiringDocuments, openApplicants, openGoals };
   }
 
   private async countOpenChecklistTasks(

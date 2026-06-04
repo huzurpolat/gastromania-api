@@ -11,11 +11,13 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { DailyClosingsModule } from './daily-closings/daily-closings.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { DutySchedulesModule } from './duty-schedules/duty-schedules.module';
+import { EmployeesModule } from './employees/employees.module';
 import { InternalMessagesModule } from './internal-messages/internal-messages.module';
 import { LocationsModule } from './locations/locations.module';
 import { MenuItemsModule } from './menu-items/menu-items.module';
 import { MobileModule } from './mobile/mobile.module';
 import { OrdersModule } from './orders/orders.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { QrOrdersModule } from './qr-orders/qr-orders.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { RecipesModule } from './recipes/recipes.module';
@@ -33,6 +35,7 @@ import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { UsersModule } from './users/users.module';
 import { WeeklyMenusModule } from './weekly-menus/weekly-menus.module';
 import { HealthController } from './health.controller';
+import { HrModule } from './hr/hr.module';
 
 @Module({
   imports: [
@@ -55,6 +58,8 @@ import { HealthController } from './health.controller';
     RegionsModule,
     UsersModule,
     DepartmentsModule,
+    EmployeesModule,
+    HrModule,
     AuthModule,
     LocationsModule,
     TablesModule,
@@ -71,6 +76,7 @@ import { HealthController } from './health.controller';
     MenuItemsModule,
     DutySchedulesModule,
     TimeTrackingModule,
+    PayrollModule,
     WeeklyMenusModule,
     InternalMessagesModule,
     DemoDataModule,

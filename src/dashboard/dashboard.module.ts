@@ -46,6 +46,18 @@ import {
   DailyClosing,
   DailyClosingSchema,
 } from '../daily-closings/schemas/daily-closing.schema';
+import {
+  EmployeeDocumentRecord,
+  EmployeeDocumentRecordSchema,
+} from '../hr/schemas/employee-document.schema';
+import {
+  EmployeeFeedback,
+  EmployeeFeedbackSchema,
+} from '../hr/schemas/employee-feedback.schema';
+import {
+  JobApplicant,
+  JobApplicantSchema,
+} from '../hr/schemas/job-applicant.schema';
 
 @Module({
   imports: [
@@ -65,6 +77,12 @@ import {
       { name: DashboardPreference.name, schema: DashboardPreferenceSchema },
       { name: DashboardNotification.name, schema: DashboardNotificationSchema },
       { name: DailyClosing.name, schema: DailyClosingSchema },
+      {
+        name: EmployeeDocumentRecord.name,
+        schema: EmployeeDocumentRecordSchema,
+      },
+      { name: EmployeeFeedback.name, schema: EmployeeFeedbackSchema },
+      { name: JobApplicant.name, schema: JobApplicantSchema },
     ]),
   ],
   controllers: [DashboardController],

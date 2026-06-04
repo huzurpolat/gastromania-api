@@ -25,6 +25,32 @@ export class CreateMenuItemDto {
   @Transform(({ value }) => trimString(value))
   @IsOptional()
   @IsString()
+  color?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  icon?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  backgroundColor?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  textColor?: string;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  sortOrder?: number;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @Transform(({ value }) => trimString(value))

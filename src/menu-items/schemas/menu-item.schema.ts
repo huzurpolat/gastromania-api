@@ -12,6 +12,21 @@ export class MenuItem {
   category!: string;
 
   @Prop({ trim: true })
+  color?: string;
+
+  @Prop({ trim: true })
+  icon?: string;
+
+  @Prop({ trim: true })
+  backgroundColor?: string;
+
+  @Prop({ trim: true })
+  textColor?: string;
+
+  @Prop({ min: 0, default: 999 })
+  sortOrder?: number;
+
+  @Prop({ trim: true })
   description?: string;
 
   @Prop({ trim: true })

@@ -10,9 +10,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateAbsenceDto } from './dto/absence.dto';
@@ -21,6 +23,10 @@ import {
   UpdateAvailabilityDto,
 } from './dto/availability.dto';
 import { CreateShiftSwapRequestDto } from './dto/shift-swap.dto';
+import {
+  CreateShiftTemplateDto,
+  UpdateShiftTemplateDto,
+} from './dto/shift-template.dto';
 import {
   AssignStaffShiftDto,
   CreateStaffShiftDto,
@@ -50,12 +56,50 @@ const staffRoles = [
 ];
 
 @Controller('staff')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(...staffRoles)
 export class StaffPlanningController {
   constructor(private readonly staffPlanningService: StaffPlanningService) {}
 
+  @Get('shift-templates')
+  @Permissions('schedule.view')
+  findTemplates(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+  ) {
+    return this.staffPlanningService.findTemplates(user, { locationId });
+  }
+
+  @Post('shift-templates')
+  @Permissions('schedule.create')
+  createTemplate(
+    @Body() payload: CreateShiftTemplateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.createTemplate(payload, user);
+  }
+
+  @Patch('shift-templates/:id')
+  @Permissions('schedule.update')
+  updateTemplate(
+    @Param('id') id: string,
+    @Body() payload: UpdateShiftTemplateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.updateTemplate(id, payload, user);
+  }
+
+  @Delete('shift-templates/:id')
+  @Permissions('schedule.update')
+  deleteTemplate(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.deleteTemplate(id, user);
+  }
+
   @Get('shifts')
+  @Permissions('schedule.view')
   findShifts(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -78,11 +122,13 @@ export class StaffPlanningController {
   }
 
   @Get('shifts/:id')
+  @Permissions('schedule.view')
   findShift(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.staffPlanningService.findShift(id, user);
   }
 
   @Post('shifts')
+  @Permissions('schedule.create')
   createShift(
     @Body() payload: CreateStaffShiftDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -91,6 +137,7 @@ export class StaffPlanningController {
   }
 
   @Patch('shifts/:id')
+  @Permissions('schedule.update')
   updateShift(
     @Param('id') id: string,
     @Body() payload: UpdateStaffShiftDto,
@@ -100,6 +147,7 @@ export class StaffPlanningController {
   }
 
   @Patch('shifts/:id/assign')
+  @Permissions('schedule.update')
   assignShift(
     @Param('id') id: string,
     @Body() payload: AssignStaffShiftDto,
@@ -109,6 +157,7 @@ export class StaffPlanningController {
   }
 
   @Patch('shifts/:id/unassign')
+  @Permissions('schedule.update')
   unassignShift(
     @Param('id') id: string,
     @Body() payload: UnassignStaffShiftDto,
@@ -118,6 +167,7 @@ export class StaffPlanningController {
   }
 
   @Patch('shifts/:id/publish')
+  @Permissions('schedule.publish')
   publishShift(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -126,6 +176,7 @@ export class StaffPlanningController {
   }
 
   @Patch('shifts/:id/complete')
+  @Permissions('schedule.update')
   completeShift(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -134,11 +185,13 @@ export class StaffPlanningController {
   }
 
   @Patch('shifts/:id/cancel')
+  @Permissions('schedule.update')
   cancelShift(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.staffPlanningService.cancelShift(id, user);
   }
 
   @Get('availability')
+  @Permissions('schedule.view')
   findAvailability(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -151,6 +204,7 @@ export class StaffPlanningController {
   }
 
   @Post('availability')
+  @Permissions('schedule.update')
   createAvailability(
     @Body() payload: CreateAvailabilityDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -159,6 +213,7 @@ export class StaffPlanningController {
   }
 
   @Patch('availability/:id')
+  @Permissions('schedule.update')
   updateAvailability(
     @Param('id') id: string,
     @Body() payload: UpdateAvailabilityDto,
@@ -168,6 +223,7 @@ export class StaffPlanningController {
   }
 
   @Delete('availability/:id')
+  @Permissions('schedule.update')
   deleteAvailability(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -176,6 +232,7 @@ export class StaffPlanningController {
   }
 
   @Get('absences')
+  @Permissions('absence.view')
   findAbsences(
     @CurrentUser() user: AuthenticatedUser,
     @Query('userId') userId?: string,
@@ -184,6 +241,7 @@ export class StaffPlanningController {
   }
 
   @Post('absences')
+  @Permissions('absence.request')
   createAbsence(
     @Body() payload: CreateAbsenceDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -192,6 +250,7 @@ export class StaffPlanningController {
   }
 
   @Patch('absences/:id/approve')
+  @Permissions('absence.approve')
   approveAbsence(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -200,6 +259,7 @@ export class StaffPlanningController {
   }
 
   @Patch('absences/:id/reject')
+  @Permissions('absence.approve')
   rejectAbsence(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -208,6 +268,7 @@ export class StaffPlanningController {
   }
 
   @Patch('absences/:id/cancel')
+  @Permissions('absence.request')
   cancelAbsence(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -216,11 +277,13 @@ export class StaffPlanningController {
   }
 
   @Get('shift-swaps')
+  @Permissions('schedule.view')
   findShiftSwaps(@CurrentUser() user: AuthenticatedUser) {
     return this.staffPlanningService.findShiftSwaps(user);
   }
 
   @Post('shift-swaps')
+  @Permissions('schedule.update')
   createShiftSwap(
     @Body() payload: CreateShiftSwapRequestDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -229,6 +292,7 @@ export class StaffPlanningController {
   }
 
   @Patch('shift-swaps/:id/accept')
+  @Permissions('schedule.update')
   acceptShiftSwap(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -237,6 +301,7 @@ export class StaffPlanningController {
   }
 
   @Patch('shift-swaps/:id/approve')
+  @Permissions('schedule.update')
   approveShiftSwap(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -245,6 +310,7 @@ export class StaffPlanningController {
   }
 
   @Patch('shift-swaps/:id/reject')
+  @Permissions('schedule.update')
   rejectShiftSwap(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,

@@ -14,7 +14,13 @@ import {
 } from '../locations/schemas/location.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateTimeEntryDto } from './dto/create-time-entry.dto';
+import { CreateTimeCorrectionDto } from './dto/time-correction.dto';
 import { UpdateTimeEntryDto } from './dto/update-time-entry.dto';
+import {
+  TimeCorrection,
+  TimeCorrectionDocument,
+  TimeCorrectionStatus,
+} from './schemas/time-correction.schema';
 import { TimeEntry, TimeEntryDocument } from './schemas/time-entry.schema';
 
 @Injectable()
@@ -22,6 +28,8 @@ export class TimeTrackingService {
   constructor(
     @InjectModel(TimeEntry.name)
     private readonly timeEntryModel: Model<TimeEntryDocument>,
+    @InjectModel(TimeCorrection.name)
+    private readonly correctionModel: Model<TimeCorrectionDocument>,
     @InjectModel(Location.name)
     private readonly locationModel: Model<LocationDocument>,
     @InjectModel(User.name)
@@ -131,6 +139,100 @@ export class TimeTrackingService {
     }
 
     return this.timeEntryModel.find(query).sort({ clockIn: -1 }).exec();
+  }
+
+  async findCorrections(
+    actor: AuthenticatedUser,
+    filters: { employeeId?: string; status?: TimeCorrectionStatus } = {},
+  ): Promise<TimeCorrectionDocument[]> {
+    const query: Record<string, unknown> = {};
+
+    if (filters.status) {
+      query.status = filters.status;
+    }
+
+    if (this.accessPolicy.isManagementRole(actor)) {
+      if (filters.employeeId) {
+        await this.assertCanAccessEmployee(actor, filters.employeeId);
+        query.employeeId = filters.employeeId;
+      } else {
+        const scopedEntries = await this.findAll(actor, {});
+        query.timeEntryId = {
+          $in: scopedEntries.map((entry) => entry._id.toString()),
+        };
+      }
+    } else {
+      query.employeeId = actor.sub;
+    }
+
+    return this.correctionModel.find(query).sort({ createdAt: -1 }).exec();
+  }
+
+  async requestCorrection(
+    payload: CreateTimeCorrectionDto,
+    actor: AuthenticatedUser,
+  ): Promise<TimeCorrectionDocument> {
+    this.validateObjectId(payload.timeEntryId);
+    const entry = await this.timeEntryModel
+      .findById(payload.timeEntryId)
+      .exec();
+    if (!entry) {
+      throw new NotFoundException('Zeiteintrag nicht gefunden');
+    }
+    await this.assertCanAccessEmployee(actor, entry.employeeId);
+    this.assertCorrectionRange(payload, entry);
+
+    return this.correctionModel.create({
+      timeEntryId: entry._id.toString(),
+      employeeId: entry.employeeId,
+      locationId: entry.locationId,
+      requestedClockIn: payload.requestedClockIn
+        ? new Date(payload.requestedClockIn)
+        : entry.clockIn,
+      requestedClockOut: payload.requestedClockOut
+        ? new Date(payload.requestedClockOut)
+        : entry.clockOut,
+      requestedBreakMinutes:
+        payload.requestedBreakMinutes ?? entry.breakMinutes,
+      reason: payload.reason,
+      status: TimeCorrectionStatus.Requested,
+    });
+  }
+
+  async approveCorrection(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<TimeCorrectionDocument> {
+    const correction = await this.getCorrectionOrThrow(id);
+    this.assertCanManageTimeCorrections(actor);
+    await this.assertCanAccessEmployee(actor, correction.employeeId);
+    const entry = await this.timeEntryModel
+      .findById(correction.timeEntryId)
+      .exec();
+    if (!entry) {
+      throw new NotFoundException('Zeiteintrag nicht gefunden');
+    }
+    entry.clockIn = correction.requestedClockIn ?? entry.clockIn;
+    entry.clockOut = correction.requestedClockOut ?? entry.clockOut;
+    entry.breakMinutes = correction.requestedBreakMinutes;
+    await entry.save();
+    correction.status = TimeCorrectionStatus.Approved;
+    correction.decidedBy = actor.sub;
+    correction.decidedAt = new Date();
+    return correction.save();
+  }
+
+  async rejectCorrection(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<TimeCorrectionDocument> {
+    const correction = await this.getCorrectionOrThrow(id);
+    this.assertCanManageTimeCorrections(actor);
+    await this.assertCanAccessEmployee(actor, correction.employeeId);
+    correction.status = TimeCorrectionStatus.Rejected;
+    correction.decidedBy = actor.sub;
+    correction.decidedAt = new Date();
+    return correction.save();
   }
 
   async update(
@@ -261,6 +363,43 @@ export class TimeTrackingService {
         ...(user.locationId ? [user.locationId] : []),
       ]),
     ];
+  }
+
+  private async getCorrectionOrThrow(
+    id: string,
+  ): Promise<TimeCorrectionDocument> {
+    this.validateObjectId(id);
+    const correction = await this.correctionModel.findById(id).exec();
+    if (!correction) {
+      throw new NotFoundException('Korrekturantrag nicht gefunden');
+    }
+    return correction;
+  }
+
+  private assertCanManageTimeCorrections(actor: AuthenticatedUser): void {
+    if (!this.accessPolicy.isManagementRole(actor)) {
+      throw new ForbiddenException(
+        'Keine Berechtigung fuer Zeiterfassungs-Korrekturen',
+      );
+    }
+  }
+
+  private assertCorrectionRange(
+    payload: CreateTimeCorrectionDto,
+    entry: TimeEntryDocument,
+  ): void {
+    const clockIn = payload.requestedClockIn
+      ? new Date(payload.requestedClockIn)
+      : entry.clockIn;
+    const clockOut = payload.requestedClockOut
+      ? new Date(payload.requestedClockOut)
+      : entry.clockOut;
+
+    if (clockOut && clockIn.getTime() >= clockOut.getTime()) {
+      throw new BadRequestException(
+        'Korrigiertes Arbeitsende muss nach Arbeitsbeginn liegen',
+      );
+    }
   }
 
   private validateObjectId(id: string): void {

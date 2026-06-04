@@ -18,7 +18,9 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateTimeEntryDto } from './dto/create-time-entry.dto';
+import { CreateTimeCorrectionDto } from './dto/time-correction.dto';
 import { UpdateTimeEntryDto } from './dto/update-time-entry.dto';
+import { TimeCorrectionStatus } from './schemas/time-correction.schema';
 import { TimeTrackingService } from './time-tracking.service';
 
 @Controller('time-tracking')
@@ -32,16 +34,22 @@ import { TimeTrackingService } from './time-tracking.service';
   Role.Regionalleiter,
   Role.Bereichsleiter,
   Role.Filialleiter,
+  Role.Restaurantleiter,
+  Role.Schichtleiter,
   Role.Service,
   Role.Kueche,
+  Role.Bar,
+  Role.Theke,
   Role.Lager,
+  Role.Reinigung,
   Role.Tellerwaescher,
+  Role.Personalabteilung,
 )
 export class TimeTrackingController {
   constructor(private readonly timeTrackingService: TimeTrackingService) {}
 
   @Post('clock-in')
-  @Permissions('employees.create')
+  @Permissions('timeTracking.clock')
   clockIn(
     @Body() createTimeEntryDto: CreateTimeEntryDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -50,13 +58,13 @@ export class TimeTrackingController {
   }
 
   @Patch(':id/clock-out')
-  @Permissions('employees.update')
+  @Permissions('timeTracking.clock')
   clockOut(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.timeTrackingService.clockOut(id, user);
   }
 
   @Get()
-  @Permissions('employees.view')
+  @Permissions('timeTracking.view')
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -74,8 +82,48 @@ export class TimeTrackingController {
     });
   }
 
+  @Get('corrections')
+  @Permissions('timeTracking.correct')
+  findCorrections(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('employeeId') employeeId?: string,
+    @Query('status') status?: TimeCorrectionStatus,
+  ) {
+    return this.timeTrackingService.findCorrections(user, {
+      employeeId,
+      status,
+    });
+  }
+
+  @Post('corrections')
+  @Permissions('timeTracking.clock')
+  requestCorrection(
+    @Body() payload: CreateTimeCorrectionDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.timeTrackingService.requestCorrection(payload, user);
+  }
+
+  @Patch('corrections/:id/approve')
+  @Permissions('timeTracking.correct')
+  approveCorrection(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.timeTrackingService.approveCorrection(id, user);
+  }
+
+  @Patch('corrections/:id/reject')
+  @Permissions('timeTracking.correct')
+  rejectCorrection(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.timeTrackingService.rejectCorrection(id, user);
+  }
+
   @Patch(':id')
-  @Permissions('employees.update')
+  @Permissions('timeTracking.view')
   @Roles(
     Role.PlatformAdmin,
     Role.SuperAdmin,
@@ -85,6 +133,9 @@ export class TimeTrackingController {
     Role.Regionalleiter,
     Role.Bereichsleiter,
     Role.Filialleiter,
+    Role.Restaurantleiter,
+    Role.Schichtleiter,
+    Role.Personalabteilung,
   )
   update(
     @Param('id') id: string,
@@ -95,7 +146,7 @@ export class TimeTrackingController {
   }
 
   @Delete(':id')
-  @Permissions('employees.delete')
+  @Permissions('timeTracking.view')
   @Roles(
     Role.PlatformAdmin,
     Role.SuperAdmin,
@@ -105,6 +156,9 @@ export class TimeTrackingController {
     Role.Regionalleiter,
     Role.Bereichsleiter,
     Role.Filialleiter,
+    Role.Restaurantleiter,
+    Role.Schichtleiter,
+    Role.Personalabteilung,
   )
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.timeTrackingService.remove(id, user);

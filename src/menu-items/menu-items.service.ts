@@ -41,7 +41,10 @@ export class MenuItemsService {
 
   async findAll(actor: AuthenticatedUser): Promise<MenuItemDocument[]> {
     void actor;
-    return this.menuItemModel.find().sort({ category: 1, name: 1 }).exec();
+    return this.menuItemModel
+      .find()
+      .sort({ sortOrder: 1, category: 1, name: 1 })
+      .exec();
   }
 
   async findOne(

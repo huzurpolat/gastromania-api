@@ -50,6 +50,9 @@ describe('DashboardAnalyticsService', () => {
     const stockItemModel = createModelMock();
     const stockMovementModel = createModelMock();
     const dailyClosingModel = createModelMock();
+    const employeeDocumentModel = createModelMock();
+    const employeeFeedbackModel = createModelMock();
+    const jobApplicantModel = createModelMock();
     const service = new DashboardAnalyticsService(
       locationModel as never,
       orderModel as never,
@@ -62,6 +65,9 @@ describe('DashboardAnalyticsService', () => {
       stockItemModel as never,
       stockMovementModel as never,
       dailyClosingModel as never,
+      employeeDocumentModel as never,
+      employeeFeedbackModel as never,
+      jobApplicantModel as never,
     );
 
     jest.spyOn(service, 'alerts').mockResolvedValue([]);
@@ -74,9 +80,14 @@ describe('DashboardAnalyticsService', () => {
       tableModel,
       timeEntryModel,
       checklistModel,
+      dutyShiftModel,
+      userModel,
       stockItemModel,
       stockMovementModel,
       dailyClosingModel,
+      employeeDocumentModel,
+      employeeFeedbackModel,
+      jobApplicantModel,
     };
   }
 
@@ -221,6 +232,50 @@ describe('DashboardAnalyticsService', () => {
     expect(() =>
       service.resolveQuery(user, { range: 'today', locationId: 'loc-2' }),
     ).toThrow(ForbiddenException);
+  });
+
+  it('adds HR document, recruiting and feedback KPIs to employee dashboard data', async () => {
+    const {
+      service,
+      userModel,
+      timeEntryModel,
+      dutyShiftModel,
+      employeeDocumentModel,
+      employeeFeedbackModel,
+      jobApplicantModel,
+    } = createService();
+    userModel.countDocuments.mockResolvedValueOnce(12);
+    timeEntryModel.countDocuments.mockResolvedValueOnce(5);
+    dutyShiftModel.find.mockReturnValue(queryResult([{ _id: 'shift-1' }]));
+    timeEntryModel.find.mockReturnValue(queryResult([{ _id: 'time-1' }]));
+    employeeDocumentModel.countDocuments
+      .mockResolvedValueOnce(9)
+      .mockResolvedValueOnce(2);
+    jobApplicantModel.countDocuments.mockResolvedValueOnce(3);
+    employeeFeedbackModel.countDocuments.mockResolvedValueOnce(4);
+
+    const employees = await service.getEmployees(user, { range: 'today' });
+
+    expect(employees).toEqual({
+      activeUsers: 12,
+      inService: 5,
+      plannedShifts: [{ _id: 'shift-1' }],
+      openTimeEntries: [{ _id: 'time-1' }],
+      hr: {
+        documentsTotal: 9,
+        expiringDocuments: 2,
+        openApplicants: 3,
+        openGoals: 4,
+      },
+    });
+    expect(employeeDocumentModel.countDocuments).toHaveBeenCalledWith({
+      locationId: { $in: ['loc-1'] },
+    });
+    expect(jobApplicantModel.countDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locationId: { $in: ['loc-1'] },
+      }),
+    );
   });
 
   it('resolves today to a full local day range', () => {

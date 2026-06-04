@@ -16,6 +16,7 @@ import { StaffAvailability } from './schemas/staff-availability.schema';
 import { StaffNotification } from './schemas/staff-notification.schema';
 import { StaffPlanningAudit } from './schemas/staff-planning-audit.schema';
 import { StaffShift, StaffShiftStatus } from './schemas/staff-shift.schema';
+import { ShiftTemplate } from './schemas/shift-template.schema';
 import { StaffPlanningService } from './staff-planning.service';
 
 describe('StaffPlanningService', () => {
@@ -69,6 +70,13 @@ describe('StaffPlanningService', () => {
   };
   const auditModel = { create: jest.fn() };
   const notificationModel = { create: jest.fn() };
+  const templateModel = {
+    create: jest.fn(),
+    find: jest.fn(),
+    findById: jest.fn(),
+    findByIdAndUpdate: jest.fn(),
+    findByIdAndDelete: jest.fn(),
+  };
   const userModel = {
     findById: jest.fn(),
     find: jest.fn(),
@@ -158,6 +166,7 @@ describe('StaffPlanningService', () => {
         },
         { provide: getModelToken(StaffAbsence.name), useValue: absenceModel },
         { provide: getModelToken(ShiftSwapRequest.name), useValue: swapModel },
+        { provide: getModelToken(ShiftTemplate.name), useValue: templateModel },
         {
           provide: getModelToken(StaffPlanningAudit.name),
           useValue: auditModel,
