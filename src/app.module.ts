@@ -16,6 +16,7 @@ import { InternalMessagesModule } from './internal-messages/internal-messages.mo
 import { LocationsModule } from './locations/locations.module';
 import { MenuItemsModule } from './menu-items/menu-items.module';
 import { MobileModule } from './mobile/mobile.module';
+import { ModulesModule } from './modules/modules.module';
 import { OrdersModule } from './orders/orders.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { QrOrdersModule } from './qr-orders/qr-orders.module';
@@ -71,6 +72,7 @@ import { HrModule } from './hr/hr.module';
     RbacModule,
     SettingsModule,
     MobileModule,
+    ModulesModule,
     OrdersModule,
     QrOrdersModule,
     MenuItemsModule,

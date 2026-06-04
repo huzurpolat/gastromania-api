@@ -5,6 +5,7 @@ import {
   MenuItem,
   MenuItemSchema,
 } from '../menu-items/schemas/menu-item.schema';
+import { ModulesModule } from '../modules/modules.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { Recipe, RecipeSchema } from '../recipes/schemas/recipe.schema';
@@ -47,6 +48,7 @@ import {
   imports: [
     AuthJwtModule,
     RealtimeModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
       { name: MenuItem.name, schema: MenuItemSchema },

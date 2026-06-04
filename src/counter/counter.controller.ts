@@ -16,6 +16,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { COUNTER_ORDERS_MODULE_KEY } from '../modules/constants/module-definitions';
+import { RequireModule } from '../modules/decorators/require-module.decorator';
+import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import { OrderStatus, PaymentStatus } from '../orders/schemas/order.schema';
 import { CancelCounterOrderDto } from './dto/cancel-counter-order.dto';
 import { CreateCounterOrderDto } from './dto/create-counter-order.dto';
@@ -57,7 +60,8 @@ const COUNTER_WRITE_ROLES = [
 ];
 
 @Controller('counter')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@RequireModule(COUNTER_ORDERS_MODULE_KEY)
+@UseGuards(JwtAuthGuard, ModuleEnabledGuard, RolesGuard, PermissionsGuard)
 export class CounterController {
   constructor(private readonly counterService: CounterOrderService) {}
 
