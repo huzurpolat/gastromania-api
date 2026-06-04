@@ -922,12 +922,17 @@ export class OrdersService {
       return OrderStatus.Ready;
     }
 
-    if (activeStatuses.some((status) => status === OrderItemStatus.Preparing)) {
+    if (
+      activeStatuses.some((status) =>
+        [
+          OrderItemStatus.Started,
+          OrderItemStatus.Preparing,
+          OrderItemStatus.Ready,
+          OrderItemStatus.Served,
+        ].includes(status),
+      )
+    ) {
       return OrderStatus.Preparing;
-    }
-
-    if (activeStatuses.some((status) => status === OrderItemStatus.Started)) {
-      return OrderStatus.Accepted;
     }
 
     return OrderStatus.New;

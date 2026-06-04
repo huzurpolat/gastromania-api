@@ -4,7 +4,12 @@ import { getModelToken } from '@nestjs/mongoose';
 import { KdsService } from './kds.service';
 import { KdsSettings } from './schemas/kds-settings.schema';
 import { KdsStatusLog } from './schemas/kds-status-log.schema';
-import { Order, OrderStatus } from '../orders/schemas/order.schema';
+import { Role } from '../auth/enums/role.enum';
+import {
+  Order,
+  OrderItemStatus,
+  OrderStatus,
+} from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { AccessPolicyService } from '../access/access-policy.service';
@@ -18,7 +23,14 @@ describe('KdsService', () => {
     locationId: '507f1f77bcf86cd799439012',
     status: OrderStatus.New,
     tableId: '507f1f77bcf86cd799439013',
-    items: [],
+    items: [] as Array<{
+      _id: { toString: () => string };
+      name: string;
+      quantity: number;
+      price: number;
+      status: OrderItemStatus;
+      [key: string]: unknown;
+    }>,
     statusTimestamps: {},
     save: jest.fn(),
   };
@@ -56,6 +68,7 @@ describe('KdsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     order.status = OrderStatus.New;
+    order.items = [];
     order.statusTimestamps = {};
     delete (order as { inventoryDeducted?: boolean }).inventoryDeducted;
     delete (order as { inventoryConsumedAt?: Date }).inventoryConsumedAt;
@@ -165,5 +178,161 @@ describe('KdsService', () => {
         { sub: 'user-1', email: 'kueche@test.local', roles: [] },
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('sets the parent order to preparing when the first item is started', async () => {
+    order.items = [
+      {
+        _id: { toString: () => 'item-1' },
+        name: 'Burger',
+        quantity: 1,
+        price: 12,
+        status: OrderItemStatus.Open,
+      },
+      {
+        _id: { toString: () => 'item-2' },
+        name: 'Pommes',
+        quantity: 1,
+        price: 5,
+        status: OrderItemStatus.Open,
+      },
+    ];
+
+    const updated = await service.updateItemStatus(
+      '507f1f77bcf86cd799439011',
+      'item-1',
+      { status: OrderItemStatus.Started },
+      { sub: 'user-1', email: 'kueche@test.local', roles: [Role.Kueche] },
+    );
+
+    expect(updated.status).toBe(OrderStatus.Preparing);
+    expect(order.items[0]).toEqual(
+      expect.objectContaining({
+        status: OrderItemStatus.Started,
+        startedBy: 'user-1',
+      }),
+    );
+    expect(realtimeService.publish).toHaveBeenCalledWith(
+      'order.status.changed',
+      expect.objectContaining({
+        previousStatus: OrderStatus.New,
+        newStatus: OrderStatus.Preparing,
+      }),
+    );
+  });
+
+  it('keeps the parent order in preparing while ready and open items are mixed', async () => {
+    order.items = [
+      {
+        _id: { toString: () => 'item-1' },
+        name: 'Burger',
+        quantity: 1,
+        price: 12,
+        status: OrderItemStatus.Open,
+      },
+      {
+        _id: { toString: () => 'item-2' },
+        name: 'Pommes',
+        quantity: 1,
+        price: 5,
+        status: OrderItemStatus.Open,
+      },
+    ];
+
+    const updated = await service.updateItemStatus(
+      '507f1f77bcf86cd799439011',
+      'item-1',
+      { status: OrderItemStatus.Ready },
+      { sub: 'user-1', email: 'kueche@test.local', roles: [Role.Kueche] },
+    );
+
+    expect(updated.status).toBe(OrderStatus.Preparing);
+  });
+
+  it('sets the parent order to ready when all active items are ready', async () => {
+    order.status = OrderStatus.Preparing;
+    order.items = [
+      {
+        _id: { toString: () => 'item-1' },
+        name: 'Burger',
+        quantity: 1,
+        price: 12,
+        status: OrderItemStatus.Ready,
+      },
+      {
+        _id: { toString: () => 'item-2' },
+        name: 'Pommes',
+        quantity: 1,
+        price: 5,
+        status: OrderItemStatus.Preparing,
+      },
+    ];
+
+    const updated = await service.updateItemStatus(
+      '507f1f77bcf86cd799439011',
+      'item-2',
+      { status: OrderItemStatus.Ready },
+      { sub: 'user-1', email: 'kueche@test.local', roles: [Role.Kueche] },
+    );
+
+    expect(updated.status).toBe(OrderStatus.Ready);
+  });
+
+  it('sets the parent order to served when all active items are served', async () => {
+    order.status = OrderStatus.Ready;
+    order.items = [
+      {
+        _id: { toString: () => 'item-1' },
+        name: 'Burger',
+        quantity: 1,
+        price: 12,
+        status: OrderItemStatus.Served,
+      },
+      {
+        _id: { toString: () => 'item-2' },
+        name: 'Pommes',
+        quantity: 1,
+        price: 5,
+        status: OrderItemStatus.Ready,
+      },
+    ];
+
+    const updated = await service.updateItemStatus(
+      '507f1f77bcf86cd799439011',
+      'item-2',
+      { status: OrderItemStatus.Served },
+      { sub: 'service-1', email: 'service@test.local', roles: [Role.Service] },
+    );
+
+    expect(updated.status).toBe(OrderStatus.Served);
+  });
+
+  it('sets the parent order to cancelled when all items are cancelled', async () => {
+    order.status = OrderStatus.Preparing;
+    order.items = [
+      {
+        _id: { toString: () => 'item-1' },
+        name: 'Burger',
+        quantity: 1,
+        price: 12,
+        status: OrderItemStatus.Cancelled,
+      },
+      {
+        _id: { toString: () => 'item-2' },
+        name: 'Pommes',
+        quantity: 1,
+        price: 5,
+        status: OrderItemStatus.Open,
+      },
+    ];
+
+    const updated = await service.updateItemStatus(
+      '507f1f77bcf86cd799439011',
+      'item-2',
+      { status: OrderItemStatus.Cancelled },
+      { sub: 'user-1', email: 'kueche@test.local', roles: [Role.Kueche] },
+    );
+
+    expect(updated.status).toBe(OrderStatus.Cancelled);
   });
 });

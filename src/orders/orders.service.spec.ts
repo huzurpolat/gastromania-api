@@ -310,4 +310,121 @@ describe('OrdersService', () => {
       }),
     );
   });
+
+  it('moves the parent order to preparing as soon as one item is started', async () => {
+    const order = {
+      _id: { toString: () => '507f1f77bcf86cd799439014' },
+      companyId: 'company-1',
+      locationId,
+      tableId,
+      orderNumber: 'B0002',
+      status: OrderStatus.New,
+      statusTimestamps: {},
+      items: [
+        {
+          _id: { toString: () => '507f1f77bcf86cd799439015' },
+          name: 'Burger',
+          quantity: 1,
+          price: 12,
+          status: OrderItemStatus.Open,
+        },
+        {
+          _id: { toString: () => '507f1f77bcf86cd799439016' },
+          name: 'Cola',
+          quantity: 1,
+          price: 3,
+          status: OrderItemStatus.Open,
+        },
+      ],
+      save: jest.fn(),
+    };
+    order.save.mockResolvedValue(order);
+    orderModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(order),
+    });
+    orderModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([order]),
+      }),
+    });
+
+    const updated = await service.updateItemStatus(
+      '507f1f77bcf86cd799439014',
+      '507f1f77bcf86cd799439015',
+      { status: OrderItemStatus.Started },
+      {
+        sub: 'kitchen-1',
+        email: 'kueche@test.local',
+        roles: [Role.Kueche],
+        companyId: 'company-1',
+      },
+    );
+
+    expect(updated.status).toBe(OrderStatus.Preparing);
+    expect(order.items[0]).toEqual(
+      expect.objectContaining({
+        status: OrderItemStatus.Started,
+        startedBy: 'kitchen-1',
+      }),
+    );
+    expect(realtimeService.publish).toHaveBeenCalledWith(
+      'order.status.changed',
+      expect.objectContaining({
+        previousStatus: OrderStatus.New,
+        newStatus: OrderStatus.Preparing,
+      }),
+    );
+  });
+
+  it('keeps mixed ready and open items in preparing instead of falling back to new', async () => {
+    const order = {
+      _id: { toString: () => '507f1f77bcf86cd799439014' },
+      companyId: 'company-1',
+      locationId,
+      tableId,
+      orderNumber: 'B0003',
+      status: OrderStatus.Preparing,
+      statusTimestamps: {},
+      items: [
+        {
+          _id: { toString: () => '507f1f77bcf86cd799439015' },
+          name: 'Burger',
+          quantity: 1,
+          price: 12,
+          status: OrderItemStatus.Open,
+        },
+        {
+          _id: { toString: () => '507f1f77bcf86cd799439016' },
+          name: 'Cola',
+          quantity: 1,
+          price: 3,
+          status: OrderItemStatus.Open,
+        },
+      ],
+      save: jest.fn(),
+    };
+    order.save.mockResolvedValue(order);
+    orderModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(order),
+    });
+    orderModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([order]),
+      }),
+    });
+
+    const updated = await service.updateItemStatus(
+      '507f1f77bcf86cd799439014',
+      '507f1f77bcf86cd799439015',
+      { status: OrderItemStatus.Ready },
+      {
+        sub: 'kitchen-1',
+        email: 'kueche@test.local',
+        roles: [Role.Kueche],
+        companyId: 'company-1',
+      },
+    );
+
+    expect(updated.status).toBe(OrderStatus.Preparing);
+  });
 });
