@@ -63,8 +63,9 @@ export class TablesController {
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
+    @Query('floorId') floorId?: string,
   ) {
-    return this.tablesService.findAll(user, locationId);
+    return this.tablesService.findAll(user, locationId, floorId);
   }
 
   @Get('overview')
@@ -87,8 +88,33 @@ export class TablesController {
   overview(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
+    @Query('floorId') floorId?: string,
   ) {
-    return this.tablesService.overview(user, locationId);
+    return this.tablesService.overview(user, locationId, floorId);
+  }
+
+  @Post('floor/start-tables')
+  @Permissions('tables.create')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+  )
+  createFloorStartTables(
+    @Body('locationId') locationId: string,
+    @Body('floorId') floorId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.tablesService.createStartTablesForFloor(
+      user,
+      locationId,
+      floorId,
+    );
   }
 
   @Post(':id/qr-token')

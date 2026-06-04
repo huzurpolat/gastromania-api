@@ -10,6 +10,10 @@ import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
+  Location,
+  LocationDocument,
+} from '../locations/schemas/location.schema';
+import {
   Order,
   OrderDocument,
   OrderItemStatus,
@@ -22,6 +26,7 @@ import { UpdateTableDto } from './dto/update-table.dto';
 import {
   RestaurantTable,
   RestaurantTableDocument,
+  TableShape,
   TableStatus,
 } from './schemas/table.schema';
 import {
@@ -147,6 +152,8 @@ export class TablesService {
   constructor(
     @InjectModel(RestaurantTable.name)
     private readonly tableModel: Model<RestaurantTableDocument>,
+    @InjectModel(Location.name)
+    private readonly locationModel: Model<LocationDocument>,
     @InjectModel(TableStatusLog.name)
     private readonly tableStatusLogModel: Model<TableStatusLogDocument>,
     @InjectModel(Order.name)
@@ -164,9 +171,10 @@ export class TablesService {
       actor,
       createTableDto.locationId,
     );
+    const payload = await this.normalizeTableFloor(createTableDto);
 
     try {
-      return await this.tableModel.create(createTableDto);
+      return await this.tableModel.create(payload);
     } catch (error) {
       if (this.isDuplicateKeyError(error)) {
         throw new ConflictException(
@@ -181,6 +189,7 @@ export class TablesService {
   async findAll(
     actor: AuthenticatedUser,
     locationId?: string,
+    floorId?: string,
   ): Promise<RestaurantTableDocument[]> {
     if (locationId) {
       this.validateObjectId(locationId, 'Standort-ID');
@@ -189,18 +198,23 @@ export class TablesService {
       actor,
       locationId,
     );
+    const filter = {
+      ...scopeFilter,
+      ...(floorId ? { floorId } : {}),
+    };
 
     return this.tableModel
-      .find(scopeFilter)
-      .sort({ locationId: 1, name: 1 })
+      .find(filter)
+      .sort({ locationId: 1, floorId: 1, name: 1 })
       .exec();
   }
 
   async overview(
     actor: AuthenticatedUser,
     locationId?: string,
+    floorId?: string,
   ): Promise<TableOverviewItem[]> {
-    const tables = await this.findAll(actor, locationId);
+    const tables = await this.findAll(actor, locationId, floorId);
     const tableIds = tables.map((table) => table._id.toString());
 
     if (!tableIds.length) {
@@ -267,10 +281,19 @@ export class TablesService {
         updateTableDto.locationId,
       );
     }
+    const payload = await this.normalizeTableFloor(
+      {
+        ...updateTableDto,
+        floorId: updateTableDto.floorId ?? existing.floorId,
+        floorName: updateTableDto.floorName ?? existing.floorName,
+        planFloor: updateTableDto.planFloor ?? existing.planFloor,
+      },
+      existing.locationId,
+    );
 
     try {
       const updatedTable = await this.tableModel
-        .findByIdAndUpdate(id, updateTableDto, {
+        .findByIdAndUpdate(id, payload, {
           new: true,
           runValidators: true,
         })
@@ -307,6 +330,21 @@ export class TablesService {
     }
 
     return deletedTable;
+  }
+
+  async createStartTablesForFloor(
+    actor: AuthenticatedUser,
+    locationId: string,
+    floorId: string,
+  ): Promise<RestaurantTableDocument[]> {
+    this.validateObjectId(locationId, 'Standort-ID');
+    await this.accessPolicy.assertCanManageLocation(actor, locationId);
+    const floor = await this.resolveFloor(locationId, floorId, undefined);
+
+    return this.createMissingStartTables(locationId, floor.id, floor.name, {
+      companyId: actor.companyId,
+      regionId: actor.regionIds?.[0],
+    });
   }
 
   async generateQrToken(
@@ -407,6 +445,158 @@ export class TablesService {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException(`Ungueltige ${label}`);
     }
+  }
+
+  private async normalizeTableFloor<T extends Partial<CreateTableDto>>(
+    dto: T,
+    fallbackLocationId?: string,
+  ): Promise<T & { floorId: string; floorName: string; planFloor: string }> {
+    const locationId = dto.locationId ?? fallbackLocationId;
+
+    if (!locationId) {
+      throw new BadRequestException('Standort-ID ist erforderlich');
+    }
+
+    const floorName = dto.floorName ?? dto.planFloor;
+    if (!dto.floorId && !floorName) {
+      throw new BadRequestException('Etage ist erforderlich');
+    }
+
+    const floor = await this.resolveFloor(locationId, dto.floorId, floorName);
+
+    return {
+      ...dto,
+      floorId: floor.id,
+      floorName: floor.name,
+      planFloor: floor.name,
+    };
+  }
+
+  private async resolveFloor(
+    locationId: string,
+    floorId: string | undefined,
+    floorName: string | undefined,
+  ): Promise<{ id: string; name: string }> {
+    const location = await this.locationModel
+      .findById(locationId)
+      .select('tablePlanFloors')
+      .lean()
+      .exec();
+
+    if (!location) {
+      throw new NotFoundException('Standort nicht gefunden');
+    }
+
+    const floors = this.normalizeFloors(location.tablePlanFloors);
+    const requestedName = floorName?.trim();
+    const requestedId = floorId?.trim();
+    const resolvedByName = requestedName
+      ? floors.find(
+          (floor) => floor.toLowerCase() === requestedName.toLowerCase(),
+        )
+      : undefined;
+    const resolvedById = requestedId
+      ? floors.find(
+          (floor) => this.toFloorId(locationId, floor) === requestedId,
+        )
+      : undefined;
+
+    const name = resolvedByName ?? resolvedById;
+
+    if (!name) {
+      throw new BadRequestException('Etage gehoert nicht zum Standort');
+    }
+
+    return {
+      id: this.toFloorId(locationId, name),
+      name,
+    };
+  }
+
+  private async createMissingStartTables(
+    locationId: string,
+    floorId: string,
+    floorName: string,
+    scope: { companyId?: string; regionId?: string } = {},
+  ): Promise<RestaurantTableDocument[]> {
+    const existingCount = await this.tableModel.countDocuments({
+      locationId,
+      floorId,
+    });
+
+    if (existingCount > 0) {
+      return [];
+    }
+
+    const positions = [
+      { name: 'Tisch 1', x: 80, y: 80 },
+      { name: 'Tisch 2', x: 260, y: 80 },
+      { name: 'Tisch 3', x: 440, y: 80 },
+    ];
+
+    const created: RestaurantTableDocument[] = [];
+
+    for (const position of positions) {
+      const table = await this.tableModel.create({
+        ...scope,
+        locationId,
+        name: await this.createAvailableStartTableName(
+          locationId,
+          position.name,
+        ),
+        seats: 4,
+        area: floorName,
+        icon: 'table_restaurant',
+        status: TableStatus.Free,
+        isActive: true,
+        planX: Number((position.x / 10).toFixed(2)),
+        planY: Number((position.y / 10).toFixed(2)),
+        planWidth: 14,
+        planHeight: 12,
+        planRotation: 0,
+        floorId,
+        floorName,
+        planFloor: floorName,
+        planShape: TableShape.Rectangle,
+      });
+      created.push(table);
+    }
+
+    return created;
+  }
+
+  private async createAvailableStartTableName(
+    locationId: string,
+    baseName: string,
+  ): Promise<string> {
+    let candidate = baseName;
+    let suffix = 2;
+
+    while (await this.tableModel.exists({ locationId, name: candidate })) {
+      candidate = `${baseName} (${suffix})`;
+      suffix += 1;
+    }
+
+    return candidate;
+  }
+
+  private normalizeFloors(floors: string[] | undefined): string[] {
+    const normalized = new Set(
+      ['EG', ...(floors ?? [])].map((floor) => floor.trim()).filter(Boolean),
+    );
+
+    return Array.from(normalized);
+  }
+
+  private toFloorId(locationId: string, floorName: string): string {
+    const slug = floorName
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    return `${locationId}:${slug || 'floor'}`;
   }
 
   async updateStatus(

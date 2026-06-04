@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
+import { Location, LocationSchema } from '../locations/schemas/location.schema';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { RestaurantTable, RestaurantTableSchema } from './schemas/table.schema';
@@ -17,6 +18,7 @@ import { TablesService } from './tables.service';
     RealtimeModule,
     MongooseModule.forFeature([
       { name: RestaurantTable.name, schema: RestaurantTableSchema },
+      { name: Location.name, schema: LocationSchema },
       { name: TableStatusLog.name, schema: TableStatusLogSchema },
       { name: Order.name, schema: OrderSchema },
     ]),

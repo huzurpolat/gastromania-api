@@ -142,6 +142,18 @@ export class CreateTableDto {
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()
   @IsString()
+  @MaxLength(160)
+  floorId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  floorName?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
   @MaxLength(80)
   planFloor?: string;
 

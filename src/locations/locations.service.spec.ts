@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AccessPolicyService } from '../access/access-policy.service';
+import { RestaurantTable } from '../tables/schemas/table.schema';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { LocationsService } from './locations.service';
@@ -26,6 +27,11 @@ describe('LocationsService', () => {
     findById: jest.fn(),
     findByIdAndUpdate: jest.fn(),
     findByIdAndDelete: jest.fn(),
+  };
+  const tableModel = {
+    countDocuments: jest.fn(),
+    exists: jest.fn(),
+    create: jest.fn(),
   };
   const actor = {
     sub: 'user-admin',
@@ -52,6 +58,10 @@ describe('LocationsService', () => {
           useValue: locationModel,
         },
         {
+          provide: getModelToken(RestaurantTable.name),
+          useValue: tableModel,
+        },
+        {
           provide: AccessPolicyService,
           useValue: accessPolicy,
         },
@@ -62,6 +72,8 @@ describe('LocationsService', () => {
     jest.clearAllMocks();
     accessPolicy.getReadableLocationFilter.mockResolvedValue({});
     accessPolicy.canAccessLocation.mockResolvedValue(true);
+    tableModel.countDocuments.mockResolvedValue(1);
+    tableModel.exists.mockResolvedValue(null);
   });
 
   it('creates a location', async () => {
@@ -126,6 +138,9 @@ describe('LocationsService', () => {
     };
 
     locationModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(location),
+    });
+    locationModel.findById.mockReturnValue({
       exec: jest.fn().mockResolvedValue(location),
     });
 

@@ -7,6 +7,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import {
+  RestaurantTable,
+  RestaurantTableDocument,
+  TableShape,
+  TableStatus,
+} from '../tables/schemas/table.schema';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { Location, LocationDocument } from './schemas/location.schema';
@@ -16,6 +22,8 @@ export class LocationsService {
   constructor(
     @InjectModel(Location.name)
     private readonly locationModel: Model<LocationDocument>,
+    @InjectModel(RestaurantTable.name)
+    private readonly tableModel: Model<RestaurantTableDocument>,
     private readonly accessPolicy: AccessPolicyService,
   ) {}
 
@@ -46,7 +54,13 @@ export class LocationsService {
       roles: [],
     });
 
-    return this.locationModel.create(payload);
+    const location = await this.locationModel.create(payload);
+    await this.createStartTablesForNewFloors(
+      location,
+      this.normalizeFloors(location.tablePlanFloors),
+    );
+
+    return location;
   }
 
   async findAll(actor: AuthenticatedUser): Promise<LocationDocument[]> {
@@ -90,6 +104,15 @@ export class LocationsService {
       });
     }
 
+    const existingLocation = await this.locationModel.findById(id).exec();
+
+    if (!existingLocation) {
+      throw new NotFoundException('Standort nicht gefunden');
+    }
+
+    const previousFloors = this.normalizeFloors(
+      existingLocation.tablePlanFloors,
+    );
     const updatedLocation = await this.locationModel
       .findByIdAndUpdate(id, updateLocationDto, {
         new: true,
@@ -99,6 +122,17 @@ export class LocationsService {
 
     if (!updatedLocation) {
       throw new NotFoundException('Standort nicht gefunden');
+    }
+
+    if (updateLocationDto.tablePlanFloors) {
+      const nextFloors = this.normalizeFloors(updatedLocation.tablePlanFloors);
+      const addedFloors = nextFloors.filter(
+        (floor) =>
+          !previousFloors.some(
+            (previous) => previous.toLowerCase() === floor.toLowerCase(),
+          ),
+      );
+      await this.createStartTablesForNewFloors(updatedLocation, addedFloors);
     }
 
     return updatedLocation;
@@ -126,5 +160,86 @@ export class LocationsService {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Ungueltige Standort-ID');
     }
+  }
+
+  private async createStartTablesForNewFloors(
+    location: LocationDocument,
+    floors: string[],
+  ): Promise<void> {
+    for (const floor of floors) {
+      const floorId = this.toFloorId(location._id.toString(), floor);
+      const existingCount = await this.tableModel.countDocuments({
+        locationId: location._id.toString(),
+        floorId,
+      });
+
+      if (existingCount > 0) {
+        continue;
+      }
+
+      for (const table of [
+        { name: 'Tisch 1', x: 8, y: 8 },
+        { name: 'Tisch 2', x: 26, y: 8 },
+        { name: 'Tisch 3', x: 44, y: 8 },
+      ]) {
+        await this.tableModel.create({
+          companyId: location.companyId,
+          regionId: location.regionId,
+          locationId: location._id.toString(),
+          name: await this.createAvailableStartTableName(
+            location._id.toString(),
+            table.name,
+          ),
+          seats: 4,
+          area: floor,
+          icon: 'table_restaurant',
+          status: TableStatus.Free,
+          isActive: true,
+          planX: table.x,
+          planY: table.y,
+          planWidth: 14,
+          planHeight: 12,
+          planRotation: 0,
+          floorId,
+          floorName: floor,
+          planFloor: floor,
+          planShape: TableShape.Rectangle,
+        });
+      }
+    }
+  }
+
+  private async createAvailableStartTableName(
+    locationId: string,
+    baseName: string,
+  ): Promise<string> {
+    let candidate = baseName;
+    let suffix = 2;
+
+    while (await this.tableModel.exists({ locationId, name: candidate })) {
+      candidate = `${baseName} (${suffix})`;
+      suffix += 1;
+    }
+
+    return candidate;
+  }
+
+  private normalizeFloors(floors: string[] | undefined): string[] {
+    const normalized = new Set(
+      ['EG', ...(floors ?? [])].map((floor) => floor.trim()).filter(Boolean),
+    );
+
+    return Array.from(normalized);
+  }
+
+  private toFloorId(locationId: string, floorName: string): string {
+    const slug = floorName
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    return `${locationId}:${slug || 'floor'}`;
   }
 }

@@ -126,6 +126,12 @@ export class RestaurantTable {
   @Prop({ default: 'EG', trim: true, index: true })
   planFloor!: string;
 
+  @Prop({ required: true, trim: true, index: true })
+  floorId!: string;
+
+  @Prop({ trim: true })
+  floorName?: string;
+
   @Prop({
     type: String,
     enum: Object.values(TableShape),
@@ -140,3 +146,4 @@ export const RestaurantTableSchema =
 RestaurantTableSchema.index({ locationId: 1, name: 1 }, { unique: true });
 RestaurantTableSchema.index({ companyId: 1, regionId: 1, locationId: 1 });
 RestaurantTableSchema.index({ locationId: 1, status: 1 });
+RestaurantTableSchema.index({ locationId: 1, floorId: 1 });
