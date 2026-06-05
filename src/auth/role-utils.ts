@@ -1,6 +1,19 @@
 import { Role } from './enums/role.enum';
 
 const roleAliases: Record<string, Role> = {
+  PLATFORM_ADMIN: Role.PlatformAdmin,
+  TENANT_ADMIN: Role.TenantAdmin,
+  COMPANY_ADMIN: Role.TenantAdmin,
+  AREA_MANAGER: Role.Bereichsleiter,
+  REGIONAL_MANAGER: Role.Regionalleiter,
+  LOCATION_MANAGER: Role.Filialleiter,
+  WAITER: Role.Service,
+  KITCHEN: Role.Kueche,
+  COUNTER: Role.Theke,
+  CASHIER: Role.Kasse,
+  INVENTORY_MANAGER: Role.Lager,
+  EMPLOYEE: Role.Service,
+  STAFF: Role.Service,
   Kueche: Role.Kueche,
   Tellerwaescher: Role.Tellerwaescher,
 };

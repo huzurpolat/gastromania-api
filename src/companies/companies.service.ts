@@ -27,7 +27,10 @@ export class CompaniesService {
       );
     }
 
-    return this.companyModel.create(dto);
+    return this.companyModel.create({
+      ...dto,
+      slug: dto.slug?.trim().toLowerCase() || this.slugify(dto.name),
+    });
   }
 
   async findAll(actor: AuthenticatedUser) {
@@ -67,8 +70,17 @@ export class CompaniesService {
       );
     }
 
+    const update = {
+      ...dto,
+      ...(dto.slug
+        ? { slug: dto.slug.trim().toLowerCase() }
+        : dto.name
+          ? { slug: this.slugify(dto.name) }
+          : {}),
+    };
+
     const company = await this.companyModel
-      .findByIdAndUpdate(id, dto, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, update, { new: true, runValidators: true })
       .exec();
     if (!company) {
       throw new NotFoundException('Unternehmen nicht gefunden');
@@ -81,5 +93,17 @@ export class CompaniesService {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Ungueltige Unternehmens-ID');
     }
+  }
+
+  private slugify(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/ä/g, 'ae')
+      .replace(/ö/g, 'oe')
+      .replace(/ü/g, 'ue')
+      .replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
   }
 }

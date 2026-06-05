@@ -37,6 +37,7 @@ describe('LocationsService', () => {
     sub: 'user-admin',
     email: 'admin@nrw.local',
     roles: ['Admin'],
+    tenantId: 'tenant-nrw',
     regionIds: ['region-nrw'],
     locationIds: ['6627d9a2c6f2d8f3e2b1a001'],
   };
@@ -90,8 +91,12 @@ describe('LocationsService', () => {
     await expect(service.create(dto, actor)).resolves.toBe(location);
     expect(locationModel.create).toHaveBeenCalledWith({
       ...dto,
+      tenantId: 'tenant-nrw',
+      slug: 'gastromania-mitte',
+      address: 'Hauptstrasse 1, 10115 Berlin',
       companyId: undefined,
       regionId: 'region-nrw',
+      postalCode: '10115',
     });
   });
 

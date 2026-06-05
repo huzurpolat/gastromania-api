@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { AuthenticatedRequest } from '../../auth/types/authenticated-request.type';
 import { REQUIRE_MODULE_KEY } from '../decorators/require-module.decorator';
 import { ModulesService } from '../modules.service';
 
@@ -20,7 +21,8 @@ export class ModuleEnabledGuard implements CanActivate {
       return true;
     }
 
-    await this.modulesService.assertEnabled(moduleKey);
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    await this.modulesService.assertEnabled(moduleKey, request.user);
 
     return true;
   }

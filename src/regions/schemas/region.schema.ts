@@ -12,10 +12,19 @@ export class Region {
   updatedAt?: Date;
 
   @Prop({ required: true, trim: true, index: true })
-  companyId!: string;
+  tenantId!: string;
+
+  @Prop({ trim: true, index: true })
+  companyId?: string;
+
+  @Prop({ trim: true, index: true })
+  areaId?: string;
 
   @Prop({ required: true, trim: true, index: true })
   name!: string;
+
+  @Prop({ trim: true })
+  description?: string;
 
   @Prop({ required: true, trim: true, uppercase: true, index: true })
   code!: string;
@@ -26,4 +35,5 @@ export class Region {
 
 export const RegionSchema = SchemaFactory.createForClass(Region);
 
-RegionSchema.index({ companyId: 1, code: 1 }, { unique: true });
+RegionSchema.index({ tenantId: 1, code: 1 }, { unique: true });
+RegionSchema.index({ tenantId: 1, areaId: 1, isActive: 1 });

@@ -41,7 +41,10 @@ export interface UserResponse {
   roles: string[];
   permissions?: string[];
   isActive: boolean;
+  status?: string;
+  tenantId?: string;
   companyId?: string;
+  areaIds?: string[];
   regionIds?: string[];
   locationId?: string;
   locationIds?: string[];
@@ -168,8 +171,17 @@ export class User {
   @Prop({ default: true })
   isActive!: boolean;
 
+  @Prop({ trim: true, index: true, default: 'active' })
+  status?: string;
+
+  @Prop({ trim: true, index: true })
+  tenantId?: string;
+
   @Prop({ trim: true, index: true })
   companyId?: string;
+
+  @Prop({ type: [String], default: [], index: true })
+  areaIds?: string[];
 
   @Prop({ type: [String], default: [], index: true })
   regionIds?: string[];
@@ -238,7 +250,10 @@ export const toUserResponse = (user: UserDocument): UserResponse => {
     role: roles[0],
     roles,
     isActive: user.isActive,
+    status: user.status ?? (user.isActive ? 'active' : 'disabled'),
+    tenantId: user.tenantId,
     companyId: user.companyId,
+    areaIds: user.areaIds,
     regionIds: user.regionIds,
     locationId: user.locationId,
     locationIds: user.locationIds,

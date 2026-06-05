@@ -9,7 +9,7 @@ import { AccessPolicyService } from '../access/access-policy.service';
 import { LoginDto } from './dto/login.dto';
 import { AuthenticatedUser } from './types/authenticated-request.type';
 import { Role } from './enums/role.enum';
-import { normalizeRoles } from './role-utils';
+import { isPlatformRole, normalizeRoles } from './role-utils';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { toUserResponse, UserResponse } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
@@ -30,20 +30,22 @@ export class AuthService {
   ) {}
 
   async login(loginDto: LoginDto): Promise<LoginResponse> {
+    const email = loginDto.email.trim().toLowerCase();
+    const password = loginDto.password.trim();
     const user = await this.usersService.findByEmailWithPassword(
-      loginDto.email,
+      email,
     );
 
     if (!user) {
       throw new UnauthorizedException('E-Mail oder Passwort ist ungueltig');
     }
 
-    if (!user.isActive) {
+    if (!user.isActive || user.status === 'disabled') {
       throw new UnauthorizedException('Benutzer ist deaktiviert');
     }
 
     const passwordMatches = await bcrypt.compare(
-      loginDto.password,
+      password,
       user.passwordHash,
     );
 
@@ -58,7 +60,9 @@ export class AuthService {
       email: user.email,
       roles,
       permissions,
+      tenantId: user.tenantId,
       companyId: user.companyId,
+      areaIds: user.areaIds ?? [],
       regionIds: user.regionIds ?? [],
       locationIds: [
         ...new Set([
@@ -69,10 +73,22 @@ export class AuthService {
       managedLocationIds: user.managedLocationIds ?? [],
       departmentIds: user.departmentIds ?? [],
     };
-    const payload: AuthenticatedUser = {
-      ...basePayload,
-      locationIds: await this.accessPolicy.getReadableLocationIds(basePayload),
-    };
+    const payload: AuthenticatedUser = isPlatformRole(roles)
+      ? {
+          ...basePayload,
+          tenantId: undefined,
+          companyId: undefined,
+          areaIds: [],
+          regionIds: [],
+          locationIds: [],
+          managedLocationIds: [],
+          departmentIds: [],
+        }
+      : {
+          ...basePayload,
+          locationIds:
+            await this.accessPolicy.getReadableLocationIds(basePayload),
+        };
 
     return {
       accessToken: await this.jwtService.signAsync(payload),
@@ -80,6 +96,7 @@ export class AuthService {
         ...toUserResponse(user),
         roles,
         permissions,
+        tenantId: payload.tenantId,
         locationIds: payload.locationIds,
       },
     };
@@ -99,7 +116,7 @@ export class AuthService {
         ...createUserDto,
         isActive: true,
       },
-      [Role.Admin],
+      [Role.PlatformAdmin],
     );
   }
 }

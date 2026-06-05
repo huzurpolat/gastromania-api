@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import bcrypt from 'bcrypt';
 import { Model } from 'mongoose';
@@ -15,6 +15,7 @@ import {
   DepartmentDocument,
   DepartmentType,
 } from '../departments/schemas/department.schema';
+import { Area, AreaDocument } from '../areas/schemas/area.schema';
 import {
   DutyShift,
   DutyShiftDocument,
@@ -47,11 +48,23 @@ import {
 } from '../reservations/schemas/reservation.schema';
 import { Region, RegionDocument } from '../regions/schemas/region.schema';
 import {
+  BillingStatus,
+  LicenseStatus,
+  Tenant,
+  TenantDocument,
+  TenantStatus,
+} from '../tenants/schemas/tenant.schema';
+import {
   RestaurantTable,
   RestaurantTableDocument,
   TableShape,
   TableStatus,
 } from '../tables/schemas/table.schema';
+import { DEFAULT_MODULES } from '../modules/constants/module-definitions';
+import {
+  TenantModule,
+  TenantModuleDocument,
+} from '../modules/schemas/tenant-module.schema';
 import {
   StockItem,
   StockItemDocument,
@@ -133,8 +146,20 @@ interface SalesDemoMenuItemConfig {
   isVegan?: boolean;
 }
 
+interface DevelopmentTenantConfig {
+  name: string;
+  slug: string;
+  locations: Array<{
+    city: string;
+    area: 'NRW' | 'Bayern';
+    region: 'Rheinland' | 'Ruhrgebiet' | 'Oberbayern' | 'Franken';
+    zip: string;
+    street: string;
+  }>;
+}
+
 @Injectable()
-export class DemoDataService {
+export class DemoDataService implements OnApplicationBootstrap {
   private readonly demoPrefix = '[Demo]';
   private readonly demoPassword = 'Gastromania2026!';
   private readonly demoCompanyName = 'Gastro Group Deutschland';
@@ -142,6 +167,62 @@ export class DemoDataService {
   private readonly salesDemoCompanyName = 'GastroWerk24 Demo Restaurant';
   private readonly salesDemoLocationName = 'GastroWerk24 Demo Restaurant Köln';
   private readonly salesDemoRegionCode = 'NRW';
+  private readonly developmentPlatformAdminEmail = 'platform@gastromania.local';
+  private readonly developmentPlatformAdminPassword = 'Gastromania2026!';
+  private readonly tenantDemoPassword = 'Demo2026!';
+  private readonly tenantDemoActiveModuleKeys = new Set([
+    'pos',
+    'table_management',
+    'kds',
+    'digital_menu',
+    'reporting',
+    'inventory',
+    'recipes',
+    'staff_management',
+    'module_management',
+  ]);
+  private readonly developmentTenantConfigs: DevelopmentTenantConfig[] = [
+    {
+      name: 'BurgerMania',
+      slug: 'burgermania',
+      locations: [
+        { city: 'Köln', area: 'NRW', region: 'Rheinland', zip: '50667', street: 'Hohe Straße 1' },
+        { city: 'Bonn', area: 'NRW', region: 'Rheinland', zip: '53111', street: 'Markt 12' },
+        { city: 'Düsseldorf', area: 'NRW', region: 'Rheinland', zip: '40213', street: 'Königsallee 20' },
+      ],
+    },
+    {
+      name: 'Crispy Chicken',
+      slug: 'crispy-chicken',
+      locations: [
+        { city: 'Köln', area: 'NRW', region: 'Rheinland', zip: '50667', street: 'Schildergasse 45' },
+        { city: 'Essen', area: 'NRW', region: 'Ruhrgebiet', zip: '45127', street: 'Limbecker Platz 1' },
+      ],
+    },
+    {
+      name: 'Pasta House',
+      slug: 'pasta-house',
+      locations: [
+        { city: 'Düsseldorf', area: 'NRW', region: 'Rheinland', zip: '40213', street: 'Altstadt 8' },
+        { city: 'Dortmund', area: 'NRW', region: 'Ruhrgebiet', zip: '44137', street: 'Westenhellweg 30' },
+      ],
+    },
+    {
+      name: 'Grill Factory',
+      slug: 'grill-factory',
+      locations: [
+        { city: 'Köln', area: 'NRW', region: 'Rheinland', zip: '50667', street: 'Domkloster 4' },
+        { city: 'München', area: 'Bayern', region: 'Oberbayern', zip: '80331', street: 'Marienplatz 7' },
+      ],
+    },
+    {
+      name: 'Frittenwerk Demo',
+      slug: 'frittenwerk-demo',
+      locations: [
+        { city: 'Düsseldorf', area: 'NRW', region: 'Rheinland', zip: '40213', street: 'Bolkerstraße 14' },
+      ],
+    },
+  ];
   private readonly salesDemoUsers: SalesDemoUserConfig[] = [
     {
       email: 'admin@gastromania-demo.de',
@@ -522,13 +603,25 @@ export class DemoDataService {
     private readonly departmentModel: Model<DepartmentDocument>,
     @InjectModel(Region.name)
     private readonly regionModel: Model<RegionDocument>,
+    @InjectModel(Area.name)
+    private readonly areaModel: Model<AreaDocument>,
+    @InjectModel(Tenant.name)
+    private readonly tenantModel: Model<TenantDocument>,
+    @InjectModel(TenantModule.name)
+    private readonly tenantModuleModel: Model<TenantModuleDocument>,
   ) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    await this.ensureDevelopmentPlatformAdmin();
+    await this.ensureDevelopmentDemoTenants();
+  }
 
   async seed(actor: AuthenticatedUser): Promise<DemoDataResult> {
     await this.clearExistingDemoData();
 
     const company = await this.companyModel.create({
       name: this.demoCompanyName,
+      slug: this.slugify(this.demoCompanyName),
       type: 'restaurant-group',
       isActive: true,
     });
@@ -611,10 +704,16 @@ export class DemoDataService {
   async seedSalesDemo(): Promise<DemoDataResult> {
     const company = await this.companyModel
       .findOneAndUpdate(
-        { name: this.salesDemoCompanyName },
+        {
+          $or: [
+            { slug: this.slugify(this.salesDemoCompanyName) },
+            { name: this.salesDemoCompanyName },
+          ],
+        },
         {
           $set: {
             name: this.salesDemoCompanyName,
+            slug: this.slugify(this.salesDemoCompanyName),
             type: 'sales-demo-restaurant',
             isActive: true,
           },
@@ -679,6 +778,7 @@ export class DemoDataService {
       users,
     );
     const checklists = await this.upsertSalesDemoChecklists(locationId);
+    const demoTenants = await this.ensureDevelopmentDemoTenants();
 
     return {
       locationId,
@@ -696,6 +796,12 @@ export class DemoDataService {
         stockMovements: stockMovements.length,
         timeEntries: timeEntries.length,
         checklists: checklists.length,
+        demoTenants: demoTenants.tenants,
+        demoTenantAreas: demoTenants.areas,
+        demoTenantRegions: demoTenants.regions,
+        demoTenantLocations: demoTenants.locations,
+        demoTenantUsers: demoTenants.users,
+        demoTenantModules: demoTenants.modules,
       },
       demoUsers: users.map((user) => ({
         email: user.email,
@@ -703,6 +809,512 @@ export class DemoDataService {
         role: user.roles[0],
       })),
     };
+  }
+
+  async ensureDevelopmentDemoTenants(): Promise<Record<string, number>> {
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        tenants: 0,
+        areas: 0,
+        regions: 0,
+        locations: 0,
+        users: 0,
+        modules: 0,
+      };
+    }
+
+    const passwordHash = await bcrypt.hash(this.tenantDemoPassword, 12);
+    let areas = 0;
+    let regions = 0;
+    let locations = 0;
+    let users = 0;
+    let modules = 0;
+
+    await this.hideLegacyDevelopmentDemoTenants();
+
+    for (const config of this.developmentTenantConfigs) {
+      const companySlug = `${config.slug}-demo-tenant`;
+      const company = await this.companyModel
+        .findOneAndUpdate(
+          {
+            $or: [
+              { slug: companySlug },
+              { name: `${config.name} Demo Tenant` },
+            ],
+          },
+          {
+            $set: {
+              name: `${config.name} Demo Tenant`,
+              slug: companySlug,
+              type: 'development-demo-tenant',
+              isActive: true,
+            },
+          },
+          { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+        )
+        .exec();
+      const tenant = await this.tenantModel
+        .findOneAndUpdate(
+          { slug: config.slug },
+          {
+            $set: {
+              name: config.name,
+              slug: config.slug,
+              status: TenantStatus.Active,
+              planKey: 'demo',
+              licenseStatus: LicenseStatus.Active,
+              billingStatus: BillingStatus.Paid,
+              contactEmail: `admin@${config.slug}.demo`,
+              contactPhone: '0221 123456',
+              billingName: config.name,
+              billingAddress: 'Demo Strasse 1, 50667 Koeln',
+              companyId: company._id.toString(),
+              deletedAt: null,
+            },
+          },
+          { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+        )
+        .exec();
+      const tenantId = tenant._id.toString();
+      const companyId = company._id.toString();
+      const areaByName = await this.upsertDevelopmentTenantAreas(
+        tenantId,
+        companyId,
+      );
+      const regionByName = await this.upsertDevelopmentTenantRegions(
+        tenantId,
+        companyId,
+        areaByName,
+      );
+      const locationDocs = await this.upsertDevelopmentTenantLocations(
+        tenantId,
+        companyId,
+        config,
+        areaByName,
+        regionByName,
+      );
+      const locationIds = locationDocs.map((location) => location._id.toString());
+      const areaIds = [...areaByName.values()].map((area) => area._id.toString());
+      const regionIds = [...regionByName.values()].map((region) =>
+        region._id.toString(),
+      );
+      const tenantUsers = await this.upsertDevelopmentTenantUsers(
+        config,
+        tenantId,
+        companyId,
+        areaIds,
+        regionIds,
+        locationDocs,
+        passwordHash,
+      );
+
+      await this.assignDevelopmentTenantLocationManagers(
+        locationDocs,
+        tenantUsers,
+      );
+      await this.upsertDevelopmentTenantModules(tenantId);
+
+      areas += areaByName.size;
+      regions += regionByName.size;
+      locations += locationDocs.length;
+      users += tenantUsers.length;
+      modules += DEFAULT_MODULES.length;
+    }
+
+    return {
+      tenants: this.developmentTenantConfigs.length,
+      areas,
+      regions,
+      locations,
+      users,
+      modules,
+    };
+  }
+
+  async ensureDevelopmentPlatformAdmin(): Promise<UserDocument | null> {
+    if (process.env.NODE_ENV === 'production') {
+      return null;
+    }
+
+    const passwordHash = await bcrypt.hash(
+      this.developmentPlatformAdminPassword,
+      12,
+    );
+
+    return this.userModel
+      .findOneAndUpdate(
+        { email: this.developmentPlatformAdminEmail },
+        {
+          $set: {
+            email: this.developmentPlatformAdminEmail,
+            passwordHash,
+            firstName: 'Platform',
+            lastName: 'Admin',
+            roles: [Role.PlatformAdminCode],
+            permissions: ['*'],
+            isActive: true,
+            status: 'active',
+            tenantId: undefined,
+            companyId: undefined,
+            areaIds: [],
+            regionIds: [],
+            locationId: undefined,
+            locationIds: [],
+            managedLocationIds: [],
+            departmentIds: [],
+            responsibilities: [],
+          },
+        },
+        {
+          returnDocument: 'after',
+          setDefaultsOnInsert: true,
+          upsert: true,
+        },
+      )
+      .exec();
+  }
+
+  private async upsertDevelopmentTenantAreas(
+    tenantId: string,
+    companyId: string,
+  ): Promise<Map<string, AreaDocument>> {
+    const result = new Map<string, AreaDocument>();
+
+    for (const name of ['NRW', 'Bayern']) {
+      const area = await this.areaModel
+        .findOneAndUpdate(
+          { tenantId, name },
+          {
+            $set: {
+              tenantId,
+              companyId,
+              name,
+              description: `${name} Demo-Bereich`,
+              isActive: true,
+            },
+          },
+          { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+        )
+        .exec();
+      result.set(name, area);
+    }
+
+    return result;
+  }
+
+  private async upsertDevelopmentTenantRegions(
+    tenantId: string,
+    companyId: string,
+    areaByName: Map<string, AreaDocument>,
+  ): Promise<Map<string, RegionDocument>> {
+    const configs = [
+      { area: 'NRW', name: 'Rheinland', code: 'NRW-RHEINLAND' },
+      { area: 'NRW', name: 'Ruhrgebiet', code: 'NRW-RUHR' },
+      { area: 'Bayern', name: 'Oberbayern', code: 'BY-OBERBAYERN' },
+      { area: 'Bayern', name: 'Franken', code: 'BY-FRANKEN' },
+    ];
+    const result = new Map<string, RegionDocument>();
+
+    for (const config of configs) {
+      const area = this.requireMapValue(areaByName, config.area);
+      const region = await this.regionModel
+        .findOneAndUpdate(
+          { tenantId, code: config.code },
+          {
+            $set: {
+              tenantId,
+              companyId,
+              areaId: area._id.toString(),
+              name: config.name,
+              code: config.code,
+              description: `${config.name} Demo-Region`,
+              isActive: true,
+            },
+          },
+          { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+        )
+        .exec();
+      result.set(config.name, region);
+    }
+
+    return result;
+  }
+
+  private async upsertDevelopmentTenantLocations(
+    tenantId: string,
+    companyId: string,
+    tenant: DevelopmentTenantConfig,
+    areaByName: Map<string, AreaDocument>,
+    regionByName: Map<string, RegionDocument>,
+  ): Promise<LocationDocument[]> {
+    return Promise.all(
+      tenant.locations.map((location, index) => {
+        const area = this.requireMapValue(areaByName, location.area);
+        const region = this.requireMapValue(regionByName, location.region);
+        const slug = `${tenant.slug}-${this.slugify(location.city)}`;
+
+        return this.locationModel
+          .findOneAndUpdate(
+            { tenantId, slug },
+            {
+              $set: {
+                tenantId,
+                companyId,
+                areaId: area._id.toString(),
+                regionId: region._id.toString(),
+                name: `${tenant.name} ${location.city}`,
+                slug,
+                address: `${location.street}, ${location.zip} ${location.city}`,
+                street: location.street,
+                zip: location.zip,
+                postalCode: location.zip,
+                city: location.city,
+                federalState:
+                  location.area === 'NRW' ? 'Nordrhein-Westfalen' : 'Bayern',
+                phone: `0221 12345${index}`,
+                email: `${this.slugify(location.city)}@${tenant.slug}.demo`,
+                icon: 'restaurant',
+                isActive: true,
+                tablePlanFloors: ['EG'],
+                tablePlanAreas: [
+                  {
+                    id: 'restaurant',
+                    label: 'Restaurantbereich',
+                    category: 'restaurant',
+                    icon: 'table_restaurant',
+                    floor: 'EG',
+                    x: 5,
+                    y: 8,
+                    width: 48,
+                    height: 48,
+                  },
+                  {
+                    id: 'theke',
+                    label: 'Theke',
+                    category: 'bar',
+                    icon: 'local_bar',
+                    floor: 'EG',
+                    x: 58,
+                    y: 12,
+                    width: 30,
+                    height: 20,
+                  },
+                ],
+              },
+            },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec();
+      }),
+    );
+  }
+
+  private async upsertDevelopmentTenantUsers(
+    tenant: DevelopmentTenantConfig,
+    tenantId: string,
+    companyId: string,
+    areaIds: string[],
+    regionIds: string[],
+    locations: LocationDocument[],
+    passwordHash: string,
+  ): Promise<UserDocument[]> {
+    const locationIds = locations.map((location) => location._id.toString());
+    const configs: Array<{
+      email: string;
+      firstName: string;
+      lastName: string;
+      roles: Role[];
+      locationIds: string[];
+      managedLocationIds: string[];
+    }> = [
+      {
+        email: `admin@${tenant.slug}.demo`,
+        firstName: 'Admin',
+        lastName: tenant.name,
+        roles: [Role.TenantAdminCode],
+        locationIds,
+        managedLocationIds: locationIds,
+      },
+      {
+        email: `regionalleiter@${tenant.slug}.demo`,
+        firstName: 'Regionalleitung',
+        lastName: tenant.name,
+        roles: [Role.Regionalleiter],
+        locationIds,
+        managedLocationIds: locationIds,
+      },
+    ];
+
+    for (const location of locations) {
+      const citySlug = this.slugify(location.city);
+      const locationId = location._id.toString();
+
+      configs.push(
+        {
+          email: `filialleiter.${citySlug}@${tenant.slug}.demo`,
+          firstName: 'Filialleitung',
+          lastName: location.city,
+          roles: [Role.Filialleiter],
+          locationIds: [locationId],
+          managedLocationIds: [locationId],
+        },
+        ...[1, 2].map((number) => ({
+          email: `service${number}.${citySlug}@${tenant.slug}.demo`,
+          firstName: `Service ${number}`,
+          lastName: location.city,
+          roles: [Role.Service],
+          locationIds: [locationId],
+          managedLocationIds: [],
+        })),
+        ...[1, 2].map((number) => ({
+          email: `kueche${number}.${citySlug}@${tenant.slug}.demo`,
+          firstName: `Kueche ${number}`,
+          lastName: location.city,
+          roles: [Role.Kueche],
+          locationIds: [locationId],
+          managedLocationIds: [],
+        })),
+      );
+    }
+
+    return Promise.all(
+      configs.map((user) =>
+        this.userModel
+          .findOneAndUpdate(
+            { email: user.email },
+            {
+              $set: {
+                email: user.email,
+                passwordHash,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                roles: user.roles,
+                isActive: true,
+                status: 'active',
+                tenantId,
+                companyId,
+                areaIds,
+                regionIds,
+                locationId: user.locationIds[0],
+                locationIds: user.locationIds,
+                managedLocationIds: user.managedLocationIds,
+                departmentIds: [],
+                responsibilities: [],
+              },
+            },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec(),
+      ),
+    );
+  }
+
+  private async assignDevelopmentTenantLocationManagers(
+    locations: LocationDocument[],
+    users: UserDocument[],
+  ): Promise<void> {
+    await Promise.all(
+      locations.map((location) => {
+        const manager = users.find(
+          (user) =>
+            user.roles.includes(Role.Filialleiter) &&
+            (user.managedLocationIds ?? []).includes(location._id.toString()),
+        );
+
+        if (!manager) {
+          return Promise.resolve();
+        }
+
+        return this.locationModel
+          .updateOne(
+            { _id: location._id },
+            { $set: { managerId: manager._id.toString() } },
+          )
+          .exec();
+      }),
+    );
+  }
+
+  private async upsertDevelopmentTenantModules(tenantId: string): Promise<void> {
+    await Promise.all(
+      DEFAULT_MODULES.map((moduleConfig) =>
+        this.tenantModuleModel
+          .findOneAndUpdate(
+            { tenantId, moduleKey: moduleConfig.key },
+            {
+              $set: {
+                tenantId,
+                moduleKey: moduleConfig.key,
+                enabled:
+                  moduleConfig.systemLocked ||
+                  this.tenantDemoActiveModuleKeys.has(moduleConfig.key),
+              },
+            },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec(),
+      ),
+    );
+  }
+
+  private async hideLegacyDevelopmentDemoTenants(): Promise<void> {
+    await this.tenantModel
+      .updateMany(
+        {
+          slug: {
+            $in: [
+              'hans-im-glueck',
+              'kfc',
+              'burger-king',
+              'losteria',
+              'frittenbude',
+            ],
+          },
+          name: {
+            $in: [
+              'Hans im Glück',
+              'Hans im Glueck',
+              'KFC',
+              'Burger King',
+              "L'Osteria",
+              'Frittenbude',
+            ],
+          },
+          deletedAt: null,
+        },
+        {
+          $set: {
+            status: TenantStatus.Cancelled,
+            licenseStatus: LicenseStatus.Suspended,
+            billingStatus: BillingStatus.Blocked,
+            deletedAt: new Date(),
+          },
+        },
+      )
+      .exec();
+  }
+
+  private slugify(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/ä/g, 'ae')
+      .replace(/ö/g, 'oe')
+      .replace(/ü/g, 'ue')
+      .replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
   }
 
   private upsertSalesDemoLocation(

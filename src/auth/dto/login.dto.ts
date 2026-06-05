@@ -15,6 +15,7 @@ export class LoginDto {
   @IsEmail()
   email!: string;
 
+  @Transform(({ value }) => trimString(value))
   @IsString()
   @IsNotEmpty()
   password!: string;

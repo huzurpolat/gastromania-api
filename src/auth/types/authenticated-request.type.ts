@@ -4,7 +4,9 @@ export interface AuthenticatedUser {
   email: string;
   roles: string[];
   permissions?: string[];
+  tenantId?: string;
   companyId?: string;
+  areaIds?: string[];
   regionIds?: string[];
   locationIds?: string[];
   managedLocationIds?: string[];

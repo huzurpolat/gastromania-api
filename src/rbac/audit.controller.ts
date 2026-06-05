@@ -7,7 +7,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RbacService } from './rbac.service';
 
-@Controller('audit')
+@Controller(['audit', 'platform/audit'])
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin)
 export class AuditController {

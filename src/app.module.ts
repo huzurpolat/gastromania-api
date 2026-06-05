@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { AccessModule } from './access/access.module';
+import { AreasModule } from './areas/areas.module';
 import { ChecklistsModule } from './checklists/checklists.module';
 import { CompaniesModule } from './companies/companies.module';
 import { CounterModule } from './counter/counter.module';
@@ -32,6 +33,7 @@ import { StaffPlanningModule } from './staff-planning/staff-planning.module';
 import { StockModule } from './stock/stock.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { TablesModule } from './tables/tables.module';
+import { TenantsModule } from './tenants/tenants.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { UsersModule } from './users/users.module';
 import { WeeklyMenusModule } from './weekly-menus/weekly-menus.module';
@@ -55,6 +57,7 @@ import { HrModule } from './hr/hr.module';
     }),
 
     AccessModule,
+    AreasModule,
     CompaniesModule,
     RegionsModule,
     UsersModule,
@@ -73,6 +76,7 @@ import { HrModule } from './hr/hr.module';
     SettingsModule,
     MobileModule,
     ModulesModule,
+    TenantsModule,
     OrdersModule,
     QrOrdersModule,
     MenuItemsModule,

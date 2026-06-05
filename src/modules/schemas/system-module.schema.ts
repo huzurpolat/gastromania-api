@@ -3,8 +3,14 @@ import { HydratedDocument } from 'mongoose';
 
 export type SystemModuleDocument = HydratedDocument<SystemModule>;
 
-@Schema({ collection: 'system_modules', timestamps: true })
+@Schema({ collection: 'module_definitions', timestamps: true })
 export class SystemModule {
+  _id!: string;
+
+  createdAt?: Date;
+
+  updatedAt?: Date;
+
   @Prop({ required: true, unique: true, trim: true })
   key!: string;
 
@@ -18,10 +24,13 @@ export class SystemModule {
   category!: string;
 
   @Prop({ required: true, default: true })
-  enabled!: boolean;
+  defaultEnabled!: boolean;
 
   @Prop({ required: true, default: false })
   systemLocked!: boolean;
+
+  @Prop({ required: true, default: 0, index: true })
+  sortOrder!: number;
 }
 
 export const SystemModuleSchema = SchemaFactory.createForClass(SystemModule);

@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { Area, AreaSchema } from '../areas/schemas/area.schema';
 import { Company, CompanySchema } from '../companies/schemas/company.schema';
 import {
   Department,
@@ -15,6 +16,7 @@ import { AccessPolicyService } from './access-policy.service';
   imports: [
     MongooseModule.forFeature([
       { name: Company.name, schema: CompanySchema },
+      { name: Area.name, schema: AreaSchema },
       { name: Department.name, schema: DepartmentSchema },
       { name: Region.name, schema: RegionSchema },
       { name: Location.name, schema: LocationSchema },

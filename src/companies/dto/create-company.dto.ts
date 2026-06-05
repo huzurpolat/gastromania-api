@@ -13,6 +13,11 @@ export class CreateCompanyDto {
   @Transform(({ value }) => trimString(value))
   @IsOptional()
   @IsString()
+  slug?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
   type?: string;
 
   @IsOptional()

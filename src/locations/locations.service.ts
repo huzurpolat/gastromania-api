@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
+import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
   RestaurantTable,
@@ -31,8 +33,19 @@ export class LocationsService {
     createLocationDto: CreateLocationDto,
     actor: AuthenticatedUser,
   ): Promise<LocationDocument> {
+    const tenantId = this.resolveTenantId(createLocationDto.tenantId, actor);
     const payload = {
       ...createLocationDto,
+      tenantId,
+      slug: createLocationDto.slug ?? this.toSlug(createLocationDto.name),
+      postalCode: createLocationDto.postalCode ?? createLocationDto.zip,
+      address:
+        createLocationDto.address ??
+        this.formatAddress(
+          createLocationDto.street,
+          createLocationDto.zip,
+          createLocationDto.city,
+        ),
       companyId: createLocationDto.companyId ?? actor.companyId,
       regionId:
         createLocationDto.regionId ??
@@ -43,11 +56,17 @@ export class LocationsService {
       await this.accessPolicy.assertCompanyExists(payload.companyId);
     }
 
+    if (payload.areaId) {
+      await this.accessPolicy.assertAreaExists(payload.areaId);
+    }
+
     if (payload.regionId) {
       await this.accessPolicy.assertRegionExists(payload.regionId);
     }
 
     await this.accessPolicy.assertAssignableScope(actor, {
+      tenantId: payload.tenantId,
+      areaIds: payload.areaId ? [payload.areaId] : [],
       companyId: payload.companyId,
       regionIds: payload.regionId ? [payload.regionId] : [],
       managedLocationIds: [],
@@ -94,6 +113,19 @@ export class LocationsService {
 
     if (updateLocationDto.companyId) {
       await this.accessPolicy.assertCompanyExists(updateLocationDto.companyId);
+    }
+    if (updateLocationDto.areaId) {
+      await this.accessPolicy.assertAreaExists(updateLocationDto.areaId);
+      await this.accessPolicy.assertAssignableScope(actor, {
+        areaIds: [updateLocationDto.areaId],
+      });
+    }
+    if (
+      updateLocationDto.tenantId !== undefined &&
+      updateLocationDto.tenantId !== actor.tenantId &&
+      !this.isPlatformAdmin(actor)
+    ) {
+      throw new ForbiddenException('Tenant eines Standorts darf nicht geaendert werden');
     }
 
     if (updateLocationDto.regionId) {
@@ -183,7 +215,9 @@ export class LocationsService {
         { name: 'Tisch 3', x: 44, y: 8 },
       ]) {
         await this.tableModel.create({
+          tenantId: location.tenantId,
           companyId: location.companyId,
+          areaId: location.areaId,
           regionId: location.regionId,
           locationId: location._id.toString(),
           name: await this.createAvailableStartTableName(
@@ -241,5 +275,53 @@ export class LocationsService {
       .replace(/^-+|-+$/g, '');
 
     return `${locationId}:${slug || 'floor'}`;
+  }
+
+  private toSlug(value: string): string {
+    return value
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  private formatAddress(street: string, zip: string, city: string): string {
+    return [street, [zip, city].filter(Boolean).join(' ')]
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  private resolveTenantId(
+    requestedTenantId: string | undefined,
+    actor: AuthenticatedUser,
+  ): string {
+    if (this.isPlatformAdmin(actor)) {
+      if (!requestedTenantId) {
+        throw new BadRequestException(
+          'Tenant-ID ist fuer Plattform-Standorte erforderlich',
+        );
+      }
+
+      return requestedTenantId;
+    }
+
+    if (!actor.tenantId) {
+      throw new BadRequestException(
+        'Benutzer ohne Tenant-ID duerfen keine Standorte verwalten',
+      );
+    }
+
+    if (requestedTenantId && requestedTenantId !== actor.tenantId) {
+      throw new ForbiddenException('Standort muss im eigenen Tenant liegen');
+    }
+
+    return actor.tenantId;
+  }
+
+  private isPlatformAdmin(actor: AuthenticatedUser): boolean {
+    return actor.roles?.some((role) =>
+      [Role.PlatformAdmin, Role.SuperAdmin].includes(role as Role),
+    );
   }
 }

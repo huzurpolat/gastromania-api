@@ -33,7 +33,13 @@ export enum TableShape {
 @Schema({ timestamps: true, versionKey: false })
 export class RestaurantTable {
   @Prop({ trim: true, index: true })
+  tenantId?: string;
+
+  @Prop({ trim: true, index: true })
   companyId?: string;
+
+  @Prop({ trim: true, index: true })
+  areaId?: string;
 
   @Prop({ trim: true, index: true })
   regionId?: string;
@@ -144,6 +150,7 @@ export const RestaurantTableSchema =
   SchemaFactory.createForClass(RestaurantTable);
 
 RestaurantTableSchema.index({ locationId: 1, name: 1 }, { unique: true });
+RestaurantTableSchema.index({ tenantId: 1, locationId: 1 });
 RestaurantTableSchema.index({ companyId: 1, regionId: 1, locationId: 1 });
 RestaurantTableSchema.index({ locationId: 1, status: 1 });
 RestaurantTableSchema.index({ locationId: 1, floorId: 1 });

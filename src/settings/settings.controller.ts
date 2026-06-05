@@ -10,7 +10,7 @@ import type { AuthenticatedUser } from '../auth/types/authenticated-request.type
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { SettingsService } from './settings.service';
 
-@Controller('settings')
+@Controller(['settings', 'platform/settings'])
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(Role.PlatformAdmin, Role.SuperAdmin)
 export class SettingsController {

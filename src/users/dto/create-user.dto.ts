@@ -41,6 +41,8 @@ export const EMPLOYEE_STATUSES = [
   'Gekuendigt',
 ] as const;
 
+export const USER_ACCOUNT_STATUSES = ['active', 'invited', 'disabled'] as const;
+
 export const QUALIFICATIONS = [
   'Service',
   'Küche',
@@ -240,8 +242,24 @@ export class CreateUserDto {
 
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()
+  @IsIn(USER_ACCOUNT_STATUSES)
+  status?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  tenantId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
   @IsString()
   companyId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  areaIds?: string[];
 
   @IsOptional()
   @IsArray()

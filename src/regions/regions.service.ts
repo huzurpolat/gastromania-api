@@ -21,16 +21,30 @@ export class RegionsService {
   ) {}
 
   async create(dto: CreateRegionDto, actor: AuthenticatedUser) {
+    const tenantId = this.resolveTenantId(dto.tenantId, actor);
+    const payload = {
+      ...dto,
+      tenantId,
+      companyId: dto.companyId ?? actor.companyId,
+    };
+
     if (
       !this.accessPolicy.isPlatformAdmin(actor) &&
-      !this.accessPolicy.canAccessCompany(actor, dto.companyId)
+      payload.companyId &&
+      !this.accessPolicy.canAccessCompany(actor, payload.companyId)
     ) {
       throw new ForbiddenException(
         'Keine Berechtigung fuer dieses Unternehmen',
       );
     }
 
-    return this.regionModel.create(dto);
+    await this.accessPolicy.assertAssignableScope(actor, {
+      tenantId,
+      areaIds: payload.areaId ? [payload.areaId] : [],
+      companyId: payload.companyId,
+    });
+
+    return this.regionModel.create(payload);
   }
 
   async findAll(actor: AuthenticatedUser) {
@@ -40,7 +54,21 @@ export class RegionsService {
 
     if (actor.regionIds?.length) {
       return this.regionModel
-        .find({ _id: { $in: actor.regionIds } })
+        .find({ tenantId: actor.tenantId, _id: { $in: actor.regionIds } })
+        .sort({ name: 1 })
+        .exec();
+    }
+
+    if (actor.areaIds?.length) {
+      return this.regionModel
+        .find({ tenantId: actor.tenantId, areaId: { $in: actor.areaIds } })
+        .sort({ name: 1 })
+        .exec();
+    }
+
+    if (actor.tenantId && this.accessPolicy.isCompanyAdmin(actor)) {
+      return this.regionModel
+        .find({ tenantId: actor.tenantId })
         .sort({ name: 1 })
         .exec();
     }
@@ -89,5 +117,28 @@ export class RegionsService {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Ungueltige Regions-ID');
     }
+  }
+
+  private resolveTenantId(
+    requestedTenantId: string | undefined,
+    actor: AuthenticatedUser,
+  ): string {
+    if (this.accessPolicy.isPlatformAdmin(actor)) {
+      if (!requestedTenantId) {
+        throw new BadRequestException('Tenant-ID ist erforderlich');
+      }
+
+      return requestedTenantId;
+    }
+
+    if (!actor.tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext vorhanden');
+    }
+
+    if (requestedTenantId && requestedTenantId !== actor.tenantId) {
+      throw new ForbiddenException('Keine Berechtigung fuer diesen Tenant');
+    }
+
+    return actor.tenantId;
   }
 }

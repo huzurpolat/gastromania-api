@@ -12,9 +12,19 @@ const normalizeCodeParam = ({ value }: TransformFnParams): unknown =>
 
 export class CreateRegionDto {
   @Transform(trimStringParam)
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  companyId!: string;
+  tenantId?: string;
+
+  @Transform(trimStringParam)
+  @IsOptional()
+  @IsString()
+  companyId?: string;
+
+  @Transform(trimStringParam)
+  @IsOptional()
+  @IsString()
+  areaId?: string;
 
   @Transform(trimStringParam)
   @IsString()
@@ -25,6 +35,11 @@ export class CreateRegionDto {
   @IsString()
   @IsNotEmpty()
   code!: string;
+
+  @Transform(trimStringParam)
+  @IsOptional()
+  @IsString()
+  description?: string;
 
   @IsOptional()
   @IsBoolean()

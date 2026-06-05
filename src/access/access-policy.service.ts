@@ -12,6 +12,7 @@ import {
   normalizeRoles,
 } from '../auth/role-utils';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { Area, AreaDocument } from '../areas/schemas/area.schema';
 import { Company, CompanyDocument } from '../companies/schemas/company.schema';
 import {
   Department,
@@ -25,7 +26,9 @@ import { Region, RegionDocument } from '../regions/schemas/region.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 
 export interface AssignableScope {
+  tenantId?: string;
   companyId?: string;
+  areaIds?: string[];
   regionIds?: string[];
   locationId?: string;
   locationIds?: string[];
@@ -37,6 +40,8 @@ export interface AssignableScope {
 @Injectable()
 export class AccessPolicyService {
   constructor(
+    @InjectModel(Area.name)
+    private readonly areaModel: Model<AreaDocument>,
     @InjectModel(Company.name)
     private readonly companyModel: Model<CompanyDocument>,
     @InjectModel(Department.name)
@@ -54,7 +59,12 @@ export class AccessPolicyService {
   }
 
   isCompanyAdmin(user?: AuthenticatedUser): boolean {
-    return this.hasAnyRole(user, [Role.CompanyAdmin, Role.Admin]);
+    return this.hasAnyRole(user, [
+      Role.TenantAdmin,
+      Role.RestaurantAdmin,
+      Role.CompanyAdmin,
+      Role.Admin,
+    ]);
   }
 
   isRegionAdmin(user?: AuthenticatedUser): boolean {
@@ -67,6 +77,8 @@ export class AccessPolicyService {
 
   isManagementRole(user?: AuthenticatedUser): boolean {
     return this.hasAnyRole(user, [
+      Role.TenantAdmin,
+      Role.RestaurantAdmin,
       Role.CompanyAdmin,
       Role.RegionAdmin,
       Role.Admin,
@@ -87,10 +99,27 @@ export class AccessPolicyService {
       ...(user.managedLocationIds ?? []),
     ]);
 
+    if (this.isCompanyAdmin(user) && user.tenantId) {
+      return this.unique([
+        ...directIds,
+        ...(await this.findLocationIds({ tenantId: user.tenantId })),
+      ]);
+    }
+
     if (this.isCompanyAdmin(user) && user.companyId) {
       return this.unique([
         ...directIds,
         ...(await this.findLocationIds({ companyId: user.companyId })),
+      ]);
+    }
+
+    if (
+      this.isBereichsleiter(user) &&
+      user.areaIds?.length
+    ) {
+      return this.unique([
+        ...directIds,
+        ...(await this.findLocationIds({ areaId: { $in: user.areaIds } })),
       ]);
     }
 
@@ -181,6 +210,10 @@ export class AccessPolicyService {
     }
 
     if (this.isCompanyAdmin(user)) {
+      if (user.tenantId) {
+        return { tenantId: user.tenantId };
+      }
+
       return user.companyId
         ? { companyId: user.companyId }
         : { _id: { $in: [] } };
@@ -192,6 +225,12 @@ export class AccessPolicyService {
     ) {
       return user.regionIds?.length
         ? { regionIds: { $in: user.regionIds } }
+        : { _id: { $in: [] } };
+    }
+
+    if (this.isBereichsleiter(user)) {
+      return user.areaIds?.length
+        ? { areaIds: { $in: user.areaIds } }
         : { _id: { $in: [] } };
     }
 
@@ -229,16 +268,52 @@ export class AccessPolicyService {
       return true;
     }
 
-    if (!this.isCompanyAdmin(user) || !user.companyId) {
+    const region = await this.regionModel
+      .findById(regionId)
+      .select('tenantId companyId areaId')
+      .exec();
+
+    if (!region) {
       return false;
     }
 
-    const region = await this.regionModel
-      .findById(regionId)
-      .select('companyId')
+    if (user.areaIds?.includes(region.areaId ?? '')) {
+      return true;
+    }
+
+    if (this.isCompanyAdmin(user) && user.tenantId) {
+      return region.tenantId === user.tenantId;
+    }
+
+    if (this.isCompanyAdmin(user) && user.companyId) {
+      return region.companyId === user.companyId;
+    }
+
+    return false;
+  }
+
+  async canAccessArea(
+    user: AuthenticatedUser,
+    areaId?: string,
+  ): Promise<boolean> {
+    if (!areaId || this.isPlatformAdmin(user)) {
+      return true;
+    }
+
+    if (user.areaIds?.includes(areaId)) {
+      return true;
+    }
+
+    if (!this.isCompanyAdmin(user) || !user.tenantId) {
+      return false;
+    }
+
+    const area = await this.areaModel
+      .findById(areaId)
+      .select('tenantId')
       .exec();
 
-    return region?.companyId === user.companyId;
+    return area?.tenantId === user.tenantId;
   }
 
   async canAccessLocation(
@@ -301,7 +376,7 @@ export class AccessPolicyService {
     const normalizedRole = normalizeRoles([role])[0];
 
     if (this.isPlatformAdmin(user)) {
-      return true;
+      return this.platformRoles().includes(normalizedRole);
     }
 
     if (this.platformRoles().includes(normalizedRole)) {
@@ -356,7 +431,9 @@ export class AccessPolicyService {
     target: Pick<
       UserDocument,
       | 'roles'
+      | 'tenantId'
       | 'companyId'
+      | 'areaIds'
       | 'regionIds'
       | 'locationId'
       | 'locationIds'
@@ -394,11 +471,19 @@ export class AccessPolicyService {
       (target.regionIds ?? []).every((regionId) =>
         actor.regionIds?.includes(regionId),
       );
+    const sharesArea =
+      Boolean(actor.areaIds?.length) &&
+      Boolean(target.areaIds?.length) &&
+      (target.areaIds ?? []).every((areaId) =>
+        actor.areaIds?.includes(areaId),
+      );
     const sharesCompany =
       Boolean(actor.companyId) && target.companyId === actor.companyId;
+    const sharesTenant =
+      Boolean(actor.tenantId) && target.tenantId === actor.tenantId;
 
     if (this.isCompanyAdmin(actor)) {
-      return sharesCompany;
+      return sharesTenant || sharesCompany;
     }
 
     if (this.isRegionAdmin(actor)) {
@@ -410,7 +495,7 @@ export class AccessPolicyService {
     }
 
     if (this.isBereichsleiter(actor)) {
-      return manageableLocation;
+      return sharesArea || manageableLocation;
     }
 
     if (this.hasAnyRole(actor, [Role.Filialleiter, Role.Restaurantleiter])) {
@@ -451,10 +536,24 @@ export class AccessPolicyService {
     actor: AuthenticatedUser,
     payload: AssignableScope,
   ): Promise<void> {
+    if (
+      payload.tenantId &&
+      !this.isPlatformAdmin(actor) &&
+      payload.tenantId !== actor.tenantId
+    ) {
+      throw new ForbiddenException('Keine Berechtigung fuer diesen Tenant');
+    }
+
     if (payload.companyId && !this.canAccessCompany(actor, payload.companyId)) {
       throw new ForbiddenException(
         'Keine Berechtigung fuer dieses Unternehmen',
       );
+    }
+
+    for (const areaId of payload.areaIds ?? []) {
+      if (!(await this.canAccessArea(actor, areaId))) {
+        throw new ForbiddenException('Keine Berechtigung fuer diesen Bereich');
+      }
     }
 
     for (const regionId of payload.regionIds ?? []) {
@@ -513,6 +612,15 @@ export class AccessPolicyService {
 
     if (!region) {
       throw new BadRequestException('Region existiert nicht');
+    }
+  }
+
+  async assertAreaExists(areaId: string): Promise<void> {
+    this.validateObjectId(areaId, 'Bereichs-ID');
+    const area = await this.areaModel.exists({ _id: areaId });
+
+    if (!area) {
+      throw new BadRequestException('Bereich existiert nicht');
     }
   }
 

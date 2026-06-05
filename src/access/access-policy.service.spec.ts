@@ -15,17 +15,22 @@ const query = <T>(value: T) => ({
 
 describe('AccessPolicyService', () => {
   const locations = [
-    doc('bonn', { companyId: 'gastro', regionId: 'nrw' }),
-    doc('essen', { companyId: 'gastro', regionId: 'nrw' }),
-    doc('frankfurt', { companyId: 'gastro', regionId: 'hessen' }),
-    doc('mitte', { companyId: 'gastro', regionId: 'berlin' }),
-    doc('muenchen', { companyId: 'gastro', regionId: 'bayern' }),
+    doc('bonn', { tenantId: 'tenant-nrw', companyId: 'gastro', areaId: 'rheinland', regionId: 'nrw' }),
+    doc('essen', { tenantId: 'tenant-nrw', companyId: 'gastro', areaId: 'ruhrgebiet', regionId: 'nrw' }),
+    doc('frankfurt', { tenantId: 'tenant-hessen', companyId: 'gastro', areaId: 'rheinmain', regionId: 'hessen' }),
+    doc('mitte', { tenantId: 'tenant-berlin', companyId: 'gastro', areaId: 'berlin-city', regionId: 'berlin' }),
+    doc('muenchen', { tenantId: 'tenant-bayern', companyId: 'gastro', areaId: 'muenchen', regionId: 'bayern' }),
   ];
   const regions = [
-    doc('nrw', { companyId: 'gastro' }),
-    doc('hessen', { companyId: 'gastro' }),
-    doc('berlin', { companyId: 'gastro' }),
-    doc('bayern', { companyId: 'gastro' }),
+    doc('nrw', { tenantId: 'tenant-nrw', companyId: 'gastro', areaId: 'rheinland' }),
+    doc('hessen', { tenantId: 'tenant-hessen', companyId: 'gastro', areaId: 'rheinmain' }),
+    doc('berlin', { tenantId: 'tenant-berlin', companyId: 'gastro', areaId: 'berlin-city' }),
+    doc('bayern', { tenantId: 'tenant-bayern', companyId: 'gastro', areaId: 'muenchen' }),
+  ];
+  const areas = [
+    doc('rheinland', { tenantId: 'tenant-nrw' }),
+    doc('ruhrgebiet', { tenantId: 'tenant-nrw' }),
+    doc('rheinmain', { tenantId: 'tenant-hessen' }),
   ];
 
   let service: AccessPolicyService;
@@ -41,6 +46,23 @@ describe('AccessPolicyService', () => {
           return query(
             locations.filter(
               (location) => location.companyId === filter.companyId,
+            ),
+          );
+        }
+
+        if (filter.tenantId) {
+          return query(
+            locations.filter(
+              (location) => location.tenantId === filter.tenantId,
+            ),
+          );
+        }
+
+        const areaFilter = filter.areaId as { $in?: string[] } | undefined;
+        if (areaFilter?.$in) {
+          return query(
+            locations.filter((location) =>
+              areaFilter.$in?.includes(location.areaId as string),
             ),
           );
         }
@@ -62,6 +84,11 @@ describe('AccessPolicyService', () => {
         query(regions.find((region) => region._id.toString() === id) ?? null),
       ),
     };
+    const areaModel = {
+      findById: jest.fn((id: string) =>
+        query(areas.find((area) => area._id.toString() === id) ?? null),
+      ),
+    };
     const departmentModel = {
       findById: jest.fn((id: string) =>
         query(
@@ -73,6 +100,7 @@ describe('AccessPolicyService', () => {
     };
 
     service = new AccessPolicyService(
+      areaModel as never,
       {} as never,
       departmentModel as never,
       regionModel as never,
@@ -122,8 +150,7 @@ describe('AccessPolicyService', () => {
     await expect(
       service.getReadableLocationIds(
         user([Role.Bereichsleiter], {
-          locationIds: ['bonn'],
-          managedLocationIds: ['bonn'],
+          areaIds: ['rheinland'],
         }),
       ),
     ).resolves.toEqual(['bonn']);
@@ -154,6 +181,18 @@ describe('AccessPolicyService', () => {
   });
 
   it('prevents lower roles from assigning higher roles', () => {
+    expect(
+      service.canAssignRole(
+        user([Role.PlatformAdmin]),
+        Role.TenantAdmin,
+      ),
+    ).toBe(false);
+    expect(
+      service.canAssignRole(
+        user([Role.PlatformAdmin]),
+        Role.PlatformAdmin,
+      ),
+    ).toBe(true);
     expect(
       service.canAssignRole(
         user([Role.CompanyAdmin], { companyId: 'gastro' }),

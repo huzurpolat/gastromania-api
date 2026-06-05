@@ -14,6 +14,9 @@ export class Company {
   @Prop({ required: true, trim: true, index: true })
   name!: string;
 
+  @Prop({ trim: true })
+  slug?: string;
+
   @Prop({ default: 'restaurant', trim: true, index: true })
   type!: string;
 

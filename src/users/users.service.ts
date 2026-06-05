@@ -9,8 +9,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import bcrypt from 'bcrypt';
 import { Model, Types } from 'mongoose';
 import { Role } from '../auth/enums/role.enum';
+import { normalizeRoles } from '../auth/role-utils';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { AccessPolicyService } from '../access/access-policy.service';
+import { AuditLog, AuditLogDocument } from '../audit-logs/schemas/audit-log.schema';
 import {
   Location,
   LocationDocument,
@@ -23,6 +25,10 @@ import {
   UserDocument,
   UserResponse,
 } from './schemas/user.schema';
+import {
+  UserLocationAssignment,
+  UserLocationAssignmentDocument,
+} from './schemas/user-location-assignment.schema';
 
 @Injectable()
 export class UsersService {
@@ -33,6 +39,10 @@ export class UsersService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Location.name)
     private readonly locationModel: Model<LocationDocument>,
+    @InjectModel(AuditLog.name)
+    private readonly auditLogModel: Model<AuditLogDocument>,
+    @InjectModel(UserLocationAssignment.name)
+    private readonly assignmentModel: Model<UserLocationAssignmentDocument>,
     private readonly accessPolicy: AccessPolicyService,
   ) {}
 
@@ -41,7 +51,19 @@ export class UsersService {
     rolesOverride?: string[],
     actor?: AuthenticatedUser,
   ): Promise<UserResponse> {
-    await this.assertCanManagePayload(actor, createUserDto);
+    const assignedRoles = normalizeRoles(
+      rolesOverride ?? createUserDto.roles ?? [Role.Service],
+    );
+    const tenantId = this.resolveUserTenantId(
+      createUserDto.tenantId,
+      assignedRoles,
+      actor,
+    );
+    await this.assertCanManagePayload(actor, {
+      ...createUserDto,
+      roles: assignedRoles,
+      tenantId,
+    });
     await this.assertUniqueEmployeeNumber(
       createUserDto.employeeNumber,
       createUserDto.companyId ?? actor?.companyId,
@@ -97,15 +119,38 @@ export class UsersService {
         employeeStatus: createUserDto.employeeStatus,
         notes: createUserDto.notes,
         profileImageUrl: createUserDto.profileImageUrl,
-        roles: rolesOverride ?? createUserDto.roles,
+        roles: assignedRoles,
         isActive: createUserDto.isActive,
+        status:
+          createUserDto.status ??
+          (createUserDto.isActive === false ? 'disabled' : 'active'),
+        tenantId,
         companyId: createUserDto.companyId ?? actor?.companyId,
+        areaIds: createUserDto.areaIds ?? actor?.areaIds ?? [],
         regionIds: createUserDto.regionIds ?? actor?.regionIds ?? [],
         locationId: createUserDto.locationId ?? locationIds[0],
         locationIds,
         managedLocationIds,
         departmentIds: createUserDto.departmentIds ?? [],
         responsibilities: createUserDto.responsibilities ?? [],
+      });
+      await this.syncLocationAssignments(
+        user._id.toString(),
+        tenantId,
+        user.areaIds ?? [],
+        user.regionIds ?? [],
+        [...locationIds, ...managedLocationIds],
+      );
+      await this.audit(actor, {
+        tenantId,
+        action: 'user.created',
+        entityType: 'user',
+        entityId: user._id.toString(),
+        metadata: {
+          email: user.email,
+          roles: assignedRoles,
+          locationIds,
+        },
       });
 
       return toUserResponse(user);
@@ -169,6 +214,12 @@ export class UsersService {
     );
 
     const update: Partial<User> = {};
+    const nextRoles = normalizeRoles(updateUserDto.roles ?? existingUser.roles);
+    const nextTenantId =
+      updateUserDto.tenantId !== undefined
+        ? updateUserDto.tenantId
+        : existingUser.tenantId;
+    this.assertTenantCompatibleWithRoles(nextTenantId, nextRoles);
     const locationIds = this.getUniqueLocationIds([
       ...(updateUserDto.locationIds ?? existingUser.locationIds ?? []),
       ...((updateUserDto.locationId ?? existingUser.locationId)
@@ -293,7 +344,7 @@ export class UsersService {
     }
 
     if (updateUserDto.roles !== undefined) {
-      update.roles = updateUserDto.roles;
+      update.roles = nextRoles;
     }
 
     if (updateUserDto.isActive !== undefined) {
@@ -309,8 +360,23 @@ export class UsersService {
       update.isActive = updateUserDto.isActive;
     }
 
+    if (updateUserDto.status !== undefined) {
+      update.status = updateUserDto.status;
+      if (updateUserDto.status === 'disabled') {
+        update.isActive = false;
+      }
+    }
+
+    if (updateUserDto.tenantId !== undefined) {
+      update.tenantId = updateUserDto.tenantId;
+    }
+
     if (updateUserDto.companyId !== undefined) {
       update.companyId = updateUserDto.companyId;
+    }
+
+    if (updateUserDto.areaIds !== undefined) {
+      update.areaIds = updateUserDto.areaIds;
     }
 
     if (updateUserDto.regionIds !== undefined) {
@@ -355,6 +421,33 @@ export class UsersService {
       if (!user) {
         throw new NotFoundException('Benutzer nicht gefunden');
       }
+      const nextLocationIds = this.getUniqueLocationIds([
+        ...(user.locationIds ?? []),
+        ...(user.managedLocationIds ?? []),
+        ...(user.locationId ? [user.locationId] : []),
+      ]);
+      await this.syncLocationAssignments(
+        user._id.toString(),
+        user.tenantId,
+        user.areaIds ?? [],
+        user.regionIds ?? [],
+        nextLocationIds,
+      );
+      await this.audit(actor, {
+        tenantId: user.tenantId,
+        action: 'user.updated',
+        entityType: 'user',
+        entityId: user._id.toString(),
+        metadata: {
+          rolesChanged: updateUserDto.roles !== undefined,
+          locationsChanged:
+            updateUserDto.locationId !== undefined ||
+            updateUserDto.locationIds !== undefined ||
+            updateUserDto.managedLocationIds !== undefined,
+          roles: user.roles,
+          locationIds: nextLocationIds,
+        },
+      });
 
       return toUserResponse(user);
     } catch (error) {
@@ -417,6 +510,8 @@ export class UsersService {
     }
 
     const scopedPayload = {
+      tenantId: payload.tenantId ?? existingUser?.tenantId,
+      areaIds: payload.areaIds ?? existingUser?.areaIds ?? [],
       companyId: payload.companyId ?? existingUser?.companyId,
       regionIds: payload.regionIds ?? existingUser?.regionIds ?? [],
       locationId: payload.locationId ?? existingUser?.locationId,
@@ -503,6 +598,141 @@ export class UsersService {
     locationIds: Array<string | undefined>,
   ): string[] {
     return [...new Set(locationIds.filter((id): id is string => Boolean(id)))];
+  }
+
+  private async syncLocationAssignments(
+    userId: string,
+    tenantId: string | undefined,
+    areaIds: string[],
+    regionIds: string[],
+    locationIds: string[],
+  ): Promise<void> {
+    if (!tenantId) {
+      await this.assignmentModel.deleteMany({ userId }).exec();
+      return;
+    }
+
+    const uniqueAreaIds = this.getUniqueLocationIds(areaIds);
+    const uniqueRegionIds = this.getUniqueLocationIds(regionIds);
+    const uniqueLocationIds = this.getUniqueLocationIds(locationIds);
+    await this.assignmentModel
+      .deleteMany({
+        userId,
+      })
+      .exec();
+    await Promise.all(
+      [
+        ...uniqueAreaIds.map((areaId) =>
+          this.assignmentModel
+            .updateOne(
+              { userId, areaId, regionId: null, locationId: null },
+              { $set: { userId, tenantId, areaId, regionId: null, locationId: null } },
+              { upsert: true },
+            )
+            .exec(),
+        ),
+        ...uniqueRegionIds.map((regionId) =>
+          this.assignmentModel
+            .updateOne(
+              { userId, regionId, locationId: null },
+              { $set: { userId, tenantId, areaId: null, regionId, locationId: null } },
+              { upsert: true },
+            )
+            .exec(),
+        ),
+        ...uniqueLocationIds.map((locationId) =>
+        this.assignmentModel
+          .updateOne(
+            { userId, locationId },
+            {
+              $set: {
+                userId,
+                tenantId,
+                locationId,
+              },
+            },
+            { upsert: true },
+          )
+          .exec(),
+        ),
+      ],
+    );
+  }
+
+  private async audit(
+    actor: AuthenticatedUser | undefined,
+    payload: {
+      tenantId?: string;
+      action: string;
+      entityType: string;
+      entityId: string;
+      metadata?: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    if (!actor) {
+      return;
+    }
+
+    await this.auditLogModel.create({
+      actorUserId: actor.sub,
+      actorRole: actor.roles[0] ?? 'unknown',
+      tenantId: payload.tenantId,
+      action: payload.action,
+      entityType: payload.entityType,
+      entityId: payload.entityId,
+      metadata: payload.metadata ?? {},
+    });
+  }
+
+  private resolveUserTenantId(
+    requestedTenantId: string | undefined,
+    roles: string[],
+    actor?: AuthenticatedUser,
+  ): string | undefined {
+    const tenantId = requestedTenantId ?? actor?.tenantId;
+
+    this.assertTenantCompatibleWithRoles(tenantId, roles);
+
+    if (
+      actor &&
+      tenantId &&
+      actor.tenantId &&
+      tenantId !== actor.tenantId &&
+      !this.isPlatformRole(actor.roles)
+    ) {
+      throw new ForbiddenException('Benutzer muss im eigenen Tenant liegen');
+    }
+
+    return tenantId;
+  }
+
+  private assertTenantCompatibleWithRoles(
+    tenantId: string | undefined,
+    roles: string[],
+  ): void {
+    if (this.isPlatformRole(roles)) {
+      if (tenantId) {
+        throw new BadRequestException(
+          'Platform Admins und Super Admins duerfen keinem Tenant zugeordnet sein',
+        );
+      }
+
+      return;
+    }
+
+    if (!tenantId) {
+      throw new BadRequestException(
+        'Tenant-ID ist fuer Benutzer zwingend erforderlich',
+      );
+    }
+  }
+
+  private isPlatformRole(roles: string[] | undefined): boolean {
+    return Boolean(
+      roles?.some((role) =>
+        [Role.PlatformAdmin, Role.SuperAdmin].includes(role as Role),
+      ),
+    );
   }
 
   private isDuplicateKeyError(error: unknown): boolean {

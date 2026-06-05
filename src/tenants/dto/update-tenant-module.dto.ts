@@ -1,6 +1,6 @@
 import { IsBoolean } from 'class-validator';
 
-export class UpdateModuleDto {
+export class UpdateTenantModuleDto {
   @IsBoolean()
   enabled!: boolean;
 }

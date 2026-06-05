@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
+import { Area, AreaSchema } from '../areas/schemas/area.schema';
 import {
   Checklist,
   ChecklistSchema,
@@ -48,10 +49,15 @@ import {
   PurchaseOrderSchema,
 } from '../stock/schemas/purchase-order.schema';
 import {
+  TenantModule,
+  TenantModuleSchema,
+} from '../modules/schemas/tenant-module.schema';
+import {
   TimeEntry,
   TimeEntrySchema,
 } from '../time-tracking/schemas/time-entry.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { Tenant, TenantSchema } from '../tenants/schemas/tenant.schema';
 import {
   WeeklyMenu,
   WeeklyMenuSchema,
@@ -82,6 +88,9 @@ import { DemoDataService } from './demo-data.service';
       { name: PurchaseOrder.name, schema: PurchaseOrderSchema },
       { name: Supplier.name, schema: SupplierSchema },
       { name: Checklist.name, schema: ChecklistSchema },
+      { name: Area.name, schema: AreaSchema },
+      { name: Tenant.name, schema: TenantSchema },
+      { name: TenantModule.name, schema: TenantModuleSchema },
     ]),
   ],
   controllers: [DemoDataController],

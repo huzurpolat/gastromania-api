@@ -80,6 +80,12 @@ class FakeModel {
 
   private matches(row: DemoDoc, filter: Record<string, unknown>): boolean {
     return Object.entries(filter).every(([key, value]) => {
+      if (key === '$or' && Array.isArray(value)) {
+        return value.some((condition) =>
+          this.matches(row, condition as Record<string, unknown>),
+        );
+      }
+
       if (value instanceof RegExp) {
         return value.test(this.stringValue(row[key]));
       }
@@ -162,6 +168,9 @@ describe('DemoDataService sales demo seed', () => {
     const companyModel = new FakeModel('company');
     const departmentModel = new FakeModel('department');
     const regionModel = new FakeModel('region');
+    const areaModel = new FakeModel('area');
+    const tenantModel = new FakeModel('tenant');
+    const tenantModuleModel = new FakeModel('tenant-module');
     const service = new DemoDataService(
       locationModel as never,
       tableModel as never,
@@ -182,6 +191,9 @@ describe('DemoDataService sales demo seed', () => {
       companyModel as never,
       departmentModel as never,
       regionModel as never,
+      areaModel as never,
+      tenantModel as never,
+      tenantModuleModel as never,
     );
 
     return {
@@ -199,6 +211,9 @@ describe('DemoDataService sales demo seed', () => {
       companyModel,
       departmentModel,
       regionModel,
+      areaModel,
+      tenantModel,
+      tenantModuleModel,
     };
   }
 
@@ -218,6 +233,9 @@ describe('DemoDataService sales demo seed', () => {
       companyModel,
       departmentModel,
       regionModel,
+      areaModel,
+      tenantModel,
+      tenantModuleModel,
     } = createService();
 
     const result = await service.seedSalesDemo();
@@ -236,20 +254,26 @@ describe('DemoDataService sales demo seed', () => {
       stockMovements: 5,
       timeEntries: 3,
       checklists: 2,
+      demoTenants: 5,
+      demoTenantAreas: 10,
+      demoTenantRegions: 20,
+      demoTenantLocations: 10,
+      demoTenantUsers: 60,
+      demoTenantModules: 85,
     });
-    expect(companyModel.rows).toHaveLength(1);
+    expect(companyModel.rows).toHaveLength(6);
     expect(companyModel.rows[0]).toMatchObject({
       name: 'GastroWerk24 Demo Restaurant',
       type: 'sales-demo-restaurant',
       isActive: true,
     });
-    expect(regionModel.rows).toHaveLength(1);
+    expect(regionModel.rows).toHaveLength(21);
     expect(regionModel.rows[0]).toMatchObject({
       name: 'Nordrhein-Westfalen',
       code: 'NRW',
       isActive: true,
     });
-    expect(locationModel.rows).toHaveLength(1);
+    expect(locationModel.rows).toHaveLength(11);
     expect(locationModel.rows[0]).toMatchObject({
       name: 'GastroWerk24 Demo Restaurant Köln',
       street: 'Musterstraße 1',
@@ -313,6 +337,18 @@ describe('DemoDataService sales demo seed', () => {
     expect(stockMovementModel.rows).toHaveLength(5);
     expect(timeEntryModel.rows).toHaveLength(3);
     expect(checklistModel.rows).toHaveLength(2);
+    expect(areaModel.rows).toHaveLength(10);
+    expect(tenantModel.rows).toHaveLength(5);
+    expect(tenantModel.rows.map((tenant) => tenant.slug)).toEqual(
+      expect.arrayContaining([
+        'burgermania',
+        'crispy-chicken',
+        'pasta-house',
+        'grill-factory',
+        'frittenwerk-demo',
+      ]),
+    );
+    expect(tenantModuleModel.rows).toHaveLength(85);
     expect(userModel.rows.map((user) => user.email)).toEqual(
       expect.arrayContaining([
         'admin@gastromania-demo.de',
@@ -321,8 +357,30 @@ describe('DemoDataService sales demo seed', () => {
         'kueche@gastromania-demo.de',
         'bar@gastromania-demo.de',
         'theke@gastromania-demo.de',
+        'admin@burgermania.demo',
+        'admin@crispy-chicken.demo',
+        'admin@pasta-house.demo',
+        'admin@grill-factory.demo',
+        'admin@frittenwerk-demo.demo',
+        'regionalleiter@burgermania.demo',
+        'filialleiter.koeln@burgermania.demo',
+        'service1.koeln@burgermania.demo',
+        'service2.koeln@burgermania.demo',
+        'kueche1.koeln@burgermania.demo',
+        'kueche2.koeln@burgermania.demo',
       ]),
     );
+    expect(userModel.rows).toHaveLength(66);
+    const tenantAdmin = userModel.rows.find(
+      (user) => user.email === 'admin@burgermania.demo',
+    );
+    expect(tenantAdmin).toMatchObject({
+      roles: [Role.TenantAdminCode],
+      status: 'active',
+      isActive: true,
+    });
+    expect(tenantAdmin?.tenantId).toBeTruthy();
+    expect((tenantAdmin?.locationIds as unknown[]).length).toBe(3);
     expect(result.demoUsers).toEqual(
       expect.arrayContaining([
         {
@@ -383,14 +441,17 @@ describe('DemoDataService sales demo seed', () => {
       companyModel,
       departmentModel,
       regionModel,
+      areaModel,
+      tenantModel,
+      tenantModuleModel,
     } = createService();
 
     await service.seedSalesDemo();
     await service.seedSalesDemo();
 
-    expect(companyModel.rows).toHaveLength(1);
-    expect(regionModel.rows).toHaveLength(1);
-    expect(locationModel.rows).toHaveLength(1);
+    expect(companyModel.rows).toHaveLength(6);
+    expect(regionModel.rows).toHaveLength(21);
+    expect(locationModel.rows).toHaveLength(11);
     expect(departmentModel.rows).toHaveLength(5);
     expect(tableModel.rows).toHaveLength(20);
     expect(menuItemModel.rows).toHaveLength(12);
@@ -400,6 +461,112 @@ describe('DemoDataService sales demo seed', () => {
     expect(stockMovementModel.rows).toHaveLength(5);
     expect(timeEntryModel.rows).toHaveLength(3);
     expect(checklistModel.rows).toHaveLength(2);
-    expect(userModel.rows).toHaveLength(6);
+    expect(userModel.rows).toHaveLength(66);
+    expect(areaModel.rows).toHaveLength(10);
+    expect(tenantModel.rows).toHaveLength(5);
+    expect(tenantModuleModel.rows).toHaveLength(85);
+  });
+
+  it('bootstraps the platform admin and five development demo tenants without the manual sales seed', async () => {
+    const { service, companyModel, locationModel, regionModel, userModel, areaModel, tenantModel, tenantModuleModel } =
+      createService();
+
+    await service.onApplicationBootstrap();
+    await service.onApplicationBootstrap();
+
+    expect(companyModel.rows).toHaveLength(5);
+    expect(tenantModel.rows).toHaveLength(5);
+    expect(tenantModel.rows.map((tenant) => tenant.slug)).toEqual(
+      expect.arrayContaining([
+        'burgermania',
+        'crispy-chicken',
+        'pasta-house',
+        'grill-factory',
+        'frittenwerk-demo',
+      ]),
+    );
+    expect(areaModel.rows).toHaveLength(10);
+    expect(regionModel.rows).toHaveLength(20);
+    expect(locationModel.rows).toHaveLength(10);
+    expect(userModel.rows).toHaveLength(61);
+    expect(tenantModuleModel.rows).toHaveLength(85);
+    expect(userModel.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          email: 'platform@gastromania.local',
+          roles: [Role.PlatformAdminCode],
+          permissions: ['*'],
+          status: 'active',
+          tenantId: undefined,
+          companyId: undefined,
+        }),
+        expect.objectContaining({
+          email: 'admin@burgermania.demo',
+          roles: [Role.TenantAdminCode],
+          status: 'active',
+        }),
+        expect.objectContaining({
+          email: 'admin@crispy-chicken.demo',
+          roles: [Role.TenantAdminCode],
+          status: 'active',
+        }),
+        expect.objectContaining({
+          email: 'admin@pasta-house.demo',
+          roles: [Role.TenantAdminCode],
+          status: 'active',
+        }),
+        expect.objectContaining({
+          email: 'admin@grill-factory.demo',
+          roles: [Role.TenantAdminCode],
+          status: 'active',
+        }),
+        expect.objectContaining({
+          email: 'admin@frittenwerk-demo.demo',
+          roles: [Role.TenantAdminCode],
+          status: 'active',
+        }),
+      ]),
+    );
+  });
+
+  it('does not create development demo tenants in production', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    const {
+      service,
+      companyModel,
+      locationModel,
+      regionModel,
+      userModel,
+      areaModel,
+      tenantModel,
+      tenantModuleModel,
+    } = createService();
+
+    try {
+      const result = await service.seedSalesDemo();
+
+      expect(result.created).toMatchObject({
+        demoTenants: 0,
+        demoTenantAreas: 0,
+        demoTenantRegions: 0,
+        demoTenantLocations: 0,
+        demoTenantUsers: 0,
+        demoTenantModules: 0,
+      });
+      expect(companyModel.rows).toHaveLength(1);
+      expect(regionModel.rows).toHaveLength(1);
+      expect(locationModel.rows).toHaveLength(1);
+      expect(userModel.rows).toHaveLength(6);
+      expect(areaModel.rows).toHaveLength(0);
+      expect(tenantModel.rows).toHaveLength(0);
+      expect(tenantModuleModel.rows).toHaveLength(0);
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
   });
 });

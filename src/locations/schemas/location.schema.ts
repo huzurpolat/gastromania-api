@@ -84,11 +84,20 @@ export class Location {
   @Prop({ required: true, trim: true, index: true })
   name!: string;
 
+  @Prop({ trim: true, index: true })
+  slug?: string;
+
+  @Prop({ trim: true })
+  address?: string;
+
   @Prop({ required: true, trim: true })
   street!: string;
 
   @Prop({ required: true, trim: true })
   zip!: string;
+
+  @Prop({ trim: true })
+  postalCode?: string;
 
   @Prop({ required: true, trim: true, index: true })
   city!: string;
@@ -109,7 +118,13 @@ export class Location {
   isActive!: boolean;
 
   @Prop({ trim: true, index: true })
+  tenantId?: string;
+
+  @Prop({ trim: true, index: true })
   companyId?: string;
+
+  @Prop({ trim: true, index: true })
+  areaId?: string;
 
   @Prop({ trim: true, index: true })
   regionId?: string;
@@ -131,4 +146,6 @@ export const LocationSchema = SchemaFactory.createForClass(Location);
 
 LocationSchema.index({ city: 1, name: 1 });
 LocationSchema.index({ federalState: 1, city: 1, name: 1 });
+LocationSchema.index({ tenantId: 1, isActive: 1 });
+LocationSchema.index({ tenantId: 1, areaId: 1, regionId: 1, isActive: 1 });
 LocationSchema.index({ companyId: 1, regionId: 1, isActive: 1 });

@@ -100,6 +100,16 @@ export class CreateLocationDto {
   @IsNotEmpty()
   name!: string;
 
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  slug?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  address?: string;
+
   @Transform(({ value }) => trimString(value))
   @IsString()
   @IsNotEmpty()
@@ -109,6 +119,11 @@ export class CreateLocationDto {
   @IsString()
   @IsNotEmpty()
   zip!: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  postalCode?: string;
 
   @Transform(({ value }) => trimString(value))
   @IsString()
@@ -150,7 +165,17 @@ export class CreateLocationDto {
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()
   @IsString()
+  tenantId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
   companyId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  areaId?: string;
 
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()

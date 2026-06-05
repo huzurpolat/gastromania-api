@@ -13,17 +13,19 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RegionGuard } from '../auth/guards/region.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { TenantGuard } from '../auth/guards/tenant.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateRegionDto } from './dto/create-region.dto';
 import { UpdateRegionDto } from './dto/update-region.dto';
 import { RegionsService } from './regions.service';
 
 @Controller('regions')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, RegionGuard, RolesGuard, PermissionsGuard)
 @Roles(
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdmin,
+  Role.RestaurantAdmin,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,
@@ -35,7 +37,13 @@ export class RegionsController {
   constructor(private readonly regionsService: RegionsService) {}
 
   @Post()
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin, Role.CompanyAdmin, Role.Admin)
+  @Roles(
+    Role.TenantAdmin,
+    Role.RestaurantAdmin,
+    Role.CompanyAdmin,
+    Role.Admin,
+    Role.Bereichsleiter,
+  )
   @Permissions('regions.create')
   create(@Body() dto: CreateRegionDto, @CurrentUser() user: AuthenticatedUser) {
     return this.regionsService.create(dto, user);
@@ -55,11 +63,12 @@ export class RegionsController {
 
   @Patch(':id')
   @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
+    Role.TenantAdmin,
+    Role.RestaurantAdmin,
     Role.CompanyAdmin,
     Role.RegionAdmin,
     Role.Admin,
+    Role.Bereichsleiter,
   )
   @Permissions('regions.update')
   update(

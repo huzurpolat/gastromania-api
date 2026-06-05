@@ -15,6 +15,7 @@ import { Role } from '../auth/enums/role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { TenantGuard } from '../auth/guards/tenant.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -22,10 +23,10 @@ import { UserResponse } from './schemas/user.schema';
 import { UsersService } from './users.service';
 
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard, PermissionsGuard)
 @Roles(
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdmin,
+  Role.RestaurantAdmin,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,

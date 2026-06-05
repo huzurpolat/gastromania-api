@@ -1,10 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getModelToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { LocationsController } from './locations.controller';
 import { LocationsService } from './locations.service';
 import { LocationDocument } from './schemas/location.schema';
+import { AccessPolicyService } from '../access/access-policy.service';
+import { LocationGuard } from '../auth/guards/location.guard';
+import { TenantGuard } from '../auth/guards/tenant.guard';
+import { Tenant } from '../tenants/schemas/tenant.schema';
 
 describe('LocationsController', () => {
   let controller: LocationsController;
@@ -30,6 +35,7 @@ describe('LocationsController', () => {
     sub: 'user-admin',
     email: 'admin@nrw.local',
     roles: ['Admin'],
+    tenantId: 'tenant-nrw',
     regionIds: ['region-nrw'],
     locationIds: ['6627d9a2c6f2d8f3e2b1a001'],
   };
@@ -46,6 +52,36 @@ describe('LocationsController', () => {
           provide: JwtService,
           useValue: {
             verifyAsync: jest.fn(),
+          },
+        },
+        {
+          provide: TenantGuard,
+          useValue: {
+            canActivate: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: LocationGuard,
+          useValue: {
+            canActivate: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: AccessPolicyService,
+          useValue: {
+            assertCanAccessLocation: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: getModelToken(Tenant.name),
+          useValue: {
+            findById: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                lean: jest.fn().mockReturnValue({
+                  exec: jest.fn().mockResolvedValue({ status: 'active' }),
+                }),
+              }),
+            }),
           },
         },
       ],
