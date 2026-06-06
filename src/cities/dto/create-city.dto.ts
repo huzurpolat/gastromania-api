@@ -1,10 +1,21 @@
 import { Transform, type TransformFnParams } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 const trimStringParam = ({ value }: TransformFnParams): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
-export class CreateRegionDto {
+const optionalTrimStringParam = ({ value }: TransformFnParams): unknown => {
+  const trimmed = typeof value === 'string' ? value.trim() : value;
+  return trimmed === '' ? undefined : trimmed;
+};
+
+export class CreateCityDto {
   @Transform(trimStringParam)
   @IsString()
   @IsNotEmpty()
@@ -13,15 +24,20 @@ export class CreateRegionDto {
   @Transform(trimStringParam)
   @IsString()
   @IsNotEmpty()
+  regionId!: string;
+
+  @Transform(trimStringParam)
+  @IsString()
+  @IsNotEmpty()
   @MinLength(2)
   name!: string;
 
-  @Transform(trimStringParam)
+  @Transform(optionalTrimStringParam)
   @IsOptional()
   @IsString()
   description?: string;
 
-  @Transform(trimStringParam)
+  @Transform(optionalTrimStringParam)
   @IsOptional()
   @IsString()
   notes?: string;

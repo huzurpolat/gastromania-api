@@ -1,11 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { AreaGuard } from '../auth/guards/area.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
@@ -13,49 +10,74 @@ import { AreasService } from './areas.service';
 import { CreateAreaDto } from './dto/create-area.dto';
 import { UpdateAreaDto } from './dto/update-area.dto';
 
-@Controller('areas')
-@UseGuards(JwtAuthGuard, TenantGuard, AreaGuard, RolesGuard, PermissionsGuard)
-@Roles(
-  Role.TenantAdmin,
-  Role.RestaurantAdmin,
-  Role.CompanyAdmin,
-  Role.Admin,
-  Role.Bereichsleiter,
-)
+@Controller('tenant/areas')
+@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class AreasController {
   constructor(private readonly areasService: AreasService) {}
 
   @Post()
-  @Roles(
-    Role.TenantAdmin,
-    Role.RestaurantAdmin,
-    Role.CompanyAdmin,
-    Role.Admin,
-  )
-  @Permissions('regions.create')
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin)
   create(@Body() dto: CreateAreaDto, @CurrentUser() user: AuthenticatedUser) {
     return this.areasService.create(dto, user);
   }
 
   @Get()
-  @Permissions('regions.view')
-  findAll(@CurrentUser() user: AuthenticatedUser) {
-    return this.areasService.findAll(user);
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin)
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('includeRegions') includeRegions?: string,
+  ) {
+    return this.areasService.findAll(user, includeRegions === 'true');
   }
 
-  @Get(':id')
-  @Permissions('regions.view')
-  findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.areasService.findOne(id, user);
+  @Get(':areaId')
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin, Role.Bereichsleiter, Role.Regionalleiter)
+  findOne(@Param('areaId') areaId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.areasService.findOne(areaId, user);
   }
 
-  @Patch(':id')
-  @Permissions('regions.update')
+  @Patch(':areaId')
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin)
   update(
-    @Param('id') id: string,
+    @Param('areaId') areaId: string,
     @Body() dto: UpdateAreaDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.areasService.update(id, dto, user);
+    return this.areasService.update(areaId, dto, user);
+  }
+
+  @Delete(':areaId')
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin)
+  remove(@Param('areaId') areaId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.areasService.remove(areaId, user);
+  }
+
+  @Get(':areaId/users')
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin, Role.Bereichsleiter, Role.Regionalleiter)
+  findUsers(
+    @Param('areaId') areaId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.areasService.findUsers(areaId, user);
+  }
+
+  @Post(':areaId/users')
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin)
+  assignUser(
+    @Param('areaId') areaId: string,
+    @Body('userId') userId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.areasService.assignUser(areaId, userId, user);
+  }
+
+  @Delete(':areaId/users/:userId')
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin)
+  unassignUser(
+    @Param('areaId') areaId: string,
+    @Param('userId') userId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.areasService.unassignUser(areaId, userId, user);
   }
 }

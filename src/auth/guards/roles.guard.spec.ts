@@ -61,4 +61,14 @@ describe('RolesGuard', () => {
       ),
     ).toBe(true);
   });
+
+  it('allows tenant admins on legacy tenant admin role metadata', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.CompanyAdmin]);
+
+    expect(
+      guard.canActivate(
+        context({ roles: [Role.TenantAdmin] }, '/api/dashboard/overview'),
+      ),
+    ).toBe(true);
+  });
 });

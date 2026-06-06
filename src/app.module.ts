@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { AccessModule } from './access/access.module';
 import { AreasModule } from './areas/areas.module';
+import { CitiesModule } from './cities/cities.module';
 import { ChecklistsModule } from './checklists/checklists.module';
 import { CompaniesModule } from './companies/companies.module';
 import { CounterModule } from './counter/counter.module';
@@ -58,6 +59,7 @@ import { HrModule } from './hr/hr.module';
 
     AccessModule,
     AreasModule,
+    CitiesModule,
     CompaniesModule,
     RegionsModule,
     UsersModule,

@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
-export type AreaDocument = HydratedDocument<Area>;
+export type CityDocument = HydratedDocument<City>;
 
 @Schema({ timestamps: true, versionKey: false })
-export class Area {
+export class City {
   _id!: string;
 
   createdAt?: Date;
@@ -14,8 +14,11 @@ export class Area {
   @Prop({ required: true, trim: true, index: true })
   tenantId!: string;
 
-  @Prop({ trim: true, index: true })
-  companyId?: string;
+  @Prop({ required: true, trim: true, index: true })
+  areaId!: string;
+
+  @Prop({ required: true, trim: true, index: true })
+  regionId!: string;
 
   @Prop({ required: true, trim: true, index: true })
   name!: string;
@@ -30,6 +33,7 @@ export class Area {
   isActive!: boolean;
 }
 
-export const AreaSchema = SchemaFactory.createForClass(Area);
+export const CitySchema = SchemaFactory.createForClass(City);
 
-AreaSchema.index({ tenantId: 1, name: 1 }, { unique: true });
+CitySchema.index({ tenantId: 1, regionId: 1, name: 1 }, { unique: true });
+CitySchema.index({ tenantId: 1, areaId: 1, regionId: 1, isActive: 1 });

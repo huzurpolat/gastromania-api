@@ -26,6 +26,9 @@ export class Region {
   @Prop({ trim: true })
   description?: string;
 
+  @Prop({ trim: true })
+  notes?: string;
+
   @Prop({ required: true, trim: true, uppercase: true, index: true })
   code!: string;
 
@@ -36,4 +39,5 @@ export class Region {
 export const RegionSchema = SchemaFactory.createForClass(Region);
 
 RegionSchema.index({ tenantId: 1, code: 1 }, { unique: true });
+RegionSchema.index({ tenantId: 1, areaId: 1, name: 1 }, { unique: true });
 RegionSchema.index({ tenantId: 1, areaId: 1, isActive: 1 });

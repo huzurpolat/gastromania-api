@@ -13,7 +13,7 @@ export class PermissionsController {
   constructor(private readonly rbacService: RbacService) {}
 
   @Get('permissions')
-  @Roles(Role.PlatformAdmin, Role.SuperAdmin)
+  @Roles(Role.TenantAdmin, Role.RestaurantAdmin, Role.CompanyAdmin, Role.Admin)
   @Permissions('roles.view')
   findAll() {
     return this.rbacService.permissionsCatalog();

@@ -16,51 +16,52 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { CreateRegionDto } from './dto/create-region.dto';
-import { UpdateRegionDto } from './dto/update-region.dto';
-import { RegionsService } from './regions.service';
+import { CitiesService } from './cities.service';
+import { CreateCityDto } from './dto/create-city.dto';
+import { UpdateCityDto } from './dto/update-city.dto';
 
-@Controller('tenant/regions')
+@Controller('tenant/cities')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 @Roles(Role.TenantAdmin, Role.CompanyAdmin, Role.Bereichsleiter, Role.Regionalleiter)
-export class RegionsController {
-  constructor(private readonly regionsService: RegionsService) {}
+export class CitiesController {
+  constructor(private readonly citiesService: CitiesService) {}
 
   @Post()
-  create(@Body() dto: CreateRegionDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.regionsService.create(dto, user);
+  create(@Body() dto: CreateCityDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.citiesService.create(dto, user);
   }
 
   @Get()
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('areaId') areaId?: string,
+    @Query('regionId') regionId?: string,
   ) {
-    return this.regionsService.findAll(user, areaId);
+    return this.citiesService.findAll(user, { areaId, regionId });
   }
 
-  @Get(':regionId')
+  @Get(':cityId')
   findOne(
-    @Param('regionId') regionId: string,
+    @Param('cityId') cityId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.regionsService.findOne(regionId, user);
+    return this.citiesService.findOne(cityId, user);
   }
 
-  @Patch(':regionId')
+  @Patch(':cityId')
   update(
-    @Param('regionId') regionId: string,
-    @Body() dto: UpdateRegionDto,
+    @Param('cityId') cityId: string,
+    @Body() dto: UpdateCityDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.regionsService.update(regionId, dto, user);
+    return this.citiesService.update(cityId, dto, user);
   }
 
-  @Delete(':regionId')
+  @Delete(':cityId')
   remove(
-    @Param('regionId') regionId: string,
+    @Param('cityId') cityId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.regionsService.remove(regionId, user);
+    return this.citiesService.remove(cityId, user);
   }
 }

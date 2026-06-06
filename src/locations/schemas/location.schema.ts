@@ -90,6 +90,18 @@ export class Location {
   @Prop({ trim: true })
   address?: string;
 
+  @Prop({ trim: true })
+  description?: string;
+
+  @Prop({ trim: true })
+  notes?: string;
+
+  @Prop({ trim: true })
+  addressLine1?: string;
+
+  @Prop({ trim: true })
+  addressLine2?: string;
+
   @Prop({ required: true, trim: true })
   street!: string;
 
@@ -102,6 +114,15 @@ export class Location {
   @Prop({ required: true, trim: true, index: true })
   city!: string;
 
+  @Prop({ trim: true })
+  cityName?: string;
+
+  @Prop({ trim: true, default: 'Deutschland' })
+  country?: string;
+
+  @Prop({ trim: true, index: true })
+  cityId?: string;
+
   @Prop({ trim: true, index: true })
   federalState?: string;
 
@@ -113,6 +134,12 @@ export class Location {
 
   @Prop({ trim: true, lowercase: true })
   email?: string;
+
+  @Prop({ trim: true })
+  taxNumber?: string;
+
+  @Prop({ trim: true })
+  vatId?: string;
 
   @Prop({ default: true })
   isActive!: boolean;
@@ -148,4 +175,5 @@ LocationSchema.index({ city: 1, name: 1 });
 LocationSchema.index({ federalState: 1, city: 1, name: 1 });
 LocationSchema.index({ tenantId: 1, isActive: 1 });
 LocationSchema.index({ tenantId: 1, areaId: 1, regionId: 1, isActive: 1 });
+LocationSchema.index({ tenantId: 1, areaId: 1, regionId: 1, cityId: 1, isActive: 1 });
 LocationSchema.index({ companyId: 1, regionId: 1, isActive: 1 });

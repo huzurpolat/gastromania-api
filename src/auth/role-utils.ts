@@ -1,5 +1,12 @@
 import { Role } from './enums/role.enum';
 
+const tenantAdminRoles = [
+  Role.TenantAdmin,
+  Role.RestaurantAdmin,
+  Role.CompanyAdmin,
+  Role.Admin,
+];
+
 const roleAliases: Record<string, Role> = {
   PLATFORM_ADMIN: Role.PlatformAdmin,
   TENANT_ADMIN: Role.TenantAdmin,
@@ -27,7 +34,7 @@ export function normalizeRoles(roles: string[] = []): string[] {
 }
 
 export function hasRole(roles: string[] | undefined, role: Role): boolean {
-  return normalizeRoles(roles).includes(role);
+  return hasAnyRole(roles, [role]);
 }
 
 export function hasAnyRole(
@@ -35,6 +42,10 @@ export function hasAnyRole(
   requiredRoles: Role[],
 ): boolean {
   const normalizedRoles = normalizeRoles(roles);
+
+  if (normalizedRoles.some((role) => tenantAdminRoles.includes(role as Role))) {
+    return requiredRoles.some((role) => tenantAdminRoles.includes(role));
+  }
 
   return requiredRoles.some((role) => normalizedRoles.includes(role));
 }

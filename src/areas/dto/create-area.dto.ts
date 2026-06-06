@@ -1,29 +1,25 @@
 import { Transform, type TransformFnParams } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 
 const trimStringParam = ({ value }: TransformFnParams): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
 export class CreateAreaDto {
   @Transform(trimStringParam)
-  @IsOptional()
-  @IsString()
-  tenantId?: string;
-
-  @Transform(trimStringParam)
-  @IsOptional()
-  @IsString()
-  companyId?: string;
-
-  @Transform(trimStringParam)
   @IsString()
   @IsNotEmpty()
+  @MinLength(2)
   name!: string;
 
   @Transform(trimStringParam)
   @IsOptional()
   @IsString()
   description?: string;
+
+  @Transform(trimStringParam)
+  @IsOptional()
+  @IsString()
+  notes?: string;
 
   @IsOptional()
   @IsBoolean()

@@ -1,6 +1,4 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { AreasService } from '../areas/areas.service';
-import { CreateAreaDto } from '../areas/dto/create-area.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -12,8 +10,6 @@ import { TenantGuard } from '../auth/guards/tenant.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateLocationDto } from '../locations/dto/create-location.dto';
 import { LocationsService } from '../locations/locations.service';
-import { CreateRegionDto } from '../regions/dto/create-region.dto';
-import { RegionsService } from '../regions/regions.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UsersService } from '../users/users.service';
 import { TenantsService } from './tenants.service';
@@ -24,8 +20,6 @@ export class TenantSelfController {
   constructor(
     private readonly tenantsService: TenantsService,
     private readonly usersService: UsersService,
-    private readonly areasService: AreasService,
-    private readonly regionsService: RegionsService,
     private readonly locationsService: LocationsService,
   ) {}
 
@@ -74,65 +68,6 @@ export class TenantSelfController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.usersService.create({ ...dto, tenantId: user.tenantId }, undefined, user);
-  }
-
-  @Get('areas')
-  @Roles(
-    Role.TenantAdmin,
-    Role.RestaurantAdmin,
-    Role.CompanyAdmin,
-    Role.Admin,
-    Role.Bereichsleiter,
-  )
-  @Permissions('regions.view')
-  areas(@CurrentUser() user: AuthenticatedUser) {
-    return this.areasService.findAll(user);
-  }
-
-  @Post('areas')
-  @Roles(
-    Role.TenantAdmin,
-    Role.RestaurantAdmin,
-    Role.CompanyAdmin,
-    Role.Admin,
-  )
-  @Permissions('regions.create')
-  createArea(
-    @Body() dto: CreateAreaDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.areasService.create({ ...dto, tenantId: user.tenantId }, user);
-  }
-
-  @Get('regions')
-  @Roles(
-    Role.TenantAdmin,
-    Role.RestaurantAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-  )
-  @Permissions('regions.view')
-  regions(@CurrentUser() user: AuthenticatedUser) {
-    return this.regionsService.findAll(user);
-  }
-
-  @Post('regions')
-  @Roles(
-    Role.TenantAdmin,
-    Role.RestaurantAdmin,
-    Role.CompanyAdmin,
-    Role.Admin,
-    Role.Bereichsleiter,
-  )
-  @Permissions('regions.create')
-  createRegion(
-    @Body() dto: CreateRegionDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.regionsService.create({ ...dto, tenantId: user.tenantId }, user);
   }
 
   @Get('locations')

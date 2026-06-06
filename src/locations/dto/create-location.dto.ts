@@ -133,6 +133,11 @@ export class CreateLocationDto {
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()
   @IsString()
+  cityId?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
   @MaxLength(80)
   federalState?: string;
 

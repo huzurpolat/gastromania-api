@@ -1,16 +1,14 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
-import { RegionGuard } from '../auth/guards/region.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Area, AreaSchema } from '../areas/schemas/area.schema';
-import { City, CitySchema } from '../cities/schemas/city.schema';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
+import { Region, RegionSchema } from '../regions/schemas/region.schema';
 import { Tenant, TenantSchema } from '../tenants/schemas/tenant.schema';
-import { User, UserSchema } from '../users/schemas/user.schema';
-import { RegionsController } from './regions.controller';
-import { RegionsService } from './regions.service';
-import { Region, RegionSchema } from './schemas/region.schema';
+import { CitiesController } from './cities.controller';
+import { CitiesService } from './cities.service';
+import { City, CitySchema } from './schemas/city.schema';
 
 @Module({
   imports: [
@@ -21,11 +19,10 @@ import { Region, RegionSchema } from './schemas/region.schema';
       { name: Location.name, schema: LocationSchema },
       { name: Region.name, schema: RegionSchema },
       { name: Tenant.name, schema: TenantSchema },
-      { name: User.name, schema: UserSchema },
     ]),
   ],
-  controllers: [RegionsController],
-  providers: [RegionsService, TenantGuard, RegionGuard],
-  exports: [RegionsService],
+  controllers: [CitiesController],
+  providers: [CitiesService, TenantGuard],
+  exports: [CitiesService],
 })
-export class RegionsModule {}
+export class CitiesModule {}
