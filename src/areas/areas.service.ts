@@ -130,19 +130,25 @@ export class AreasService {
       throw new ForbiddenException('Keine Berechtigung fuer diesen Bereich');
     }
 
-    const updated = await this.areaModel
-      .findByIdAndUpdate(
-        area._id,
-        { isActive: false },
-        { new: true, runValidators: true },
-      )
+    const dependencies = await this.getAreaDependencyLabels(area);
+
+    if (dependencies.length) {
+      throw new ConflictException(
+        `Dieser Bereich kann nicht geloescht werden, weil noch ${this.formatDependencyList(
+          dependencies,
+        )} zugeordnet sind.`,
+      );
+    }
+
+    const result = await this.areaModel
+      .deleteOne({ _id: area._id, tenantId: area.tenantId })
       .exec();
 
-    if (!updated) {
+    if (!result.deletedCount) {
       throw new NotFoundException('Bereich nicht gefunden');
     }
 
-    return this.buildAreaDetail(updated);
+    return { deleted: true, areaId: area._id.toString() };
   }
 
   async findUsers(areaId: string, actor: AuthenticatedUser) {
@@ -322,6 +328,62 @@ export class AreasService {
       status: user.status ?? (user.isActive ? 'active' : 'disabled'),
       isActive: user.isActive,
     }));
+  }
+
+  private async getAreaDependencyLabels(area: AreaDocument): Promise<string[]> {
+    const areaId = area._id.toString();
+    const [regions, cities, locations, users] = await Promise.all([
+      this.countDependency(
+        'Regionen',
+        this.regionModel.countDocuments({
+          tenantId: area.tenantId,
+          areaId,
+        }),
+      ),
+      this.countDependency(
+        'Staedte',
+        this.cityModel.countDocuments({
+          tenantId: area.tenantId,
+          areaId,
+        }),
+      ),
+      this.countDependency(
+        'Standorte',
+        this.locationModel.countDocuments({
+          tenantId: area.tenantId,
+          areaId,
+        }),
+      ),
+      this.countDependency(
+        'Benutzerzuweisungen',
+        this.userModel.countDocuments({
+          tenantId: area.tenantId,
+          areaIds: areaId,
+        }),
+      ),
+    ]);
+
+    return [regions, cities, locations, users].filter(Boolean) as string[];
+  }
+
+  private async countDependency(
+    label: string,
+    countPromise: Promise<number> | { exec: () => Promise<number> },
+  ): Promise<string | null> {
+    const count =
+      typeof (countPromise as { exec?: unknown }).exec === 'function'
+        ? await (countPromise as { exec: () => Promise<number> }).exec()
+        : await (countPromise as Promise<number>);
+
+    return count > 0 ? label : null;
+  }
+
+  private formatDependencyList(dependencies: string[]): string {
+    if (dependencies.length === 1) {
+      return dependencies[0];
+    }
+
+    return `${dependencies.slice(0, -1).join(', ')} und ${dependencies.at(-1)}`;
   }
 
   private validateObjectId(id: string, label: string): void {

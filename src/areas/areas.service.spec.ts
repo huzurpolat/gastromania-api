@@ -36,6 +36,7 @@ describe('AreasService', () => {
       lean: jest.fn().mockReturnThis(),
       exec: jest.fn().mockResolvedValue([]),
     })),
+    countDocuments: jest.fn().mockResolvedValue(0),
     exists: jest.fn(() => ({
       exec: jest.fn().mockResolvedValue(null),
     })),
@@ -47,6 +48,7 @@ describe('AreasService', () => {
       lean: jest.fn().mockReturnThis(),
       exec: jest.fn().mockResolvedValue([]),
     })),
+    countDocuments: jest.fn().mockResolvedValue(0),
   };
   const countModel = {
     countDocuments: jest.fn().mockResolvedValue(0),
@@ -278,7 +280,7 @@ describe('AreasService', () => {
     ]);
   });
 
-  it('soft deletes areas for tenant admins', async () => {
+  it('physically deletes areas without dependencies for tenant admins', async () => {
     const areaDocument = {
       _id: { toString: () => '507f1f77bcf86cd799439011' },
       tenantId: 'tenant-frittenwerk',
@@ -294,8 +296,8 @@ describe('AreasService', () => {
       findById: jest.fn(() => ({
         exec: jest.fn().mockResolvedValue(areaDocument),
       })),
-      findByIdAndUpdate: jest.fn(() => ({
-        exec: jest.fn().mockResolvedValue(areaDocument),
+      deleteOne: jest.fn(() => ({
+        exec: jest.fn().mockResolvedValue({ deletedCount: 1 }),
       })),
     };
     const service = new AreasService(
@@ -307,12 +309,46 @@ describe('AreasService', () => {
       accessPolicy as never,
     );
 
-    await service.remove('507f1f77bcf86cd799439011', actor);
+    const result = await service.remove('507f1f77bcf86cd799439011', actor);
 
-    expect(areaModel.findByIdAndUpdate).toHaveBeenCalledWith(
-      areaDocument._id,
-      { isActive: false },
-      { new: true, runValidators: true },
+    expect(result).toEqual({
+      deleted: true,
+      areaId: '507f1f77bcf86cd799439011',
+    });
+    expect(areaModel.deleteOne).toHaveBeenCalledWith({
+      _id: areaDocument._id,
+      tenantId: 'tenant-frittenwerk',
+    });
+  });
+
+  it('blocks area deletion when regions are assigned', async () => {
+    const areaDocument = {
+      _id: { toString: () => '507f1f77bcf86cd799439011' },
+      tenantId: 'tenant-frittenwerk',
+      name: 'NRW',
+    };
+    const areaModel = {
+      findById: jest.fn(() => ({
+        exec: jest.fn().mockResolvedValue(areaDocument),
+      })),
+      deleteOne: jest.fn(),
+    };
+    const scopedRegionModel = {
+      ...regionModel,
+      countDocuments: jest.fn().mockResolvedValue(1),
+    };
+    const service = new AreasService(
+      areaModel as never,
+      scopedRegionModel as never,
+      countModel as never,
+      countModel as never,
+      userModel as never,
+      accessPolicy as never,
     );
+
+    await expect(
+      service.remove('507f1f77bcf86cd799439011', actor),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(areaModel.deleteOne).not.toHaveBeenCalled();
   });
 });

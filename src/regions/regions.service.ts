@@ -140,14 +140,25 @@ export class RegionsService {
     this.validateObjectId(id, 'Regions-ID');
     const region = await this.findRegionDocument(id, actor);
     this.assertCanManageRegion(actor, region);
+    const dependencies = await this.getRegionDependencyLabels(region);
 
-    return this.regionModel
-      .findByIdAndUpdate(
-        region._id,
-        { isActive: false },
-        { new: true, runValidators: true },
-      )
+    if (dependencies.length) {
+      throw new ConflictException(
+        `Diese Region kann nicht geloescht werden, weil noch ${this.formatDependencyList(
+          dependencies,
+        )} zugeordnet sind.`,
+      );
+    }
+
+    const result = await this.regionModel
+      .deleteOne({ _id: region._id, tenantId: region.tenantId })
       .exec();
+
+    if (!result.deletedCount) {
+      throw new NotFoundException('Region nicht gefunden');
+    }
+
+    return { deleted: true, regionId: region._id.toString() };
   }
 
   private resolveTenantId(actor: AuthenticatedUser): string {
@@ -307,6 +318,49 @@ export class RegionsService {
         users: users.length,
       },
     };
+  }
+
+  private async getRegionDependencyLabels(region: RegionDocument): Promise<string[]> {
+    const regionId = region._id.toString();
+    const results = await Promise.all([
+      this.countDependency(
+        'Staedte',
+        this.cityModel
+          .countDocuments({ tenantId: region.tenantId, regionId })
+          .exec(),
+      ),
+      this.countDependency(
+        'Standorte',
+        this.locationModel
+          .countDocuments({ tenantId: region.tenantId, regionId })
+          .exec(),
+      ),
+      this.countDependency(
+        'Benutzer',
+        this.userModel
+          .countDocuments({ tenantId: region.tenantId, regionIds: regionId })
+          .exec(),
+      ),
+    ]);
+
+    return results
+      .filter((result) => result.count > 0)
+      .map((result) => `${result.label} (${result.count})`);
+  }
+
+  private async countDependency(
+    label: string,
+    countPromise: Promise<number>,
+  ): Promise<{ label: string; count: number }> {
+    return { label, count: await countPromise };
+  }
+
+  private formatDependencyList(dependencies: string[]): string {
+    if (dependencies.length <= 3) {
+      return dependencies.join(', ');
+    }
+
+    return `${dependencies.slice(0, 3).join(', ')} und ${dependencies.length - 3} weitere`;
   }
 
   private validateObjectId(id: string, label: string): void {

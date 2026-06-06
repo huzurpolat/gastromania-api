@@ -32,6 +32,9 @@ const emptyModel = {
     lean: jest.fn().mockReturnThis(),
     exec: jest.fn().mockResolvedValue(null),
   })),
+  countDocuments: jest.fn(() => ({
+    exec: jest.fn().mockResolvedValue(0),
+  })),
 };
 
 describe('RegionsService', () => {
@@ -234,7 +237,7 @@ describe('RegionsService', () => {
     expect(regionModel.find).not.toHaveBeenCalled();
   });
 
-  it('soft deletes regions for tenant admins', async () => {
+  it('physically deletes regions without dependencies for tenant admins', async () => {
     const region = {
       _id: { toString: () => '507f1f77bcf86cd799439012' },
       tenantId: 'tenant-frittenwerk',
@@ -243,8 +246,8 @@ describe('RegionsService', () => {
     };
     const regionModel = {
       findOne: jest.fn(() => createQuery(region)),
-      findByIdAndUpdate: jest.fn(() => ({
-        exec: jest.fn().mockResolvedValue({ ...region, isActive: false }),
+      deleteOne: jest.fn(() => ({
+        exec: jest.fn().mockResolvedValue({ deletedCount: 1 }),
       })),
     };
     const areaModel = {
@@ -259,12 +262,47 @@ describe('RegionsService', () => {
       accessPolicy as never,
     );
 
-    await service.remove('507f1f77bcf86cd799439012', actor);
+    await expect(
+      service.remove('507f1f77bcf86cd799439012', actor),
+    ).resolves.toEqual({
+      deleted: true,
+      regionId: '507f1f77bcf86cd799439012',
+    });
 
-    expect(regionModel.findByIdAndUpdate).toHaveBeenCalledWith(
-      region._id,
-      { isActive: false },
-      { new: true, runValidators: true },
+    expect(regionModel.deleteOne).toHaveBeenCalledWith({
+      _id: region._id,
+      tenantId: 'tenant-frittenwerk',
+    });
+  });
+
+  it('blocks region deletion when cities are assigned', async () => {
+    const region = {
+      _id: { toString: () => '507f1f77bcf86cd799439012' },
+      tenantId: 'tenant-frittenwerk',
+      areaId: '507f1f77bcf86cd799439011',
+      name: 'Rheinland',
+    };
+    const regionModel = {
+      findOne: jest.fn(() => createQuery(region)),
+      deleteOne: jest.fn(),
+    };
+    const cityModel = {
+      countDocuments: jest.fn(() => ({
+        exec: jest.fn().mockResolvedValue(1),
+      })),
+    };
+    const service = new RegionsService(
+      regionModel as never,
+      emptyModel as never,
+      cityModel as never,
+      emptyModel as never,
+      emptyModel as never,
+      accessPolicy as never,
     );
+
+    await expect(
+      service.remove('507f1f77bcf86cd799439012', actor),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(regionModel.deleteOne).not.toHaveBeenCalled();
   });
 });
