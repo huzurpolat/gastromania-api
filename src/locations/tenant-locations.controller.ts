@@ -70,8 +70,11 @@ export class TenantLocationsController {
   @Delete(':locationId')
   remove(
     @Param('locationId') locationId: string,
+    @Query('force') force: string | undefined,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.locationsService.deleteTenantLocation(locationId, user);
+    return this.locationsService.deleteTenantLocation(locationId, user, {
+      force: force === 'true',
+    });
   }
 }

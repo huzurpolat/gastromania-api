@@ -218,14 +218,19 @@ export class LocationsService {
     return updated;
   }
 
-  async deleteTenantLocation(id: string, actor: AuthenticatedUser) {
+  async deleteTenantLocation(
+    id: string,
+    actor: AuthenticatedUser,
+    options: { force?: boolean } = {},
+  ) {
     const location = await this.findTenantLocation(id, actor);
+    const tenantId = this.resolveTenantId(undefined, actor);
     const dependencies = await this.getOperationalDependencyLabels(
       location._id.toString(),
-      this.resolveTenantId(undefined, actor),
+      tenantId,
     );
 
-    if (dependencies.length) {
+    if (dependencies.length && !options.force) {
       throw new ConflictException(
         `Dieser Standort kann nicht geloescht werden, weil noch ${this.formatDependencyList(
           dependencies,
@@ -233,7 +238,10 @@ export class LocationsService {
       );
     }
 
-    const tenantId = this.resolveTenantId(undefined, actor);
+    if (dependencies.length) {
+      await this.deleteTenantLocationDependencies(location._id.toString(), tenantId);
+    }
+
     const result = await this.locationModel
       .deleteOne({ _id: location._id, tenantId })
       .exec();
@@ -824,6 +832,47 @@ export class LocationsService {
     return results
       .filter((result) => result.count > 0)
       .map((result) => `${result.label} (${result.count})`);
+  }
+
+  private async deleteTenantLocationDependencies(
+    locationId: string,
+    tenantId: string,
+  ): Promise<void> {
+    await Promise.all([
+      this.orderModel.deleteMany({ locationId, tenantId }).exec(),
+      this.tableModel.deleteMany({ locationId, tenantId }).exec(),
+      this.stockItemModel.deleteMany({ locationId, tenantId }).exec(),
+      this.inventoryLocationModel.deleteMany({ locationId, tenantId }).exec(),
+      this.inventoryBatchModel.deleteMany({ locationId, tenantId }).exec(),
+      this.stockMovementModel.deleteMany({ locationId, tenantId }).exec(),
+      this.inventorySessionModel.deleteMany({ locationId, tenantId }).exec(),
+      this.purchaseOrderModel.deleteMany({ locationId, tenantId }).exec(),
+      this.stockAlertModel.deleteMany({ locationId, tenantId }).exec(),
+      this.dailyClosingModel.deleteMany({ locationId, tenantId }).exec(),
+      this.counterPaymentModel.deleteMany({ locationId, tenantId }).exec(),
+      this.counterSettingsModel.deleteMany({ locationId }).exec(),
+      this.counterOrderStatusLogModel.deleteMany({ locationId, tenantId }).exec(),
+      this.userLocationAssignmentModel.deleteMany({ tenantId, locationId }).exec(),
+      this.userModel
+        .updateMany(
+          {
+            tenantId,
+            $or: [
+              { locationId },
+              { locationIds: locationId },
+              { managedLocationIds: locationId },
+            ],
+          },
+          {
+            $unset: { locationId: '' },
+            $pull: {
+              locationIds: locationId,
+              managedLocationIds: locationId,
+            },
+          },
+        )
+        .exec(),
+    ]);
   }
 
   private async countDependency(

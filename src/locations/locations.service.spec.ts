@@ -55,10 +55,17 @@ describe('LocationsService', () => {
     countDocuments: jest.fn(),
     exists: jest.fn(),
     create: jest.fn(),
+    deleteMany: jest.fn(),
   };
   const dependencyModel = () => ({
     countDocuments: jest.fn(() => ({
       exec: jest.fn().mockResolvedValue(0),
+    })),
+    deleteMany: jest.fn(() => ({
+      exec: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+    })),
+    updateMany: jest.fn(() => ({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
     })),
   });
   const dependencyModels = new Map<Function, ReturnType<typeof dependencyModel>>();
@@ -141,6 +148,9 @@ describe('LocationsService', () => {
     accessPolicy.isCompanyAdmin.mockReturnValue(true);
     tableModel.countDocuments.mockResolvedValue(1);
     tableModel.exists.mockResolvedValue(null);
+    tableModel.deleteMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+    });
   });
 
   it('creates a location', async () => {
@@ -381,6 +391,63 @@ describe('LocationsService', () => {
       }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(locationModel.deleteOne).not.toHaveBeenCalled();
+  });
+
+  it('force deletes tenant locations and clears location scoped dependencies', async () => {
+    const targetLocationId = '6627d9a2c6f2d8f3e2b1a001';
+    locationModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        ...location,
+        tenantId: 'tenant-nrw',
+        _id: { toString: () => targetLocationId },
+      }),
+    });
+    tableModel.countDocuments.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(1),
+    });
+    locationModel.deleteOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+    });
+
+    await expect(
+      service.deleteTenantLocation(
+        targetLocationId,
+        {
+          ...actor,
+          roles: ['TenantAdmin'],
+        },
+        { force: true },
+      ),
+    ).resolves.toEqual({
+      deleted: true,
+      locationId: targetLocationId,
+    });
+
+    expect(tableModel.deleteMany).toHaveBeenCalledWith({
+      locationId: targetLocationId,
+      tenantId: 'tenant-nrw',
+    });
+    expect(dependencyModels.get(User)?.updateMany).toHaveBeenCalledWith(
+      {
+        tenantId: 'tenant-nrw',
+        $or: [
+          { locationId: targetLocationId },
+          { locationIds: targetLocationId },
+          { managedLocationIds: targetLocationId },
+        ],
+      },
+      {
+        $unset: { locationId: '' },
+        $pull: {
+          locationIds: targetLocationId,
+          managedLocationIds: targetLocationId,
+        },
+      },
+    );
+    expect(locationModel.deleteOne).toHaveBeenCalledWith({
+      _id: expect.anything(),
+      tenantId: 'tenant-nrw',
+    });
   });
 
   it('returns NotFoundException for locations outside the actor scope', async () => {
