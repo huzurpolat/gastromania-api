@@ -18,6 +18,10 @@ import {
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { PayrollController } from './payroll.controller';
 import { PayrollService } from './payroll.service';
+import {
+  PayrollPeriod,
+  PayrollPeriodSchema,
+} from './schemas/payroll-period.schema';
 
 @Module({
   imports: [
@@ -29,6 +33,7 @@ import { PayrollService } from './payroll.service';
       { name: TimeEntry.name, schema: TimeEntrySchema },
       { name: StaffShift.name, schema: StaffShiftSchema },
       { name: StaffAbsence.name, schema: StaffAbsenceSchema },
+      { name: PayrollPeriod.name, schema: PayrollPeriodSchema },
     ]),
   ],
   controllers: [PayrollController],

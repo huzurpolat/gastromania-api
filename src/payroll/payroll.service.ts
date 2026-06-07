@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
@@ -24,6 +28,11 @@ import {
   UserResponse,
   toUserResponse,
 } from '../users/schemas/user.schema';
+import {
+  PayrollPeriod,
+  PayrollPeriodDocument,
+  PayrollPeriodStatus,
+} from './schemas/payroll-period.schema';
 
 export interface PayrollQuery {
   locationId?: string;
@@ -42,23 +51,48 @@ export interface PayrollEmployeeSummary {
   sickDays: number;
   vacationDays: number;
   hourlyRate: number;
+  grossPay: number;
   laborCost: number;
   minijobWarning: boolean;
+}
+
+export interface PayrollPeriodResponse {
+  _id: string;
+  start: string;
+  end: string;
+  locationId?: string;
+  employeeId?: string;
+  status: PayrollPeriodStatus;
+  lockedAt?: string;
+  lockedByUserId?: string;
 }
 
 export interface PayrollSummary {
   start: string;
   end: string;
+  period: PayrollPeriodResponse;
   employees: PayrollEmployeeSummary[];
   totals: {
     plannedHours: number;
     actualHours: number;
     breakHours: number;
     overtimeHours: number;
+    grossPay: number;
     laborCost: number;
     vacationDays: number;
     sickDays: number;
   };
+}
+
+interface PayrollTotals {
+  plannedHours: number;
+  actualHours: number;
+  breakHours: number;
+  overtimeHours: number;
+  grossPay: number;
+  laborCost: number;
+  vacationDays: number;
+  sickDays: number;
 }
 
 @Injectable()
@@ -72,6 +106,8 @@ export class PayrollService {
     private readonly staffShiftModel: Model<StaffShiftDocument>,
     @InjectModel(StaffAbsence.name)
     private readonly absenceModel: Model<StaffAbsenceDocument>,
+    @InjectModel(PayrollPeriod.name)
+    private readonly payrollPeriodModel: Model<PayrollPeriodDocument>,
     private readonly accessPolicy: AccessPolicyService,
   ) {}
 
@@ -80,6 +116,124 @@ export class PayrollService {
     query: PayrollQuery = {},
   ): Promise<PayrollSummary> {
     const range = this.resolveRange(query);
+    const period = await this.ensurePeriod(actor, query, range);
+
+    if (period.status === PayrollPeriodStatus.Locked) {
+      return this.summaryFromLockedPeriod(period);
+    }
+
+    const calculated = await this.calculateSummary(actor, query, range);
+    return {
+      start: range.start.toISOString(),
+      end: range.end.toISOString(),
+      period: this.toPeriodResponse(period),
+      ...calculated,
+    };
+  }
+
+  async listPeriods(
+    actor: AuthenticatedUser,
+    query: PayrollQuery = {},
+  ): Promise<PayrollPeriodResponse[]> {
+    const filter = await this.periodFilter(actor, query);
+    return this.payrollPeriodModel
+      .find(filter)
+      .sort({ start: -1, createdAt: -1 })
+      .exec()
+      .then((periods) => periods.map((period) => this.toPeriodResponse(period)));
+  }
+
+  async lockPeriod(
+    actor: AuthenticatedUser,
+    query: PayrollQuery,
+  ): Promise<PayrollSummary> {
+    const range = this.resolveRange(query);
+    const period = await this.ensurePeriod(actor, query, range);
+
+    if (period.status === PayrollPeriodStatus.Locked) {
+      throw new ConflictException('Payroll-Periode ist bereits gesperrt');
+    }
+
+    const calculated = await this.calculateSummary(actor, query, range);
+    period.status = PayrollPeriodStatus.Locked;
+    period.lockedAt = new Date();
+    period.lockedByUserId = actor.sub;
+    period.employeeSnapshots = calculated.employees.map((employee) => ({
+      ...employee,
+    }));
+    period.totalsSnapshot = { ...calculated.totals };
+    await period.save();
+
+    return {
+      start: range.start.toISOString(),
+      end: range.end.toISOString(),
+      period: this.toPeriodResponse(period),
+      ...calculated,
+    };
+  }
+
+  async export(
+    actor: AuthenticatedUser,
+    query: PayrollQuery & { format?: 'csv' | 'xlsx' } = {},
+  ) {
+    const summary = await this.summary(actor, query);
+    const rows = [
+      [
+        'Periode',
+        'Status',
+        'Personalnummer',
+        'Name',
+        'Vertragsart',
+        'Stundenlohn',
+        'Sollstunden',
+        'Iststunden',
+        'Pausen',
+        'Ueberstunden',
+        'Urlaubstage',
+        'Krankheitstage',
+        'Bruttolohn',
+        'Minijob-Warnung',
+      ],
+      ...summary.employees.map((item) => [
+        `${summary.start.slice(0, 10)} bis ${summary.end.slice(0, 10)}`,
+        summary.period.status === PayrollPeriodStatus.Locked
+          ? 'gesperrt'
+          : 'offen',
+        item.employee.employeeNumber ?? '',
+        item.employee.name,
+        item.employee.contractType ?? '',
+        item.hourlyRate,
+        item.plannedHours,
+        item.actualHours,
+        item.breakHours,
+        item.overtimeHours,
+        item.vacationDays,
+        item.sickDays,
+        item.grossPay,
+        item.minijobWarning ? 'ja' : 'nein',
+      ]),
+    ];
+
+    if (query.format === 'xlsx') {
+      return {
+        filename: `gastromania-payroll-${summary.start.slice(0, 10)}.xls`,
+        mimeType: 'application/vnd.ms-excel',
+        content: this.toExcelXml(rows),
+      };
+    }
+
+    return {
+      filename: `gastromania-payroll-${summary.start.slice(0, 10)}.csv`,
+      mimeType: 'text/csv; charset=utf-8',
+      content: this.toCsv(rows),
+    };
+  }
+
+  private async calculateSummary(
+    actor: AuthenticatedUser,
+    query: PayrollQuery,
+    range: { start: Date; end: Date },
+  ): Promise<{ employees: PayrollEmployeeSummary[]; totals: PayrollTotals }> {
     const employeeQuery = await this.getEmployeeQuery(actor, query);
     const employees = await this.userModel
       .find(employeeQuery)
@@ -137,26 +291,27 @@ export class PayrollService {
       );
       const breakHours = this.roundHours(
         employeeEntries.reduce(
-          (sum, entry) => sum + entry.breakMinutes / 60,
+          (sum, entry) => sum + (entry.breakMinutes ?? 0) / 60,
           0,
         ),
       );
       const actualHours = this.roundHours(
-        employeeEntries.reduce(
-          (sum, entry) =>
-            sum +
+        employeeEntries.reduce((sum, entry) => {
+          const netMinutes =
+            entry.netDurationMinutes ??
             Math.max(
               0,
-              this.hoursBetween(entry.clockIn, entry.clockOut ?? new Date()) -
-                entry.breakMinutes / 60,
-            ),
-          0,
-        ),
+              this.hoursBetween(entry.clockIn, entry.clockOut ?? new Date()) *
+                60 -
+                (entry.breakMinutes ?? 0),
+            );
+          return sum + netMinutes / 60;
+        }, 0),
       );
       const overtimeHours = this.roundHours(actualHours - plannedHours);
       const hourlyRate =
         employee.hourlyRate ?? this.monthlyToHourly(employee.monthlySalary);
-      const laborCost = this.roundMoney(actualHours * hourlyRate);
+      const grossPay = this.roundMoney(actualHours * hourlyRate);
       const vacationDays = this.countAbsenceDays(
         employeeAbsences,
         StaffAbsenceType.Vacation,
@@ -176,74 +331,25 @@ export class PayrollService {
         sickDays,
         vacationDays,
         hourlyRate,
-        laborCost,
+        grossPay,
+        laborCost: grossPay,
         minijobWarning:
-          employee.contractType === 'Minijob' && laborCost >= 538 * 0.9,
+          employee.contractType === 'Minijob' && grossPay >= 538 * 0.9,
       };
     });
 
     return {
-      start: range.start.toISOString(),
-      end: range.end.toISOString(),
       employees: summaries,
       totals: {
         plannedHours: this.sum(summaries, 'plannedHours'),
         actualHours: this.sum(summaries, 'actualHours'),
         breakHours: this.sum(summaries, 'breakHours'),
         overtimeHours: this.sum(summaries, 'overtimeHours'),
+        grossPay: this.sum(summaries, 'grossPay'),
         laborCost: this.sum(summaries, 'laborCost'),
         vacationDays: this.sum(summaries, 'vacationDays'),
         sickDays: this.sum(summaries, 'sickDays'),
       },
-    };
-  }
-
-  async export(
-    actor: AuthenticatedUser,
-    query: PayrollQuery & { format?: 'csv' | 'xlsx' } = {},
-  ) {
-    const summary = await this.summary(actor, query);
-    const rows = [
-      [
-        'Personalnummer',
-        'Name',
-        'Vertragsart',
-        'Sollstunden',
-        'Iststunden',
-        'Pausen',
-        'Überstunden',
-        'Urlaubstage',
-        'Krankheitstage',
-        'Personalkosten',
-        'Minijob-Warnung',
-      ],
-      ...summary.employees.map((item) => [
-        item.employee.employeeNumber ?? '',
-        item.employee.name,
-        item.employee.contractType ?? '',
-        item.plannedHours,
-        item.actualHours,
-        item.breakHours,
-        item.overtimeHours,
-        item.vacationDays,
-        item.sickDays,
-        item.laborCost,
-        item.minijobWarning ? 'ja' : 'nein',
-      ]),
-    ];
-
-    if (query.format === 'xlsx') {
-      return {
-        filename: `gastromania-payroll-${summary.start.slice(0, 10)}.xls`,
-        mimeType: 'application/vnd.ms-excel',
-        content: this.toExcelXml(rows),
-      };
-    }
-
-    return {
-      filename: `gastromania-payroll-${summary.start.slice(0, 10)}.csv`,
-      mimeType: 'text/csv; charset=utf-8',
-      content: this.toCsv(rows),
     };
   }
 
@@ -273,7 +379,105 @@ export class PayrollService {
     const end = query.end
       ? new Date(query.end)
       : new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      start.getTime() >= end.getTime()
+    ) {
+      throw new BadRequestException('Ungueltige Payroll-Periode');
+    }
+
     return { start, end };
+  }
+
+  private async ensurePeriod(
+    actor: AuthenticatedUser,
+    query: PayrollQuery,
+    range: { start: Date; end: Date },
+  ): Promise<PayrollPeriodDocument> {
+    const filter = await this.periodFilter(actor, query, range);
+    const existing = await this.payrollPeriodModel.findOne(filter).exec();
+
+    if (existing) {
+      return existing;
+    }
+
+    return this.payrollPeriodModel.create({
+      ...filter,
+      status: PayrollPeriodStatus.Open,
+      employeeSnapshots: [],
+      totalsSnapshot: {},
+    });
+  }
+
+  private async periodFilter(
+    actor: AuthenticatedUser,
+    query: PayrollQuery,
+    range?: { start: Date; end: Date },
+  ): Promise<Record<string, unknown>> {
+    if (this.accessPolicy.isPlatformAdmin(actor) || !actor.tenantId) {
+      throw new BadRequestException('Payroll benoetigt einen Tenant-Kontext');
+    }
+
+    if (query.locationId) {
+      await this.accessPolicy.assertCanAccessLocation(actor, query.locationId);
+    }
+
+    const filter: Record<string, unknown> = {
+      tenantId: actor.tenantId,
+      locationId: query.locationId ?? null,
+      employeeId: query.employeeId ?? null,
+    };
+
+    if (range) {
+      filter.start = range.start;
+      filter.end = range.end;
+    }
+
+    return filter;
+  }
+
+  private summaryFromLockedPeriod(
+    period: PayrollPeriodDocument,
+  ): PayrollSummary {
+    const employees = period.employeeSnapshots as unknown as PayrollEmployeeSummary[];
+    const totals = this.normalizeTotals(period.totalsSnapshot);
+    return {
+      start: period.start.toISOString(),
+      end: period.end.toISOString(),
+      period: this.toPeriodResponse(period),
+      employees,
+      totals,
+    };
+  }
+
+  private normalizeTotals(value: Record<string, unknown>): PayrollTotals {
+    return {
+      plannedHours: this.numberFrom(value.plannedHours),
+      actualHours: this.numberFrom(value.actualHours),
+      breakHours: this.numberFrom(value.breakHours),
+      overtimeHours: this.numberFrom(value.overtimeHours),
+      grossPay: this.numberFrom(value.grossPay ?? value.laborCost),
+      laborCost: this.numberFrom(value.laborCost ?? value.grossPay),
+      vacationDays: this.numberFrom(value.vacationDays),
+      sickDays: this.numberFrom(value.sickDays),
+    };
+  }
+
+  private toPeriodResponse(
+    period: PayrollPeriodDocument,
+  ): PayrollPeriodResponse {
+    return {
+      _id: period._id.toString(),
+      start: period.start.toISOString(),
+      end: period.end.toISOString(),
+      locationId: period.locationId || undefined,
+      employeeId: period.employeeId || undefined,
+      status: period.status,
+      lockedAt: period.lockedAt?.toISOString(),
+      lockedByUserId: period.lockedByUserId,
+    };
   }
 
   private hoursBetween(start: Date, end: Date): number {
@@ -320,6 +524,10 @@ export class PayrollService {
     return Math.round(value * 100) / 100;
   }
 
+  private numberFrom(value: unknown): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  }
+
   private toCsv(rows: unknown[][]): string {
     return rows
       .map((row) =>
@@ -335,9 +543,9 @@ export class PayrollService {
           `<Row>${row
             .map(
               (cell) =>
-                `<Cell><Data ss:Type="${typeof cell === 'number' ? 'Number' : 'String'}">${String(
-                  cell,
-                )
+                `<Cell><Data ss:Type="${
+                  typeof cell === 'number' ? 'Number' : 'String'
+                }">${String(cell)
                   .replaceAll('&', '&amp;')
                   .replaceAll('<', '&lt;')
                   .replaceAll('>', '&gt;')}</Data></Cell>`,

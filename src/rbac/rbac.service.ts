@@ -153,7 +153,13 @@ export class RbacService implements OnModuleInit {
     if (dto.isActive !== undefined) role.isActive = dto.isActive;
     if (dto.permissions !== undefined) role.permissions = dto.permissions;
 
-    const saved = await role.save();
+    let saved: ManagedRoleDocument;
+    try {
+      saved = await role.save();
+    } catch (error) {
+      this.handleRoleWriteError(error);
+    }
+
     await this.writeAudit(
       actor,
       'roles.update',
@@ -286,5 +292,22 @@ export class RbacService implements OnModuleInit {
       'code' in error &&
       error.code === 11000
     );
+  }
+
+  private handleRoleWriteError(error: unknown): never {
+    if (this.isDuplicateKeyError(error)) {
+      throw new ConflictException('Rolle existiert bereits');
+    }
+
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      error.name === 'ValidationError'
+    ) {
+      throw new BadRequestException('Rolle konnte nicht validiert werden');
+    }
+
+    throw error;
   }
 }

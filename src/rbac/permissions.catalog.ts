@@ -58,7 +58,7 @@ const modules = {
   schedule: ['view', 'create', 'update', 'delete', 'publish'],
   timeTracking: ['view', 'clock', 'correct'],
   absence: ['view', 'request', 'approve'],
-  payroll: ['view', 'export'],
+  payroll: ['view', 'export', 'lock'],
   internalMessages: ['view', 'create'],
   reports: ['view', 'export'],
   analytics: ['view'],
@@ -324,6 +324,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'absence.request',
     'absence.approve',
     'payroll.view',
+    'payroll.lock',
   ],
   Schichtleiter: [
     'dashboard.view',
@@ -530,6 +531,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'timeTracking.view',
     'payroll.view',
     'payroll.export',
+    'payroll.lock',
   ],
   Marketing: [
     'dashboard.view',
