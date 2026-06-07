@@ -40,6 +40,7 @@ export interface UserResponse {
   role: string;
   roles: string[];
   permissions?: string[];
+  permissionsVersion?: number;
   isActive: boolean;
   status?: string;
   tenantId?: string;
@@ -48,9 +49,21 @@ export interface UserResponse {
   regionIds?: string[];
   locationId?: string;
   locationIds?: string[];
+  locationAssignments?: UserLocationAssignmentResponse[];
   managedLocationIds?: string[];
   departmentIds?: string[];
   responsibilities?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface UserLocationAssignmentResponse {
+  _id: string;
+  tenantId: string;
+  userId: string;
+  locationId: string;
+  role: string;
+  isPrimary: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -162,6 +175,9 @@ export class User {
   @Prop()
   lastLoginAt?: Date;
 
+  @Prop({ type: Number, default: 1, min: 1 })
+  permissionsVersion?: number;
+
   @Prop({
     type: [String],
     default: [Role.Service],
@@ -249,6 +265,7 @@ export const toUserResponse = (user: UserDocument): UserResponse => {
     lastLoginAt: user.lastLoginAt,
     role: roles[0],
     roles,
+    permissionsVersion: Math.max(user.permissionsVersion ?? 1, 1),
     isActive: user.isActive,
     status: user.status ?? (user.isActive ? 'active' : 'disabled'),
     tenantId: user.tenantId,

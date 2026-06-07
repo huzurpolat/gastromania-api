@@ -75,6 +75,17 @@ export class AccessPolicyService {
     return this.hasAnyRole(user, [Role.Bereichsleiter]);
   }
 
+  isScopedLocationManager(user?: AuthenticatedUser): boolean {
+    return Boolean(
+      user &&
+        !this.isPlatformAdmin(user) &&
+        !this.isCompanyAdmin(user) &&
+        !this.isRegionAdmin(user) &&
+        !this.hasAnyRole(user, [Role.Regionalleiter, Role.Bereichsleiter]) &&
+        this.getLocationManagerAssignmentIds(user).length,
+    );
+  }
+
   isManagementRole(user?: AuthenticatedUser): boolean {
     return this.hasAnyRole(user, [
       Role.TenantAdmin,
@@ -145,6 +156,10 @@ export class AccessPolicyService {
   }
 
   async getManageableLocationIds(user: AuthenticatedUser): Promise<string[]> {
+    if (this.isScopedLocationManager(user)) {
+      return this.getLocationManagerAssignmentIds(user);
+    }
+
     if (
       this.isPlatformAdmin(user) ||
       this.isCompanyAdmin(user) ||
@@ -234,9 +249,12 @@ export class AccessPolicyService {
         : { _id: { $in: [] } };
     }
 
-    const locationIds = await this.getReadableLocationIds(user);
+    const locationIds = this.isScopedLocationManager(user)
+      ? await this.getManageableLocationIds(user)
+      : await this.getReadableLocationIds(user);
     if (locationIds.length) {
       return {
+        tenantId: user.tenantId,
         $or: [
           { locationId: { $in: locationIds } },
           { locationIds: { $in: locationIds } },
@@ -375,6 +393,12 @@ export class AccessPolicyService {
   canAssignRole(user: AuthenticatedUser, role: string): boolean {
     const normalizedRole = normalizeRoles([role])[0];
 
+    if (this.isScopedLocationManager(user)) {
+      return this.locationManagerAssignableRoles().includes(
+        normalizedRole as Role,
+      );
+    }
+
     if (this.isPlatformAdmin(user)) {
       return this.platformRoles().includes(normalizedRole);
     }
@@ -460,11 +484,16 @@ export class AccessPolicyService {
       targetLocationIds.every((locationId) =>
         readableLocationIds.includes(locationId),
       );
+    const locationManagerScoped = this.isScopedLocationManager(actor);
     const manageableLocation =
       targetLocationIds.length > 0 &&
-      targetLocationIds.every((locationId) =>
-        manageableLocationIds.includes(locationId),
-      );
+      (locationManagerScoped
+        ? targetLocationIds.some((locationId) =>
+            manageableLocationIds.includes(locationId),
+          )
+        : targetLocationIds.every((locationId) =>
+            manageableLocationIds.includes(locationId),
+          ));
     const sharesRegion =
       Boolean(actor.regionIds?.length) &&
       Boolean(target.regionIds?.length) &&
@@ -665,6 +694,32 @@ export class AccessPolicyService {
 
   private platformRoles(): string[] {
     return [Role.PlatformAdmin, Role.SuperAdmin];
+  }
+
+  private getLocationManagerAssignmentIds(user: AuthenticatedUser): string[] {
+    return this.unique([
+      ...(user.locationAssignments ?? [])
+        .filter((assignment) =>
+          [Role.LocationManager, Role.Filialleiter].includes(
+            assignment.role as Role,
+          ),
+        )
+        .map((assignment) => assignment.locationId),
+      ...(user.managedLocationIds ?? []),
+    ]);
+  }
+
+  private locationManagerAssignableRoles(): Role[] {
+    return [
+      Role.Service,
+      Role.Kueche,
+      Role.Theke,
+      Role.Kasse,
+      Role.Lager,
+      Role.Dishwasher,
+      Role.Tellerwaescher,
+      Role.Staff,
+    ];
   }
 
   private operationalRoles(): Role[] {

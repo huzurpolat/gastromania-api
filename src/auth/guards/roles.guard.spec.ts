@@ -71,4 +71,44 @@ describe('RolesGuard', () => {
       ),
     ).toBe(true);
   });
+
+  it('normalizes technical tenant admin role codes for tenant role checks', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.TenantAdmin]);
+
+    expect(
+      guard.canActivate(
+        context({ roles: [Role.TenantAdminCode] }, '/api/employees'),
+      ),
+    ).toBe(true);
+  });
+
+  it('accepts legacy tenant admin users on technical tenant admin metadata', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.TenantAdminCode]);
+
+    expect(
+      guard.canActivate(
+        context({ roles: [Role.TenantAdmin] }, '/api/employees'),
+      ),
+    ).toBe(true);
+  });
+
+  it('allows technical waiter location roles on legacy service endpoints', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.Service]);
+
+    expect(
+      guard.canActivate(
+        context({ roles: [Role.Waiter] }, '/api/orders'),
+      ),
+    ).toBe(true);
+  });
+
+  it('does not treat STAFF as waiter/service access', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.Service]);
+
+    expect(() =>
+      guard.canActivate(
+        context({ roles: [Role.Staff] }, '/api/orders'),
+      ),
+    ).toThrow(ForbiddenException);
+  });
 });

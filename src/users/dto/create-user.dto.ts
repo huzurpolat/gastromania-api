@@ -12,7 +12,9 @@ import {
   IsString,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Role } from '../../auth/enums/role.enum';
 
 const trimString = (value: unknown): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -70,6 +72,56 @@ export const QUALIFICATIONS = [
   'Hygieneschulung',
   'Erste Hilfe',
 ] as const;
+
+export const USER_LOCATION_ASSIGNMENT_ROLES = [
+  Role.LocationManager,
+  Role.Waiter,
+  Role.Kitchen,
+  Role.Counter,
+  Role.Cashier,
+  Role.InventoryManager,
+  Role.Dishwasher,
+  Role.Staff,
+] as const;
+
+export const USER_LOCATION_ASSIGNMENT_ROLE_INPUTS = [
+  ...USER_LOCATION_ASSIGNMENT_ROLES,
+  Role.Filialleiter,
+  Role.Restaurantleiter,
+  Role.Service,
+  Role.Kueche,
+  'KÃ¼che',
+  'KÃƒÂ¼che',
+  'KÃƒÆ’Ã‚Â¼che',
+  'Kueche',
+  'Küche',
+  Role.Theke,
+  Role.Bar,
+  Role.Kasse,
+  Role.Lager,
+  Role.Tellerwaescher,
+  'TellerwÃ¤scher',
+  'TellerwÃƒÂ¤scher',
+  'Tellerwaescher',
+  'Spuelkueche',
+] as const;
+
+export class UserLocationAssignmentDto {
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsString()
+  @IsNotEmpty()
+  locationId!: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsString()
+  @IsNotEmpty()
+  @IsIn(USER_LOCATION_ASSIGNMENT_ROLE_INPUTS)
+  role!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
+}
 
 export class CreateUserDto {
   @Transform(({ value }) => {
@@ -277,6 +329,13 @@ export class CreateUserDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   locationIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @ValidateNested({ each: true })
+  @Type(() => UserLocationAssignmentDto)
+  locationAssignments?: UserLocationAssignmentDto[];
 
   @IsOptional()
   @IsArray()

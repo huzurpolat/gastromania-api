@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AccessModule } from '../access/access.module';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
+import { ModulesModule } from '../modules/modules.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { HrController } from './hr.controller';
 import { HrService } from './hr.service';
@@ -22,6 +23,7 @@ import {
   imports: [
     AccessModule,
     AuthJwtModule,
+    ModulesModule,
     MongooseModule.forFeature([
       {
         name: EmployeeDocumentRecord.name,

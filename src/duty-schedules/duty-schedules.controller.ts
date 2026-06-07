@@ -17,27 +17,46 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { STAFF_MANAGEMENT_MODULE_KEY } from '../modules/constants/module-definitions';
+import { RequireModule } from '../modules/decorators/require-module.decorator';
+import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import { CreateDutyShiftDto } from './dto/create-duty-shift.dto';
 import { UpdateDutyShiftDto } from './dto/update-duty-shift.dto';
 import { DutySchedulesService } from './duty-schedules.service';
 
+const dutyScheduleManagerRoles = [
+  Role.TenantAdminCode,
+  Role.CompanyAdmin,
+  Role.RegionAdmin,
+  Role.Admin,
+  Role.Regionalleiter,
+  Role.Bereichsleiter,
+  Role.Filialleiter,
+  Role.Restaurantleiter,
+  Role.Schichtleiter,
+  Role.Personalabteilung,
+];
+
+const dutyScheduleReaderRoles = [
+  ...dutyScheduleManagerRoles,
+  Role.Service,
+  Role.Kueche,
+  Role.Bar,
+  Role.Theke,
+  Role.Lager,
+  Role.Reinigung,
+  Role.Tellerwaescher,
+];
+
 @Controller('duty-schedules')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, ModuleEnabledGuard)
+@RequireModule(STAFF_MANAGEMENT_MODULE_KEY)
 export class DutySchedulesController {
   constructor(private readonly dutySchedulesService: DutySchedulesService) {}
 
   @Post()
   @Permissions('employees.create')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-  )
+  @Roles(...dutyScheduleManagerRoles)
   create(
     @Body() createDutyShiftDto: CreateDutyShiftDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -47,20 +66,7 @@ export class DutySchedulesController {
 
   @Get()
   @Permissions('employees.view')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Kueche,
-    Role.Lager,
-    Role.Tellerwaescher,
-  )
+  @Roles(...dutyScheduleReaderRoles)
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -72,16 +78,7 @@ export class DutySchedulesController {
 
   @Patch(':id')
   @Permissions('employees.update')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-  )
+  @Roles(...dutyScheduleManagerRoles)
   update(
     @Param('id') id: string,
     @Body() updateDutyShiftDto: UpdateDutyShiftDto,
@@ -92,16 +89,7 @@ export class DutySchedulesController {
 
   @Delete(':id')
   @Permissions('employees.delete')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-  )
+  @Roles(...dutyScheduleManagerRoles)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.dutySchedulesService.remove(id, user);
   }

@@ -41,4 +41,17 @@ describe('PermissionsGuard', () => {
       ),
     ).toThrow(ForbiddenException);
   });
+
+  it('blocks staff users from waiter-only permissions', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['orders.view']);
+
+    expect(() =>
+      guard.canActivate(
+        context({
+          roles: [Role.Staff],
+          permissions: ['users.own.view', 'users.own.update'],
+        }),
+      ),
+    ).toThrow(ForbiddenException);
+  });
 });

@@ -15,6 +15,11 @@ export class CreateTimeEntryDto {
   @IsString()
   employeeId?: string;
 
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  shiftId?: string;
+
   @Type(() => Number)
   @IsOptional()
   @IsInt()
@@ -25,4 +30,21 @@ export class CreateTimeEntryDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class ClockOutTimeEntryDto {
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  timeEntryId?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }

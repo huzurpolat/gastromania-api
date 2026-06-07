@@ -19,8 +19,8 @@ const roleAliases: Record<string, Role> = {
   COUNTER: Role.Theke,
   CASHIER: Role.Kasse,
   INVENTORY_MANAGER: Role.Lager,
-  EMPLOYEE: Role.Service,
-  STAFF: Role.Service,
+  EMPLOYEE: Role.Staff,
+  STAFF: Role.Staff,
   Kueche: Role.Kueche,
   Tellerwaescher: Role.Tellerwaescher,
 };
@@ -42,12 +42,15 @@ export function hasAnyRole(
   requiredRoles: Role[],
 ): boolean {
   const normalizedRoles = normalizeRoles(roles);
+  const normalizedRequiredRoles = normalizeRoles(requiredRoles);
 
   if (normalizedRoles.some((role) => tenantAdminRoles.includes(role as Role))) {
-    return requiredRoles.some((role) => tenantAdminRoles.includes(role));
+    return normalizedRequiredRoles.some((role) =>
+      tenantAdminRoles.includes(role as Role),
+    );
   }
 
-  return requiredRoles.some((role) => normalizedRoles.includes(role));
+  return normalizedRequiredRoles.some((role) => normalizedRoles.includes(role));
 }
 
 export function isPlatformRole(roles: string[] | undefined): boolean {

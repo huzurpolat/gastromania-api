@@ -17,7 +17,11 @@ import {
   Location,
   LocationDocument,
 } from '../locations/schemas/location.schema';
-import { CreateUserDto } from './dto/create-user.dto';
+import {
+  CreateUserDto,
+  USER_LOCATION_ASSIGNMENT_ROLES,
+  UserLocationAssignmentDto,
+} from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
   toUserResponse,
@@ -29,6 +33,12 @@ import {
   UserLocationAssignment,
   UserLocationAssignmentDocument,
 } from './schemas/user-location-assignment.schema';
+
+interface NormalizedLocationAssignment {
+  locationId: string;
+  role: string;
+  isPrimary: boolean;
+}
 
 @Injectable()
 export class UsersService {
@@ -73,12 +83,30 @@ export class UsersService {
       createUserDto.password,
       this.passwordSaltRounds,
     );
+    const locationAssignments = this.normalizeLocationAssignments(
+      createUserDto.locationAssignments,
+      assignedRoles,
+    );
+    await this.assertActorCanManageLocationAssignmentRoles(
+      actor,
+      locationAssignments.map((assignment) => assignment.role),
+    );
     const locationIds = this.getUniqueLocationIds([
       ...(createUserDto.locationIds ?? []),
       ...(createUserDto.locationId ? [createUserDto.locationId] : []),
+      ...locationAssignments.map((assignment) => assignment.locationId),
     ]);
     const managedLocationIds = this.getUniqueLocationIds(
       createUserDto.managedLocationIds ?? [],
+    );
+    await this.assertLocationsBelongToTenant(tenantId, [
+      ...locationIds,
+      ...managedLocationIds,
+    ]);
+    const primaryLocationId = this.resolvePrimaryLocationId(
+      createUserDto.locationId,
+      locationIds,
+      locationAssignments,
     );
 
     try {
@@ -128,7 +156,7 @@ export class UsersService {
         companyId: createUserDto.companyId ?? actor?.companyId,
         areaIds: createUserDto.areaIds ?? actor?.areaIds ?? [],
         regionIds: createUserDto.regionIds ?? actor?.regionIds ?? [],
-        locationId: createUserDto.locationId ?? locationIds[0],
+        locationId: primaryLocationId,
         locationIds,
         managedLocationIds,
         departmentIds: createUserDto.departmentIds ?? [],
@@ -140,6 +168,8 @@ export class UsersService {
         user.areaIds ?? [],
         user.regionIds ?? [],
         [...locationIds, ...managedLocationIds],
+        locationAssignments,
+        user.locationId,
       );
       await this.audit(actor, {
         tenantId,
@@ -153,7 +183,7 @@ export class UsersService {
         },
       });
 
-      return toUserResponse(user);
+      return this.withLocationAssignments(toUserResponse(user), actor);
     } catch (error) {
       if (this.isDuplicateKeyError(error)) {
         throw new ConflictException(
@@ -172,7 +202,10 @@ export class UsersService {
       .sort({ createdAt: -1 })
       .exec();
 
-    return users.map((user) => toUserResponse(user));
+    return this.withLocationAssignmentsForUsers(
+      users.map((user) => toUserResponse(user)),
+      actor,
+    );
   }
 
   async count(): Promise<number> {
@@ -190,7 +223,7 @@ export class UsersService {
 
     await this.assertCanManageUser(actor, user);
 
-    return toUserResponse(user);
+    return this.withLocationAssignments(toUserResponse(user), actor);
   }
 
   async update(
@@ -220,15 +253,78 @@ export class UsersService {
         ? updateUserDto.tenantId
         : existingUser.tenantId;
     this.assertTenantCompatibleWithRoles(nextTenantId, nextRoles);
+    const locationIdsProvided = Boolean(updateUserDto.locationIds?.length);
+    const locationAssignmentsProvided = Boolean(
+      updateUserDto.locationAssignments?.length,
+    );
+    const managedLocationIdsProvided = Boolean(
+      updateUserDto.managedLocationIds?.length,
+    );
+    const locationScopeTouched =
+      updateUserDto.locationId !== undefined ||
+      locationIdsProvided ||
+      locationAssignmentsProvided ||
+      managedLocationIdsProvided;
+    const submittedLocationAssignments =
+      locationAssignmentsProvided
+        ? this.normalizeLocationAssignments(
+            updateUserDto.locationAssignments,
+            nextRoles,
+          )
+        : [];
+    await this.assertActorCanManageLocationAssignmentRoles(
+      actor,
+      submittedLocationAssignments.map((assignment) => assignment.role),
+    );
+    const nextLocationAssignments =
+      locationAssignmentsProvided
+        ? await this.mergeScopedLocationAssignments(
+            actor,
+            existingUser,
+            submittedLocationAssignments,
+          )
+        : [];
     const locationIds = this.getUniqueLocationIds([
-      ...(updateUserDto.locationIds ?? existingUser.locationIds ?? []),
-      ...((updateUserDto.locationId ?? existingUser.locationId)
+      ...(locationIdsProvided
+        ? (updateUserDto.locationIds ?? [])
+        : (existingUser.locationIds ?? [])),
+      ...(updateUserDto.locationId ?? existingUser.locationId
         ? [updateUserDto.locationId ?? existingUser.locationId]
         : []),
+      ...nextLocationAssignments.map((assignment) => assignment.locationId),
     ]);
+    const primaryLocationId = this.resolvePrimaryLocationId(
+      updateUserDto.locationId ?? existingUser.locationId,
+      locationIds,
+      nextLocationAssignments,
+    );
+    const managedLocationIds =
+      managedLocationIdsProvided
+        ? this.getUniqueLocationIds(updateUserDto.managedLocationIds ?? [])
+        : this.getUniqueLocationIds(existingUser.managedLocationIds ?? []);
+    if (locationScopeTouched) {
+      await this.assertLocationsBelongToTenant(nextTenantId, [
+        ...locationIds,
+        ...managedLocationIds,
+      ]);
+    }
 
     if (updateUserDto.email !== undefined) {
-      update.email = updateUserDto.email;
+      const nextEmail = updateUserDto.email.toLowerCase();
+      if (nextEmail !== existingUser.email.toLowerCase()) {
+        const emailExists = await this.userModel.exists({
+          _id: { $ne: id },
+          email: nextEmail,
+        });
+
+        if (emailExists) {
+          throw new ConflictException(
+            'Benutzer mit dieser E-Mail existiert bereits',
+          );
+        }
+
+        update.email = nextEmail;
+      }
     }
 
     if (updateUserDto.firstName !== undefined) {
@@ -384,18 +480,19 @@ export class UsersService {
     }
 
     if (updateUserDto.locationId !== undefined) {
-      update.locationId = updateUserDto.locationId;
+      update.locationId = primaryLocationId;
     }
 
-    if (updateUserDto.locationIds !== undefined) {
+    if (
+      locationIdsProvided ||
+      locationAssignmentsProvided
+    ) {
       update.locationIds = locationIds;
-      update.locationId = updateUserDto.locationId ?? locationIds[0];
+      update.locationId = primaryLocationId;
     }
 
-    if (updateUserDto.managedLocationIds !== undefined) {
-      update.managedLocationIds = this.getUniqueLocationIds(
-        updateUserDto.managedLocationIds,
-      );
+    if (managedLocationIdsProvided) {
+      update.managedLocationIds = managedLocationIds;
     }
 
     if (updateUserDto.departmentIds !== undefined) {
@@ -413,6 +510,22 @@ export class UsersService {
       );
     }
 
+    if (
+      await this.hasPermissionScopeChanged(
+        existingUser,
+        nextRoles,
+        updateUserDto,
+        locationScopeTouched,
+        locationIds,
+        managedLocationIds,
+        nextLocationAssignments,
+        primaryLocationId,
+      )
+    ) {
+      update.permissionsVersion =
+        Math.max(existingUser.permissionsVersion ?? 1, 1) + 1;
+    }
+
     try {
       const user = await this.userModel
         .findByIdAndUpdate(id, update, { new: true })
@@ -426,12 +539,25 @@ export class UsersService {
         ...(user.managedLocationIds ?? []),
         ...(user.locationId ? [user.locationId] : []),
       ]);
+      const assignmentsForSync =
+        locationAssignmentsProvided
+          ? nextLocationAssignments
+          : this.normalizeLocationAssignments(
+              nextLocationIds.map((locationId) => ({
+                locationId,
+                role: this.resolveDefaultLocationRole(user.roles),
+                isPrimary: locationId === user.locationId,
+              })),
+              user.roles,
+            );
       await this.syncLocationAssignments(
         user._id.toString(),
         user.tenantId,
         user.areaIds ?? [],
         user.regionIds ?? [],
         nextLocationIds,
+        assignmentsForSync,
+        user.locationId,
       );
       await this.audit(actor, {
         tenantId: user.tenantId,
@@ -442,14 +568,15 @@ export class UsersService {
           rolesChanged: updateUserDto.roles !== undefined,
           locationsChanged:
             updateUserDto.locationId !== undefined ||
-            updateUserDto.locationIds !== undefined ||
-            updateUserDto.managedLocationIds !== undefined,
+            locationIdsProvided ||
+            managedLocationIdsProvided ||
+            locationAssignmentsProvided,
           roles: user.roles,
           locationIds: nextLocationIds,
         },
       });
 
-      return toUserResponse(user);
+      return this.withLocationAssignments(toUserResponse(user), actor);
     } catch (error) {
       if (this.isDuplicateKeyError(error)) {
         throw new ConflictException(
@@ -480,6 +607,7 @@ export class UsersService {
       );
     }
     await this.userModel.findByIdAndDelete(id).exec();
+    await this.assignmentModel.deleteMany({ userId: id }).exec();
   }
 
   async findByEmail(email: string): Promise<UserResponse | null> {
@@ -509,17 +637,42 @@ export class UsersService {
       return;
     }
 
+    const assignmentLocationIds = this.getUniqueLocationIds(
+      payload.locationAssignments?.map((assignment) => assignment.locationId) ??
+        [],
+    );
+    const roles = this.getUniqueLocationIds([
+      ...(payload.roles ?? existingUser?.roles ?? []),
+    ]);
+    const locationFieldsProvided =
+      payload.locationId !== undefined ||
+      payload.locationIds !== undefined ||
+      payload.locationAssignments !== undefined ||
+      payload.managedLocationIds !== undefined;
+    const scopedLocationManager =
+      this.accessPolicy.isScopedLocationManager(actor);
+    const scopedLocationIds = this.getUniqueLocationIds([
+      ...(payload.locationIds ??
+        (scopedLocationManager &&
+        !locationFieldsProvided
+          ? []
+          : existingUser?.locationIds ?? [])),
+      ...assignmentLocationIds,
+    ]);
     const scopedPayload = {
       tenantId: payload.tenantId ?? existingUser?.tenantId,
       areaIds: payload.areaIds ?? existingUser?.areaIds ?? [],
       companyId: payload.companyId ?? existingUser?.companyId,
       regionIds: payload.regionIds ?? existingUser?.regionIds ?? [],
-      locationId: payload.locationId ?? existingUser?.locationId,
-      locationIds: payload.locationIds ?? existingUser?.locationIds ?? [],
+      locationId:
+        payload.locationId ??
+        (scopedLocationManager ? undefined : existingUser?.locationId),
+      locationIds: scopedLocationIds,
       managedLocationIds:
-        payload.managedLocationIds ?? existingUser?.managedLocationIds ?? [],
+        payload.managedLocationIds ??
+        (scopedLocationManager ? [] : existingUser?.managedLocationIds ?? []),
       departmentIds: payload.departmentIds ?? existingUser?.departmentIds ?? [],
-      roles: payload.roles ?? existingUser?.roles ?? [],
+      roles,
     };
 
     await this.accessPolicy.assertAssignableScope(actor, scopedPayload);
@@ -528,7 +681,6 @@ export class UsersService {
       await this.accessPolicy.assertCanManageUser(actor, existingUser);
     }
 
-    const roles = payload.roles ?? existingUser?.roles ?? [];
     if (
       !roles.length ||
       roles.some((role) => !this.accessPolicy.canAssignRole(actor, role))
@@ -594,68 +746,482 @@ export class UsersService {
     }
   }
 
+  private async assertLocationsBelongToTenant(
+    tenantId: string | undefined,
+    locationIds: string[],
+  ): Promise<void> {
+    const uniqueLocationIds = this.getUniqueLocationIds(locationIds);
+    if (!uniqueLocationIds.length) {
+      return;
+    }
+
+    if (!tenantId) {
+      throw new BadRequestException(
+        'Tenant-ID ist fuer Standortzuordnungen erforderlich',
+      );
+    }
+
+    for (const locationId of uniqueLocationIds) {
+      this.validateLocationObjectId(locationId);
+    }
+
+    const locations = await this.locationModel
+      .find({ _id: { $in: uniqueLocationIds } })
+      .select('_id tenantId')
+      .exec();
+
+    if (locations.length !== uniqueLocationIds.length) {
+      throw new BadRequestException(
+        'Mindestens ein Standort wurde nicht gefunden',
+      );
+    }
+
+    const invalidLocation = locations.find(
+      (location) => location.tenantId !== tenantId,
+    );
+    if (invalidLocation) {
+      throw new ForbiddenException(
+        'Standort gehoert nicht zum Tenant des Mitarbeiters',
+      );
+    }
+  }
+
+  private validateLocationObjectId(id: string): void {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Ungueltige Standort-ID');
+    }
+  }
+
   private getUniqueLocationIds(
     locationIds: Array<string | undefined>,
   ): string[] {
     return [...new Set(locationIds.filter((id): id is string => Boolean(id)))];
   }
 
+  private normalizeLocationAssignments(
+    assignments: UserLocationAssignmentDto[] | undefined,
+    userRoles: string[] = [],
+  ): NormalizedLocationAssignment[] {
+    const normalized = new Map<string, NormalizedLocationAssignment>();
+    const defaultRole = this.resolveDefaultLocationRole(userRoles);
+
+    for (const assignment of assignments ?? []) {
+      if (!assignment.locationId) {
+        continue;
+      }
+
+      normalized.set(assignment.locationId, {
+        locationId: assignment.locationId,
+        role: this.normalizeLocationRole(assignment.role ?? defaultRole),
+        isPrimary: assignment.isPrimary === true,
+      });
+    }
+
+    const values = [...normalized.values()];
+    if (values.length && !values.some((assignment) => assignment.isPrimary)) {
+      values[0].isPrimary = true;
+    }
+
+    let primarySeen = false;
+    for (const assignment of values) {
+      if (assignment.isPrimary && !primarySeen) {
+        primarySeen = true;
+        continue;
+      }
+
+      assignment.isPrimary = false;
+    }
+
+    return values;
+  }
+
+  private resolvePrimaryLocationId(
+    requestedLocationId: string | undefined,
+    locationIds: string[],
+    assignments: NormalizedLocationAssignment[],
+  ): string | undefined {
+    if (requestedLocationId && locationIds.includes(requestedLocationId)) {
+      return requestedLocationId;
+    }
+
+    const primaryAssignment = assignments.find(
+      (assignment) => assignment.isPrimary,
+    );
+    if (
+      primaryAssignment &&
+      locationIds.includes(primaryAssignment.locationId)
+    ) {
+      return primaryAssignment.locationId;
+    }
+
+    return locationIds[0];
+  }
+
+  private resolveDefaultLocationRole(userRoles: string[] = []): string {
+    for (const role of userRoles) {
+      const normalizedRole = this.normalizeLocationRole(role);
+      if (normalizedRole !== Role.Staff || role === Role.Staff) {
+        return normalizedRole;
+      }
+    }
+
+    return Role.Staff;
+  }
+
+  private normalizeLocationRole(role?: string): string {
+    if (
+      role &&
+      (USER_LOCATION_ASSIGNMENT_ROLES as readonly string[]).includes(role)
+    ) {
+      return role;
+    }
+
+    switch (role) {
+      case Role.Filialleiter:
+      case Role.Restaurantleiter:
+      case Role.LocationManager:
+        return Role.LocationManager;
+      case Role.Waiter:
+      case Role.Service:
+        return Role.Waiter;
+      case Role.Kitchen:
+      case Role.Kueche:
+      case 'KÃ¼che':
+      case 'KÃƒÂ¼che':
+      case 'KÃƒÆ’Ã‚Â¼che':
+      case 'Kueche':
+      case 'Küche':
+        return Role.Kitchen;
+      case Role.Counter:
+      case Role.Theke:
+      case Role.Bar:
+        return Role.Counter;
+      case Role.Cashier:
+      case Role.Kasse:
+        return Role.Cashier;
+      case Role.InventoryManager:
+      case Role.Lager:
+        return Role.InventoryManager;
+      case Role.Dishwasher:
+      case Role.Tellerwaescher:
+      case 'TellerwÃ¤scher':
+      case 'TellerwÃƒÂ¤scher':
+      case 'Tellerwaescher':
+      case 'Spuelkueche':
+        return Role.Dishwasher;
+      default:
+        return Role.Staff;
+    }
+  }
+
+  private async hasPermissionScopeChanged(
+    existingUser: UserDocument,
+    nextRoles: string[],
+    updateUserDto: UpdateUserDto,
+    locationScopeTouched: boolean,
+    locationIds: string[],
+    managedLocationIds: string[],
+    nextLocationAssignments: NormalizedLocationAssignment[],
+    primaryLocationId?: string,
+  ): Promise<boolean> {
+    if (
+      updateUserDto.roles !== undefined &&
+      !this.sameStringSet(normalizeRoles(existingUser.roles), nextRoles)
+    ) {
+      return true;
+    }
+
+    if (
+      updateUserDto.status !== undefined &&
+      updateUserDto.status !== (existingUser.status ?? 'active')
+    ) {
+      return true;
+    }
+
+    if (
+      updateUserDto.isActive !== undefined &&
+      updateUserDto.isActive !== existingUser.isActive
+    ) {
+      return true;
+    }
+
+    if (!locationScopeTouched) {
+      return false;
+    }
+
+    if (!this.sameStringSet(existingUser.locationIds ?? [], locationIds)) {
+      return true;
+    }
+
+    if (
+      !this.sameStringSet(
+        existingUser.managedLocationIds ?? [],
+        managedLocationIds,
+      )
+    ) {
+      return true;
+    }
+
+    if ((existingUser.locationId ?? undefined) !== primaryLocationId) {
+      return true;
+    }
+
+    if (updateUserDto.locationAssignments === undefined) {
+      return false;
+    }
+
+    const currentAssignments = await this.assignmentModel
+      .find({
+        userId: existingUser._id.toString(),
+        locationId: { $ne: null },
+      })
+      .select('locationId role isPrimary')
+      .lean()
+      .exec();
+    const currentByLocationId = new Map(
+      currentAssignments.map((assignment) => [
+        assignment.locationId ?? '',
+        {
+          role: this.normalizeLocationRole(assignment.role),
+          isPrimary: assignment.isPrimary === true,
+        },
+      ]),
+    );
+
+    if (currentByLocationId.size !== nextLocationAssignments.length) {
+      return true;
+    }
+
+    return nextLocationAssignments.some((assignment) => {
+      const current = currentByLocationId.get(assignment.locationId);
+
+      return (
+        !current ||
+        current.role !== assignment.role ||
+        current.isPrimary !== assignment.isPrimary
+      );
+    });
+  }
+
+  private sameStringSet(left: string[], right: string[]): boolean {
+    const leftSet = new Set(left.filter(Boolean));
+    const rightSet = new Set(right.filter(Boolean));
+
+    if (leftSet.size !== rightSet.size) {
+      return false;
+    }
+
+    return [...leftSet].every((value) => rightSet.has(value));
+  }
+
+  private async assertActorCanManageLocationAssignmentRoles(
+    actor: AuthenticatedUser | undefined,
+    roles: string[],
+  ): Promise<void> {
+    if (!actor || !this.accessPolicy.isScopedLocationManager(actor)) {
+      return;
+    }
+
+    const invalidRole = roles.find(
+      (role) => !this.isLocationManagerAssignableLocationRole(role),
+    );
+
+    if (invalidRole) {
+      throw new ForbiddenException(
+        'Filialleiter duerfen nur operative Standortrollen vergeben',
+      );
+    }
+  }
+
+  private async mergeScopedLocationAssignments(
+    actor: AuthenticatedUser | undefined,
+    existingUser: UserDocument,
+    submittedAssignments: NormalizedLocationAssignment[],
+  ): Promise<NormalizedLocationAssignment[]> {
+    if (!actor || !this.accessPolicy.isScopedLocationManager(actor)) {
+      return submittedAssignments;
+    }
+
+    const manageableLocationIds =
+      await this.accessPolicy.getManageableLocationIds(actor);
+    const submittedOutsideScope = submittedAssignments.find(
+      (assignment) => !manageableLocationIds.includes(assignment.locationId),
+    );
+
+    if (submittedOutsideScope) {
+      throw new ForbiddenException(
+        'Filialleiter duerfen nur eigene Standorte zuweisen',
+      );
+    }
+
+    const currentAssignments = await this.assignmentModel
+      .find({
+        userId: existingUser._id.toString(),
+        locationId: { $ne: null },
+      })
+      .select('locationId role isPrimary')
+      .lean()
+      .exec();
+    const preservedAssignments = currentAssignments
+      .filter(
+        (assignment) =>
+          assignment.locationId &&
+          !manageableLocationIds.includes(assignment.locationId),
+      )
+      .map((assignment) => ({
+        locationId: assignment.locationId ?? '',
+        role: this.normalizeLocationRole(assignment.role),
+        isPrimary: assignment.isPrimary === true,
+      }));
+
+    return this.normalizeLocationAssignments(
+      [...preservedAssignments, ...submittedAssignments],
+      existingUser.roles,
+    );
+  }
+
+  private isLocationManagerAssignableLocationRole(role: string): boolean {
+    return [
+      Role.Waiter,
+      Role.Kitchen,
+      Role.Counter,
+      Role.Cashier,
+      Role.InventoryManager,
+      Role.Dishwasher,
+      Role.Staff,
+    ].includes(this.normalizeLocationRole(role) as Role);
+  }
+
+  private async withLocationAssignments(
+    user: UserResponse,
+    actor?: AuthenticatedUser,
+  ): Promise<UserResponse> {
+    const visibleLocationIds = await this.visibleAssignmentLocationIds(actor);
+    const assignments = await this.assignmentModel
+      .find({
+        userId: user._id,
+        locationId: { $ne: null },
+        ...(visibleLocationIds ? { locationId: { $in: visibleLocationIds } } : {}),
+      })
+      .sort({ isPrimary: -1, createdAt: 1 })
+      .exec();
+
+    return {
+      ...user,
+      locationAssignments: assignments.map((assignment) => ({
+        _id: assignment._id.toString(),
+        tenantId: assignment.tenantId,
+        userId: assignment.userId,
+        locationId: assignment.locationId ?? '',
+        role: this.normalizeLocationRole(assignment.role),
+        isPrimary: assignment.isPrimary === true,
+      })),
+    };
+  }
+
+  private async withLocationAssignmentsForUsers(
+    users: UserResponse[],
+    actor?: AuthenticatedUser,
+  ): Promise<UserResponse[]> {
+    if (!users.length) {
+      return [];
+    }
+
+    const userIds = users.map((user) => user._id);
+    const visibleLocationIds = await this.visibleAssignmentLocationIds(actor);
+    const assignments = await this.assignmentModel
+      .find({
+        userId: { $in: userIds },
+        locationId: { $ne: null },
+        ...(visibleLocationIds ? { locationId: { $in: visibleLocationIds } } : {}),
+      })
+      .sort({ isPrimary: -1, createdAt: 1 })
+      .exec();
+    const assignmentsByUser = new Map<
+      string,
+      UserResponse['locationAssignments']
+    >();
+
+    for (const assignment of assignments) {
+      const rows = assignmentsByUser.get(assignment.userId) ?? [];
+      rows.push({
+        _id: assignment._id.toString(),
+        tenantId: assignment.tenantId,
+        userId: assignment.userId,
+        locationId: assignment.locationId ?? '',
+        role: this.normalizeLocationRole(assignment.role),
+        isPrimary: assignment.isPrimary === true,
+      });
+      assignmentsByUser.set(assignment.userId, rows);
+    }
+
+    return users.map((user) => ({
+      ...user,
+      locationAssignments: assignmentsByUser.get(user._id) ?? [],
+    }));
+  }
+
+  private async visibleAssignmentLocationIds(
+    actor?: AuthenticatedUser,
+  ): Promise<string[] | undefined> {
+    if (!actor || !this.accessPolicy.isScopedLocationManager(actor)) {
+      return undefined;
+    }
+
+    return this.accessPolicy.getManageableLocationIds(actor);
+  }
+
   private async syncLocationAssignments(
     userId: string,
     tenantId: string | undefined,
-    areaIds: string[],
-    regionIds: string[],
+    _areaIds: string[],
+    _regionIds: string[],
     locationIds: string[],
+    locationAssignments: NormalizedLocationAssignment[] = [],
+    primaryLocationId?: string,
   ): Promise<void> {
     if (!tenantId) {
       await this.assignmentModel.deleteMany({ userId }).exec();
       return;
     }
 
-    const uniqueAreaIds = this.getUniqueLocationIds(areaIds);
-    const uniqueRegionIds = this.getUniqueLocationIds(regionIds);
     const uniqueLocationIds = this.getUniqueLocationIds(locationIds);
+    const defaultRole = this.resolveDefaultLocationRole(
+      locationAssignments.map((assignment) => assignment.role),
+    );
+    const primaryId = this.resolvePrimaryLocationId(
+      primaryLocationId,
+      uniqueLocationIds,
+      locationAssignments,
+    );
     await this.assignmentModel
       .deleteMany({
         userId,
       })
       .exec();
     await Promise.all(
-      [
-        ...uniqueAreaIds.map((areaId) =>
+      uniqueLocationIds.map((locationId) =>
           this.assignmentModel
             .updateOne(
-              { userId, areaId, regionId: null, locationId: null },
-              { $set: { userId, tenantId, areaId, regionId: null, locationId: null } },
-              { upsert: true },
-            )
-            .exec(),
-        ),
-        ...uniqueRegionIds.map((regionId) =>
-          this.assignmentModel
-            .updateOne(
-              { userId, regionId, locationId: null },
-              { $set: { userId, tenantId, areaId: null, regionId, locationId: null } },
-              { upsert: true },
-            )
-            .exec(),
-        ),
-        ...uniqueLocationIds.map((locationId) =>
-        this.assignmentModel
-          .updateOne(
-            { userId, locationId },
-            {
-              $set: {
-                userId,
-                tenantId,
-                locationId,
+              { userId, locationId },
+              {
+                $set: {
+                  userId,
+                  tenantId,
+                  areaId: null,
+                  regionId: null,
+                  locationId,
+                  role:
+                    locationAssignments.find(
+                      (assignment) => assignment.locationId === locationId,
+                    )?.role ?? defaultRole,
+                  isPrimary: locationId === primaryId,
+                },
               },
-            },
-            { upsert: true },
-          )
-          .exec(),
+              { upsert: true },
+            )
+            .exec(),
         ),
-      ],
     );
   }
 

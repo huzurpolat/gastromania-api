@@ -3,6 +3,7 @@ import { join } from 'path';
 import {
   ALL_PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
+  LOCATION_ROLE_PERMISSIONS,
 } from './permissions.catalog';
 
 function controllerFiles(directory: string): string[] {
@@ -133,6 +134,33 @@ describe('permissions catalog', () => {
         'users.update',
         'roles.view',
       ]),
+    );
+  });
+
+  it('keeps location role permissions narrow and canonical', () => {
+    const knownPermissions = new Set([...ALL_PERMISSIONS, '*']);
+    const invalidPermissions = Object.values(LOCATION_ROLE_PERMISSIONS)
+      .flat()
+      .filter((permission) => !knownPermissions.has(permission));
+
+    expect(invalidPermissions).toEqual([]);
+    expect(LOCATION_ROLE_PERMISSIONS.WAITER).toEqual(
+      expect.arrayContaining(['orders.view', 'tables.view']),
+    );
+    expect(LOCATION_ROLE_PERMISSIONS.WAITER).toEqual(
+      expect.not.arrayContaining(['counter.orders.pay', 'employees.view']),
+    );
+    expect(LOCATION_ROLE_PERMISSIONS.KITCHEN).toEqual(
+      expect.arrayContaining(['kds.view', 'kds.manage']),
+    );
+    expect(LOCATION_ROLE_PERMISSIONS.KITCHEN).toEqual(
+      expect.not.arrayContaining(['counter.orders.pay', 'payroll.view']),
+    );
+    expect(LOCATION_ROLE_PERMISSIONS.LOCATION_MANAGER).toEqual(
+      expect.arrayContaining(['locations.view', 'employees.view', 'employees.update']),
+    );
+    expect(LOCATION_ROLE_PERMISSIONS.LOCATION_MANAGER).toEqual(
+      expect.not.arrayContaining(['settings.view', 'regions.view', 'payroll.view']),
     );
   });
 });

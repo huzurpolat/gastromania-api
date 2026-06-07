@@ -24,11 +24,11 @@ import { LocationsService } from './locations.service';
 
 @Controller('tenant/locations')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
-@Roles(Role.TenantAdmin, Role.CompanyAdmin)
 export class TenantLocationsController {
   constructor(private readonly locationsService: LocationsService) {}
 
   @Post()
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin)
   create(
     @Body() dto: CreateTenantLocationDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -37,6 +37,7 @@ export class TenantLocationsController {
   }
 
   @Get()
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin, Role.LocationManager, Role.Filialleiter)
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('areaId') areaId?: string,
@@ -51,6 +52,7 @@ export class TenantLocationsController {
   }
 
   @Get(':locationId')
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin, Role.LocationManager, Role.Filialleiter)
   findOne(
     @Param('locationId') locationId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -59,6 +61,7 @@ export class TenantLocationsController {
   }
 
   @Patch(':locationId')
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin)
   update(
     @Param('locationId') locationId: string,
     @Body() dto: UpdateTenantLocationDto,
@@ -68,6 +71,7 @@ export class TenantLocationsController {
   }
 
   @Delete(':locationId')
+  @Roles(Role.TenantAdmin, Role.CompanyAdmin)
   remove(
     @Param('locationId') locationId: string,
     @Query('force') force: string | undefined,

@@ -42,6 +42,7 @@ const COUNTER_VIEW_ROLES = [
   Role.Kueche,
   Role.Bar,
   Role.Theke,
+  Role.Kasse,
 ];
 
 const COUNTER_WRITE_ROLES = [
@@ -57,6 +58,7 @@ const COUNTER_WRITE_ROLES = [
   Role.Schichtleiter,
   Role.Service,
   Role.Theke,
+  Role.Kasse,
 ];
 
 @Controller('counter')

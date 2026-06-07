@@ -17,7 +17,14 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { CreateAbsenceDto } from './dto/absence.dto';
+import { STAFF_MANAGEMENT_MODULE_KEY } from '../modules/constants/module-definitions';
+import { RequireModule } from '../modules/decorators/require-module.decorator';
+import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
+import {
+  AbsenceFiltersDto,
+  CreateAbsenceDto,
+  ReviewAbsenceDto,
+} from './dto/absence.dto';
 import {
   CreateAvailabilityDto,
   UpdateAvailabilityDto,
@@ -37,27 +44,35 @@ import { StaffShiftStatus } from './schemas/staff-shift.schema';
 import { StaffPlanningService } from './staff-planning.service';
 
 const staffRoles = [
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdminCode,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,
   Role.Regionalleiter,
   Role.Bereichsleiter,
+  Role.LocationManager,
   Role.Filialleiter,
   Role.Restaurantleiter,
   Role.Schichtleiter,
+  Role.Waiter,
   Role.Service,
+  Role.Kitchen,
   Role.Kueche,
+  Role.Counter,
+  Role.Cashier,
+  Role.InventoryManager,
   Role.Lager,
+  Role.Dishwasher,
   Role.Reinigung,
   Role.Tellerwaescher,
+  Role.Staff,
   Role.Personalabteilung,
 ];
 
 @Controller('staff')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, ModuleEnabledGuard)
 @Roles(...staffRoles)
+@RequireModule(STAFF_MANAGEMENT_MODULE_KEY)
 export class StaffPlanningController {
   constructor(private readonly staffPlanningService: StaffPlanningService) {}
 
@@ -190,6 +205,12 @@ export class StaffPlanningController {
     return this.staffPlanningService.cancelShift(id, user);
   }
 
+  @Delete('shifts/:id')
+  @Permissions('schedule.delete')
+  deleteShift(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.staffPlanningService.deleteShift(id, user);
+  }
+
   @Get('availability')
   @Permissions('schedule.view')
   findAvailability(
@@ -235,9 +256,15 @@ export class StaffPlanningController {
   @Permissions('absence.view')
   findAbsences(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('userId') userId?: string,
+    @Query() filters: AbsenceFiltersDto,
   ) {
-    return this.staffPlanningService.findAbsences(user, { userId });
+    return this.staffPlanningService.findAbsences(user, filters);
+  }
+
+  @Get('absences/:id')
+  @Permissions('absence.view')
+  findAbsence(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.staffPlanningService.findAbsence(id, user);
   }
 
   @Post('absences')
@@ -253,18 +280,20 @@ export class StaffPlanningController {
   @Permissions('absence.approve')
   approveAbsence(
     @Param('id') id: string,
+    @Body() payload: ReviewAbsenceDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.staffPlanningService.approveAbsence(id, user);
+    return this.staffPlanningService.approveAbsence(id, user, payload);
   }
 
   @Patch('absences/:id/reject')
   @Permissions('absence.approve')
   rejectAbsence(
     @Param('id') id: string,
+    @Body() payload: ReviewAbsenceDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.staffPlanningService.rejectAbsence(id, user);
+    return this.staffPlanningService.rejectAbsence(id, user, payload);
   }
 
   @Patch('absences/:id/cancel')

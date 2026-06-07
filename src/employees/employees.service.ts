@@ -44,7 +44,14 @@ export class EmployeesService {
         user.locationId,
         ...(user.locationIds ?? []),
         ...(user.managedLocationIds ?? []),
+        ...(user.locationAssignments?.map(
+          (assignment) => assignment.locationId,
+        ) ?? []),
       ].filter(Boolean);
+      const assignmentRoles =
+        user.locationAssignments
+          ?.map((assignment) => assignment.role)
+          .filter((role): role is string => Boolean(role)) ?? [];
       const departmentIds = user.departmentIds ?? [];
       const qualifications = user.qualifications ?? [];
       const searchable = [
@@ -66,7 +73,9 @@ export class EmployeesService {
         (!filters.qualification ||
           qualifications.includes(filters.qualification) ||
           user.roles.includes(filters.qualification)) &&
-        (!filters.role || user.roles.includes(filters.role)) &&
+        (!filters.role ||
+          user.roles.includes(filters.role) ||
+          assignmentRoles.includes(filters.role)) &&
         (!filters.employmentType ||
           user.employmentType === filters.employmentType ||
           user.contractType === filters.employmentType) &&

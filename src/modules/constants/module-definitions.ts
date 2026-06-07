@@ -10,6 +10,7 @@ export interface ModuleDefinition {
 
 export const COUNTER_ORDERS_MODULE_KEY = 'counter_orders';
 export const STAFF_MANAGEMENT_MODULE_KEY = 'staff_management';
+export const TIME_TRACKING_MODULE_KEY = 'time_tracking';
 export const INVENTORY_MODULE_KEY = 'inventory';
 export const KDS_MODULE_KEY = 'kds';
 export const REPORTING_MODULE_KEY = 'reporting';
@@ -126,6 +127,15 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
     sortOrder: 120,
   },
   {
+    key: TIME_TRACKING_MODULE_KEY,
+    name: 'Zeiterfassung',
+    description: 'Einfache Stempeluhr fuer Mitarbeiter und Standortleiter.',
+    category: 'Personal',
+    defaultEnabled: true,
+    systemLocked: false,
+    sortOrder: 125,
+  },
+  {
     key: 'reporting',
     name: 'Reporting',
     description: 'Auswertungen, Kennzahlen und Management-Reports.',
@@ -177,6 +187,7 @@ export const MODULE_KEY_ALIASES: Record<string, string> = {
   margins: 'cost_of_goods',
   daily_closings: 'daily_closing',
   staff: STAFF_MANAGEMENT_MODULE_KEY,
+  timeTracking: TIME_TRACKING_MODULE_KEY,
 };
 
 export function normalizeModuleKey(key: string): string {

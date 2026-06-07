@@ -22,6 +22,12 @@ export class UserLocationAssignment {
 
   @Prop({ type: String, trim: true, index: true, default: null })
   locationId?: string | null;
+
+  @Prop({ required: true, trim: true, index: true })
+  role!: string;
+
+  @Prop({ type: Boolean, default: false })
+  isPrimary?: boolean;
 }
 
 export const UserLocationAssignmentSchema = SchemaFactory.createForClass(
@@ -31,6 +37,15 @@ export const UserLocationAssignmentSchema = SchemaFactory.createForClass(
 UserLocationAssignmentSchema.index({ userId: 1, areaId: 1 });
 UserLocationAssignmentSchema.index({ userId: 1, regionId: 1 });
 UserLocationAssignmentSchema.index({ userId: 1, locationId: 1 });
+UserLocationAssignmentSchema.index(
+  { tenantId: 1, userId: 1, locationId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      locationId: { $type: 'string' },
+    },
+  },
+);
 UserLocationAssignmentSchema.index({
   tenantId: 1,
   areaId: 1,

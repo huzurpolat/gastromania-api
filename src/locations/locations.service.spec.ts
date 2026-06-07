@@ -85,6 +85,8 @@ describe('LocationsService', () => {
     canAccessLocation: jest.fn(),
     assertCanManageLocation: jest.fn(),
     isCompanyAdmin: jest.fn(),
+    isScopedLocationManager: jest.fn(),
+    getManageableLocationIds: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -146,6 +148,8 @@ describe('LocationsService', () => {
     accessPolicy.getReadableLocationFilter.mockResolvedValue({});
     accessPolicy.canAccessLocation.mockResolvedValue(true);
     accessPolicy.isCompanyAdmin.mockReturnValue(true);
+    accessPolicy.isScopedLocationManager.mockReturnValue(false);
+    accessPolicy.getManageableLocationIds.mockResolvedValue([]);
     tableModel.countDocuments.mockResolvedValue(1);
     tableModel.exists.mockResolvedValue(null);
     tableModel.deleteMany.mockReturnValue({
@@ -282,6 +286,35 @@ describe('LocationsService', () => {
 
     await expect(service.findAll(actor)).resolves.toEqual([location]);
     expect(sort).toHaveBeenCalledWith({ createdAt: -1 });
+  });
+
+  it('returns only own tenant locations for scoped location managers', async () => {
+    const exec = jest.fn().mockResolvedValue([location]);
+    const sort = jest.fn().mockReturnValue({ exec });
+    locationModel.find.mockReturnValue({ sort });
+    accessPolicy.isCompanyAdmin.mockReturnValue(false);
+    accessPolicy.isScopedLocationManager.mockReturnValue(true);
+    accessPolicy.getManageableLocationIds.mockResolvedValue([
+      '6627d9a2c6f2d8f3e2b1a001',
+    ]);
+
+    await expect(
+      service.findTenantLocations({
+        ...actor,
+        roles: ['Filialleiter'],
+        locationAssignments: [
+          {
+            locationId: '6627d9a2c6f2d8f3e2b1a001',
+            role: 'LOCATION_MANAGER',
+          },
+        ],
+      } as never),
+    ).resolves.toEqual([location]);
+
+    expect(locationModel.find).toHaveBeenCalledWith({
+      tenantId: 'tenant-nrw',
+      _id: { $in: ['6627d9a2c6f2d8f3e2b1a001'] },
+    });
   });
 
   it('returns one location by id', async () => {

@@ -14,6 +14,9 @@ export enum StaffShiftStatus {
 @Schema({ timestamps: true, versionKey: false })
 export class StaffShift {
   @Prop({ trim: true, index: true })
+  tenantId?: string;
+
+  @Prop({ trim: true, index: true })
   companyId?: string;
 
   @Prop({ trim: true, index: true })
@@ -68,3 +71,4 @@ export const StaffShiftSchema = SchemaFactory.createForClass(StaffShift);
 
 StaffShiftSchema.index({ locationId: 1, startTime: 1, endTime: 1 });
 StaffShiftSchema.index({ assignedUserIds: 1, startTime: 1, endTime: 1 });
+StaffShiftSchema.index({ tenantId: 1, locationId: 1, startTime: 1 });

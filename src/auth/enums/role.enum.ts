@@ -27,6 +27,7 @@ export enum Role {
   Kasse = 'Kasse',
   InventoryManager = 'INVENTORY_MANAGER',
   Lager = 'Lager',
+  Dishwasher = 'DISHWASHER',
   Employee = 'EMPLOYEE',
   Staff = 'STAFF',
   Einkauf = 'Einkauf',

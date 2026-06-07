@@ -2,7 +2,12 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
+import { ModulesModule } from '../modules/modules.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import {
+  UserLocationAssignment,
+  UserLocationAssignmentSchema,
+} from '../users/schemas/user-location-assignment.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import {
   ShiftSwapRequest,
@@ -36,6 +41,7 @@ import { StaffPlanningService } from './staff-planning.service';
 @Module({
   imports: [
     AuthJwtModule,
+    ModulesModule,
     RealtimeModule,
     MongooseModule.forFeature([
       { name: StaffShift.name, schema: StaffShiftSchema },
@@ -46,6 +52,10 @@ import { StaffPlanningService } from './staff-planning.service';
       { name: StaffPlanningAudit.name, schema: StaffPlanningAuditSchema },
       { name: StaffNotification.name, schema: StaffNotificationSchema },
       { name: User.name, schema: UserSchema },
+      {
+        name: UserLocationAssignment.name,
+        schema: UserLocationAssignmentSchema,
+      },
       { name: Location.name, schema: LocationSchema },
     ]),
   ],

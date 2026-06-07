@@ -17,6 +17,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { STAFF_MANAGEMENT_MODULE_KEY } from '../modules/constants/module-definitions';
+import { RequireModule } from '../modules/decorators/require-module.decorator';
+import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { UserResponse } from '../users/schemas/user.schema';
@@ -27,13 +30,15 @@ import {
 } from './employees.service';
 
 const employeeRoles = [
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdminCode,
   Role.CompanyAdmin,
+  Role.AreaManager,
+  Role.RegionalManager,
   Role.RegionAdmin,
   Role.Admin,
   Role.Regionalleiter,
   Role.Bereichsleiter,
+  Role.LocationManager,
   Role.Filialleiter,
   Role.Restaurantleiter,
   Role.Schichtleiter,
@@ -41,8 +46,9 @@ const employeeRoles = [
 ];
 
 @Controller('employees')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, ModuleEnabledGuard)
 @Roles(...employeeRoles)
+@RequireModule(STAFF_MANAGEMENT_MODULE_KEY)
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 

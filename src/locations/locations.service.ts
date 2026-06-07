@@ -113,8 +113,19 @@ export class LocationsService {
     filters: { areaId?: string; regionId?: string; cityId?: string } = {},
   ): Promise<LocationDocument[]> {
     const tenantId = this.resolveTenantId(undefined, actor);
-    this.assertTenantAdmin(actor);
+    const isTenantAdmin = this.accessPolicy.isCompanyAdmin(actor);
+    const isScopedLocationManager =
+      this.accessPolicy.isScopedLocationManager(actor);
+    if (!isTenantAdmin && !isScopedLocationManager) {
+      throw new ForbiddenException('Keine Berechtigung fuer Tenant-Standorte');
+    }
     const filter: Record<string, unknown> = { tenantId };
+
+    if (isScopedLocationManager) {
+      filter._id = {
+        $in: await this.accessPolicy.getManageableLocationIds(actor),
+      };
+    }
 
     if (filters.areaId || filters.regionId || filters.cityId) {
       await this.resolveOptionalTenantHierarchy(tenantId, filters);
@@ -132,7 +143,18 @@ export class LocationsService {
   ): Promise<LocationDocument> {
     this.validateObjectId(id);
     const tenantId = this.resolveTenantId(undefined, actor);
-    this.assertTenantAdmin(actor);
+    const isTenantAdmin = this.accessPolicy.isCompanyAdmin(actor);
+    const isScopedLocationManager =
+      this.accessPolicy.isScopedLocationManager(actor);
+    if (!isTenantAdmin && !isScopedLocationManager) {
+      throw new ForbiddenException('Keine Berechtigung fuer Tenant-Standorte');
+    }
+    if (
+      isScopedLocationManager &&
+      !(await this.accessPolicy.canManageLocation(actor, id))
+    ) {
+      throw new NotFoundException('Standort nicht gefunden');
+    }
     const location = await this.locationModel
       .findOne({ _id: id, tenantId })
       .exec();

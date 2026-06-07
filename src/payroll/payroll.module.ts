@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AccessModule } from '../access/access.module';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
+import { ModulesModule } from '../modules/modules.module';
 import {
   StaffAbsence,
   StaffAbsenceSchema,
@@ -22,6 +23,7 @@ import { PayrollService } from './payroll.service';
   imports: [
     AccessModule,
     AuthJwtModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: TimeEntry.name, schema: TimeEntrySchema },

@@ -308,7 +308,7 @@ export class HrService {
       return query;
     }
     if (this.accessPolicy.isPlatformAdmin(actor)) {
-      return query;
+      throw new ForbiddenException('Nicht ausreichende Berechtigung');
     }
     const locationIds = await this.accessPolicy.getReadableLocationIds(actor);
     return locationIds.length

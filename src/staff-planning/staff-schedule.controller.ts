@@ -17,6 +17,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { STAFF_MANAGEMENT_MODULE_KEY } from '../modules/constants/module-definitions';
+import { RequireModule } from '../modules/decorators/require-module.decorator';
+import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import {
   CreateStaffShiftDto,
   UpdateStaffShiftDto,
@@ -28,22 +31,35 @@ import {
 } from './staff-planning.service';
 
 const staffScheduleRoles = [
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdminCode,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,
   Role.Regionalleiter,
   Role.Bereichsleiter,
+  Role.LocationManager,
   Role.Filialleiter,
   Role.Restaurantleiter,
   Role.Schichtleiter,
+  Role.Waiter,
+  Role.Service,
+  Role.Kitchen,
+  Role.Kueche,
+  Role.Counter,
+  Role.Cashier,
+  Role.InventoryManager,
+  Role.Lager,
+  Role.Dishwasher,
+  Role.Reinigung,
+  Role.Tellerwaescher,
+  Role.Staff,
   Role.Personalabteilung,
 ];
 
 @Controller('staff-schedule')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, ModuleEnabledGuard)
 @Roles(...staffScheduleRoles)
+@RequireModule(STAFF_MANAGEMENT_MODULE_KEY)
 export class StaffScheduleController {
   constructor(private readonly staffPlanningService: StaffPlanningService) {}
 
@@ -91,7 +107,7 @@ export class StaffScheduleController {
   @Delete('shifts/:id')
   @Permissions('schedule.delete')
   deleteShift(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.staffPlanningService.cancelShift(id, user);
+    return this.staffPlanningService.deleteShift(id, user);
   }
 
   @Post('publish')

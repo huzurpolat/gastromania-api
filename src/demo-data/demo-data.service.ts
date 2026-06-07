@@ -179,6 +179,7 @@ export class DemoDataService implements OnApplicationBootstrap {
     'inventory',
     'recipes',
     'staff_management',
+    'time_tracking',
     'module_management',
   ]);
   private readonly developmentTenantConfigs: DevelopmentTenantConfig[] = [
@@ -1123,6 +1124,7 @@ export class DemoDataService implements OnApplicationBootstrap {
     passwordHash: string,
   ): Promise<UserDocument[]> {
     const locationIds = locations.map((location) => location._id.toString());
+    const demoNames = this.getDevelopmentTenantUserNames(tenant.slug);
     const configs: Array<{
       email: string;
       firstName: string;
@@ -1133,51 +1135,71 @@ export class DemoDataService implements OnApplicationBootstrap {
     }> = [
       {
         email: `admin@${tenant.slug}.demo`,
-        firstName: 'Admin',
-        lastName: tenant.name,
+        firstName: demoNames.admin.firstName,
+        lastName: demoNames.admin.lastName,
         roles: [Role.TenantAdminCode],
         locationIds,
         managedLocationIds: locationIds,
       },
       {
         email: `regionalleiter@${tenant.slug}.demo`,
-        firstName: 'Regionalleitung',
-        lastName: tenant.name,
+        firstName: demoNames.regionalManager.firstName,
+        lastName: demoNames.regionalManager.lastName,
         roles: [Role.Regionalleiter],
         locationIds,
         managedLocationIds: locationIds,
       },
     ];
 
-    for (const location of locations) {
+    for (const [locationIndex, location] of locations.entries()) {
       const citySlug = this.slugify(location.city);
       const locationId = location._id.toString();
+      const locationManager =
+        demoNames.locationManagers[
+          locationIndex % demoNames.locationManagers.length
+        ];
 
       configs.push(
         {
           email: `filialleiter.${citySlug}@${tenant.slug}.demo`,
-          firstName: 'Filialleitung',
-          lastName: location.city,
+          firstName: locationManager.firstName,
+          lastName: locationManager.lastName,
           roles: [Role.Filialleiter],
           locationIds: [locationId],
           managedLocationIds: [locationId],
         },
-        ...[1, 2].map((number) => ({
-          email: `service${number}.${citySlug}@${tenant.slug}.demo`,
-          firstName: `Service ${number}`,
-          lastName: location.city,
-          roles: [Role.Service],
-          locationIds: [locationId],
-          managedLocationIds: [],
-        })),
-        ...[1, 2].map((number) => ({
-          email: `kueche${number}.${citySlug}@${tenant.slug}.demo`,
-          firstName: `Kueche ${number}`,
-          lastName: location.city,
-          roles: [Role.Kueche],
-          locationIds: [locationId],
-          managedLocationIds: [],
-        })),
+        ...[0, 1].map((offset) => {
+          const person =
+            demoNames.service[
+              (locationIndex * 2 + offset) % demoNames.service.length
+            ];
+          const number = offset + 1;
+
+          return {
+            email: `service${number}.${citySlug}@${tenant.slug}.demo`,
+            firstName: person.firstName,
+            lastName: person.lastName,
+            roles: [Role.Service],
+            locationIds: [locationId],
+            managedLocationIds: [],
+          };
+        }),
+        ...[0, 1].map((offset) => {
+          const person =
+            demoNames.kitchen[
+              (locationIndex * 2 + offset) % demoNames.kitchen.length
+            ];
+          const number = offset + 1;
+
+          return {
+            email: `kueche${number}.${citySlug}@${tenant.slug}.demo`,
+            firstName: person.firstName,
+            lastName: person.lastName,
+            roles: [Role.Kueche],
+            locationIds: [locationId],
+            managedLocationIds: [],
+          };
+        }),
       );
     }
 
@@ -1214,6 +1236,142 @@ export class DemoDataService implements OnApplicationBootstrap {
           )
           .exec(),
       ),
+    );
+  }
+
+  private getDevelopmentTenantUserNames(tenantSlug: string): {
+    admin: { firstName: string; lastName: string };
+    regionalManager: { firstName: string; lastName: string };
+    locationManagers: Array<{ firstName: string; lastName: string }>;
+    service: Array<{ firstName: string; lastName: string }>;
+    kitchen: Array<{ firstName: string; lastName: string }>;
+  } {
+    const namesByTenant: Record<
+      string,
+      {
+        admin: { firstName: string; lastName: string };
+        regionalManager: { firstName: string; lastName: string };
+        locationManagers: Array<{ firstName: string; lastName: string }>;
+        service: Array<{ firstName: string; lastName: string }>;
+        kitchen: Array<{ firstName: string; lastName: string }>;
+      }
+    > = {
+      burgermania: {
+        admin: { firstName: 'Marlene', lastName: 'Schuster' },
+        regionalManager: { firstName: 'Nico', lastName: 'Berger' },
+        locationManagers: [
+          { firstName: 'Laura', lastName: 'Kramer' },
+          { firstName: 'Emre', lastName: 'Yildiz' },
+          { firstName: 'Felix', lastName: 'Hoffmann' },
+        ],
+        service: [
+          { firstName: 'Sophie', lastName: 'Brandt' },
+          { firstName: 'Jonas', lastName: 'Meier' },
+          { firstName: 'Mila', lastName: 'Neumann' },
+          { firstName: 'Tom', lastName: 'Klein' },
+          { firstName: 'Lea', lastName: 'Sommer' },
+          { firstName: 'Ben', lastName: 'Wagner' },
+        ],
+        kitchen: [
+          { firstName: 'David', lastName: 'Koch' },
+          { firstName: 'Nina', lastName: 'Vogel' },
+          { firstName: 'Paul', lastName: 'Richter' },
+          { firstName: 'Sara', lastName: 'Wolf' },
+          { firstName: 'Elias', lastName: 'Hartmann' },
+          { firstName: 'Clara', lastName: 'Weber' },
+        ],
+      },
+      'crispy-chicken': {
+        admin: { firstName: 'Katharina', lastName: 'Lorenz' },
+        regionalManager: { firstName: 'Daniel', lastName: 'Krueger' },
+        locationManagers: [
+          { firstName: 'Aylin', lastName: 'Demir' },
+          { firstName: 'Markus', lastName: 'Seidel' },
+        ],
+        service: [
+          { firstName: 'Hannah', lastName: 'Bauer' },
+          { firstName: 'Lukas', lastName: 'Fischer' },
+          { firstName: 'Maja', lastName: 'Schneider' },
+          { firstName: 'Noah', lastName: 'Becker' },
+        ],
+        kitchen: [
+          { firstName: 'Omar', lastName: 'Hassan' },
+          { firstName: 'Julia', lastName: 'Lehmann' },
+          { firstName: 'Timo', lastName: 'Schwarz' },
+          { firstName: 'Eva', lastName: 'Peters' },
+        ],
+      },
+      'pasta-house': {
+        admin: { firstName: 'Isabel', lastName: 'Graf' },
+        regionalManager: { firstName: 'Marco', lastName: 'Bellini' },
+        locationManagers: [
+          { firstName: 'Chiara', lastName: 'Mertens' },
+          { firstName: 'Sebastian', lastName: 'Lang' },
+        ],
+        service: [
+          { firstName: 'Lena', lastName: 'Krause' },
+          { firstName: 'Mats', lastName: 'Zimmer' },
+          { firstName: 'Amelie', lastName: 'Scholz' },
+          { firstName: 'Leon', lastName: 'Frey' },
+        ],
+        kitchen: [
+          { firstName: 'Giulia', lastName: 'Romano' },
+          { firstName: 'Fabian', lastName: 'Keller' },
+          { firstName: 'Miriam', lastName: 'Jansen' },
+          { firstName: 'Robert', lastName: 'Hahn' },
+        ],
+      },
+      'grill-factory': {
+        admin: { firstName: 'Stefanie', lastName: 'Busch' },
+        regionalManager: { firstName: 'Patrick', lastName: 'Schmidt' },
+        locationManagers: [
+          { firstName: 'Svenja', lastName: 'Korte' },
+          { firstName: 'Can', lastName: 'Arslan' },
+        ],
+        service: [
+          { firstName: 'Melina', lastName: 'Voigt' },
+          { firstName: 'Jan', lastName: 'Bergmann' },
+          { firstName: 'Nora', lastName: 'Hein' },
+          { firstName: 'Simon', lastName: 'Dietz' },
+        ],
+        kitchen: [
+          { firstName: 'Ali', lastName: 'Kaya' },
+          { firstName: 'Greta', lastName: 'Moser' },
+          { firstName: 'Philipp', lastName: 'Kuhn' },
+          { firstName: 'Rosa', lastName: 'Maas' },
+        ],
+      },
+      'frittenwerk-demo': {
+        admin: { firstName: 'Annika', lastName: 'Fischer' },
+        regionalManager: { firstName: 'Robin', lastName: 'Neumann' },
+        locationManagers: [
+          { firstName: 'Mara', lastName: 'Schulte' },
+        ],
+        service: [
+          { firstName: 'Lena', lastName: 'Hartmann' },
+          { firstName: 'Jonas', lastName: 'Becker' },
+        ],
+        kitchen: [
+          { firstName: 'Kira', lastName: 'Wagner' },
+          { firstName: 'Samir', lastName: 'Yilmaz' },
+        ],
+      },
+    };
+
+    return (
+      namesByTenant[tenantSlug] ?? {
+        admin: { firstName: 'Alex', lastName: 'Meyer' },
+        regionalManager: { firstName: 'Rene', lastName: 'Scholz' },
+        locationManagers: [{ firstName: 'Kim', lastName: 'Bauer' }],
+        service: [
+          { firstName: 'Lisa', lastName: 'Weber' },
+          { firstName: 'Max', lastName: 'Klein' },
+        ],
+        kitchen: [
+          { firstName: 'Nina', lastName: 'Hoffmann' },
+          { firstName: 'Tim', lastName: 'Schneider' },
+        ],
+      }
     );
   }
 

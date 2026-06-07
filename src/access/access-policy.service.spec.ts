@@ -225,6 +225,28 @@ describe('AccessPolicyService', () => {
     ).toBe(false);
   });
 
+  it('limits scoped LOCATION_MANAGER users to their managed assignment locations and operative roles', async () => {
+    const locationManager = user([Role.Staff, Role.Filialleiter], {
+      tenantId: 'tenant-nrw',
+      locationIds: ['bonn', 'essen'],
+      locationAssignments: [
+        { locationId: 'bonn', role: Role.LocationManager, isPrimary: true },
+        { locationId: 'essen', role: Role.Waiter, isPrimary: false },
+      ],
+    });
+
+    expect(service.isScopedLocationManager(locationManager)).toBe(true);
+    await expect(
+      service.getManageableLocationIds(locationManager),
+    ).resolves.toEqual(['bonn']);
+    expect(service.canAssignRole(locationManager, Role.Waiter)).toBe(true);
+    expect(service.canAssignRole(locationManager, Role.Kitchen)).toBe(true);
+    expect(service.canAssignRole(locationManager, Role.LocationManager)).toBe(
+      false,
+    );
+    expect(service.canAssignRole(locationManager, Role.TenantAdmin)).toBe(false);
+  });
+
   it('enforces the user-management hierarchy by role and scope', async () => {
     await expect(
       service.canManageUser(
@@ -296,6 +318,34 @@ describe('AccessPolicyService', () => {
           managedLocationIds: [],
         } as never,
       ),
+    ).resolves.toBe(false);
+  });
+
+  it('lets scoped LOCATION_MANAGER users manage employees sharing one own location only', async () => {
+    const locationManager = user([Role.Staff, Role.Filialleiter], {
+      tenantId: 'tenant-nrw',
+      locationIds: ['bonn', 'essen'],
+      locationAssignments: [
+        { locationId: 'bonn', role: Role.LocationManager, isPrimary: true },
+        { locationId: 'essen', role: Role.Waiter, isPrimary: false },
+      ],
+    });
+
+    await expect(
+      service.canManageUser(locationManager, {
+        roles: [Role.Service],
+        tenantId: 'tenant-nrw',
+        locationIds: ['bonn', 'essen'],
+        managedLocationIds: [],
+      } as never),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageUser(locationManager, {
+        roles: [Role.Service],
+        tenantId: 'tenant-nrw',
+        locationIds: ['essen'],
+        managedLocationIds: [],
+      } as never),
     ).resolves.toBe(false);
   });
 

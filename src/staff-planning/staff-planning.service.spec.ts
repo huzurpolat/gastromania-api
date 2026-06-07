@@ -5,6 +5,7 @@ import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
 import { Location } from '../locations/schemas/location.schema';
 import { RealtimeService } from '../realtime/realtime.service';
+import { UserLocationAssignment } from '../users/schemas/user-location-assignment.schema';
 import { User } from '../users/schemas/user.schema';
 import { ShiftSwapRequest } from './schemas/shift-swap-request.schema';
 import {
@@ -28,6 +29,7 @@ describe('StaffPlanningService', () => {
     sub: '507f1f77bcf86cd799439099',
     email: 'filialleiter@test.local',
     roles: [Role.Filialleiter],
+    tenantId: 'tenant-1',
     companyId: 'company-1',
     locationIds: [locationId],
     managedLocationIds: [locationId],
@@ -37,18 +39,21 @@ describe('StaffPlanningService', () => {
     isActive: true,
     email: 'service@test.local',
     roles: [Role.Service],
+    tenantId: 'tenant-1',
     companyId: 'company-1',
     locationIds: [locationId],
     departmentIds: [],
   };
   const location = {
     _id: { toString: () => locationId },
+    tenantId: 'tenant-1',
     companyId: 'company-1',
     regionId: 'region-nrw',
   };
   const shiftModel = {
     create: jest.fn(),
     exists: jest.fn(),
+    countDocuments: jest.fn(),
     findById: jest.fn(),
     find: jest.fn(),
   };
@@ -81,9 +86,13 @@ describe('StaffPlanningService', () => {
     findById: jest.fn(),
     find: jest.fn(),
   };
+  const assignmentModel = {
+    findOne: jest.fn(),
+  };
   const locationModel = { findById: jest.fn() };
   const accessPolicy = {
     isPlatformAdmin: jest.fn(),
+    isScopedLocationManager: jest.fn(),
     isManagementRole: jest.fn(),
     assertCanManageLocation: jest.fn(),
     assertCanAccessLocation: jest.fn(),
@@ -91,6 +100,7 @@ describe('StaffPlanningService', () => {
     assertCanManageUser: jest.fn(),
     getScopedResourceFilter: jest.fn(),
     getReadableLocationIds: jest.fn(),
+    getManageableLocationIds: jest.fn(),
     getManageableUsersFilter: jest.fn(),
   };
   const realtimeService = { publish: jest.fn() };
@@ -98,6 +108,7 @@ describe('StaffPlanningService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     accessPolicy.isPlatformAdmin.mockReturnValue(false);
+    accessPolicy.isScopedLocationManager.mockReturnValue(false);
     accessPolicy.isManagementRole.mockReturnValue(true);
     accessPolicy.assertCanManageLocation.mockResolvedValue(undefined);
     accessPolicy.assertCanAccessLocation.mockResolvedValue(undefined);
@@ -105,6 +116,7 @@ describe('StaffPlanningService', () => {
     accessPolicy.assertCanManageUser.mockResolvedValue(undefined);
     accessPolicy.getScopedResourceFilter.mockResolvedValue({ locationId });
     accessPolicy.getReadableLocationIds.mockResolvedValue([locationId]);
+    accessPolicy.getManageableLocationIds.mockResolvedValue([locationId]);
     accessPolicy.getManageableUsersFilter.mockResolvedValue({
       locationIds: locationId,
     });
@@ -119,7 +131,17 @@ describe('StaffPlanningService', () => {
         exec: jest.fn().mockResolvedValue([employee]),
       }),
     });
+    assignmentModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          role: Role.Waiter,
+        }),
+      }),
+    });
     shiftModel.exists.mockResolvedValue(null);
+    shiftModel.countDocuments.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(0),
+    });
     absenceModel.exists.mockResolvedValue(null);
     shiftModel.create.mockImplementation((payload: Record<string, unknown>) =>
       Promise.resolve({
@@ -176,6 +198,10 @@ describe('StaffPlanningService', () => {
           useValue: notificationModel,
         },
         { provide: getModelToken(User.name), useValue: userModel },
+        {
+          provide: getModelToken(UserLocationAssignment.name),
+          useValue: assignmentModel,
+        },
         { provide: getModelToken(Location.name), useValue: locationModel },
         { provide: AccessPolicyService, useValue: accessPolicy },
         { provide: RealtimeService, useValue: realtimeService },
@@ -215,6 +241,54 @@ describe('StaffPlanningService', () => {
 
   it('prevents double booking an employee', async () => {
     shiftModel.exists.mockResolvedValueOnce({ _id: 'conflict' });
+
+    await expect(
+      service.createShift(
+        {
+          locationId,
+          roleNeeded: Role.Service,
+          title: 'Service Frueh',
+          startTime: '2026-06-08T08:00:00.000Z',
+          endTime: '2026-06-08T14:00:00.000Z',
+          requiredStaffCount: 1,
+          assignedUserIds: [userId],
+        },
+        actor,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('requires an employee location assignment before planning a shift', async () => {
+    assignmentModel.findOne.mockReturnValueOnce({
+      select: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(null),
+      }),
+    });
+
+    await expect(
+      service.createShift(
+        {
+          locationId,
+          roleNeeded: Role.Service,
+          title: 'Service Frueh',
+          startTime: '2026-06-08T08:00:00.000Z',
+          endTime: '2026-06-08T14:00:00.000Z',
+          requiredStaffCount: 1,
+          assignedUserIds: [userId],
+        },
+        actor,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('requires the employee location role to match the shift role', async () => {
+    assignmentModel.findOne.mockReturnValueOnce({
+      select: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          role: Role.Kitchen,
+        }),
+      }),
+    });
 
     await expect(
       service.createShift(
@@ -286,12 +360,60 @@ describe('StaffPlanningService', () => {
       actor,
     );
 
-    expect(absence.status).toBe(StaffAbsenceStatus.Requested);
+    expect(absence.status).toBe(StaffAbsenceStatus.Pending);
+    expect(absenceModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        employeeId: userId,
+        requestedByUserId: actor.sub,
+      }),
+    );
     expect(notificationModel.create).toHaveBeenCalledWith(
       expect.objectContaining({
         targetRole: Role.Filialleiter,
         type: 'staff.absence.requested',
       }),
     );
+  });
+
+  it('marks approved absences with a shift conflict warning', async () => {
+    const absence = {
+      _id: { toString: () => '507f1f77bcf86cd799439015' },
+      userId,
+      employeeId: userId,
+      locationId,
+      companyId: 'company-1',
+      tenantId: 'tenant-1',
+      type: StaffAbsenceType.Vacation,
+      status: StaffAbsenceStatus.Pending,
+      startDate: new Date('2026-06-10T00:00:00.000Z'),
+      endDate: new Date('2026-06-12T23:59:59.999Z'),
+      save: jest.fn().mockImplementation(function save(this: unknown) {
+        return Promise.resolve(this);
+      }),
+      toObject: () => ({
+        userId,
+        employeeId: userId,
+        locationId,
+        status: StaffAbsenceStatus.Pending,
+      }),
+    };
+    absenceModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(absence),
+    });
+    shiftModel.countDocuments.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(2),
+    });
+
+    const approved = await service.approveAbsence(
+      '507f1f77bcf86cd799439015',
+      actor,
+      { managerNote: 'Genehmigt, Schichten umbuchen' },
+    );
+
+    expect(approved.status).toBe(StaffAbsenceStatus.Approved);
+    expect(approved.hasShiftConflicts).toBe(true);
+    expect(approved.shiftConflictCount).toBe(2);
+    expect(approved.managerNote).toBe('Genehmigt, Schichten umbuchen');
   });
 });
