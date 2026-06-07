@@ -21,10 +21,22 @@ import {
   DutyShiftDocument,
 } from '../duty-schedules/schemas/duty-shift.schema';
 import {
+  StaffAbsence,
+  StaffAbsenceDocument,
+  StaffAbsenceStatus,
+  StaffAbsenceType,
+} from '../staff-planning/schemas/staff-absence.schema';
+import {
+  StaffShift,
+  StaffShiftDocument,
+  StaffShiftStatus,
+} from '../staff-planning/schemas/staff-shift.schema';
+import {
   InternalMessage,
   InternalMessageDocument,
   InternalMessagePriority,
 } from '../internal-messages/schemas/internal-message.schema';
+import { City, CityDocument } from '../cities/schemas/city.schema';
 import {
   Location,
   LocationDocument,
@@ -34,10 +46,14 @@ import {
   MenuItemDocument,
 } from '../menu-items/schemas/menu-item.schema';
 import {
+  CourseType,
   Order,
   OrderDocument,
+  OrderItemStatus,
   OrderSource,
   OrderStatus,
+  OrderTenantResolutionStatus,
+  PaymentMethod,
   PaymentStatus,
   ProductionArea,
 } from '../orders/schemas/order.schema';
@@ -60,7 +76,18 @@ import {
   TableShape,
   TableStatus,
 } from '../tables/schemas/table.schema';
-import { DEFAULT_MODULES } from '../modules/constants/module-definitions';
+import {
+  COUNTER_ORDERS_MODULE_KEY,
+  DAILY_CLOSING_MODULE_KEY,
+  DEFAULT_MODULES,
+  DIGITAL_MENU_MODULE_KEY,
+  KDS_MODULE_KEY,
+  POS_MODULE_KEY,
+  REPORTING_MODULE_KEY,
+  TABLE_MANAGEMENT_MODULE_KEY,
+  TABLE_ORDERS_MODULE_KEY,
+} from '../modules/constants/module-definitions';
+import { mapOrderStatusToTableStatus } from '../orders/order-status.utils';
 import {
   TenantModule,
   TenantModuleDocument,
@@ -90,7 +117,13 @@ import {
 import {
   TimeEntry,
   TimeEntryDocument,
+  TimeEntryStatus,
 } from '../time-tracking/schemas/time-entry.schema';
+import {
+  PayrollPeriod,
+  PayrollPeriodDocument,
+  PayrollPeriodStatus,
+} from '../payroll/schemas/payroll-period.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
   WeeklyMenu,
@@ -171,16 +204,23 @@ export class DemoDataService implements OnApplicationBootstrap {
   private readonly developmentPlatformAdminPassword = 'Gastromania2026!';
   private readonly tenantDemoPassword = 'Demo2026!';
   private readonly tenantDemoActiveModuleKeys = new Set([
-    'pos',
-    'table_management',
-    'kds',
-    'digital_menu',
-    'reporting',
+    POS_MODULE_KEY,
+    TABLE_MANAGEMENT_MODULE_KEY,
+    KDS_MODULE_KEY,
+    DIGITAL_MENU_MODULE_KEY,
+    REPORTING_MODULE_KEY,
     'inventory',
     'recipes',
     'staff_management',
+    'payroll',
     'time_tracking',
     'module_management',
+  ]);
+  private readonly frittenwerkDemoActiveModuleKeys = new Set([
+    ...this.tenantDemoActiveModuleKeys,
+    TABLE_ORDERS_MODULE_KEY,
+    COUNTER_ORDERS_MODULE_KEY,
+    DAILY_CLOSING_MODULE_KEY,
   ]);
   private readonly developmentTenantConfigs: DevelopmentTenantConfig[] = [
     {
@@ -580,6 +620,12 @@ export class DemoDataService implements OnApplicationBootstrap {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(DutyShift.name)
     private readonly dutyShiftModel: Model<DutyShiftDocument>,
+    @InjectModel(StaffShift.name)
+    private readonly staffShiftModel: Model<StaffShiftDocument>,
+    @InjectModel(StaffAbsence.name)
+    private readonly staffAbsenceModel: Model<StaffAbsenceDocument>,
+    @InjectModel(PayrollPeriod.name)
+    private readonly payrollPeriodModel: Model<PayrollPeriodDocument>,
     @InjectModel(TimeEntry.name)
     private readonly timeEntryModel: Model<TimeEntryDocument>,
     @InjectModel(WeeklyMenu.name)
@@ -610,6 +656,8 @@ export class DemoDataService implements OnApplicationBootstrap {
     private readonly tenantModel: Model<TenantDocument>,
     @InjectModel(TenantModule.name)
     private readonly tenantModuleModel: Model<TenantModuleDocument>,
+    @InjectModel(City.name)
+    private readonly cityModel: Model<CityDocument>,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -775,6 +823,7 @@ export class DemoDataService implements OnApplicationBootstrap {
       users[0]._id.toString(),
     );
     const timeEntries = await this.recreateSalesDemoTimeEntries(
+      companyId,
       locationId,
       users,
     );
@@ -803,6 +852,9 @@ export class DemoDataService implements OnApplicationBootstrap {
         demoTenantLocations: demoTenants.locations,
         demoTenantUsers: demoTenants.users,
         demoTenantModules: demoTenants.modules,
+        frittenwerkDemoTables: demoTenants.frittenwerkDemoTables,
+        frittenwerkDemoMenuItems: demoTenants.frittenwerkDemoMenuItems,
+        frittenwerkDemoOrders: demoTenants.frittenwerkDemoOrders,
       },
       demoUsers: users.map((user) => ({
         email: user.email,
@@ -821,6 +873,9 @@ export class DemoDataService implements OnApplicationBootstrap {
         locations: 0,
         users: 0,
         modules: 0,
+        frittenwerkDemoTables: 0,
+        frittenwerkDemoMenuItems: 0,
+        frittenwerkDemoOrders: 0,
       };
     }
 
@@ -830,6 +885,9 @@ export class DemoDataService implements OnApplicationBootstrap {
     let locations = 0;
     let users = 0;
     let modules = 0;
+    let frittenwerkDemoTables = 0;
+    let frittenwerkDemoMenuItems = 0;
+    let frittenwerkDemoOrders = 0;
 
     await this.hideLegacyDevelopmentDemoTenants();
 
@@ -913,7 +971,28 @@ export class DemoDataService implements OnApplicationBootstrap {
         locationDocs,
         tenantUsers,
       );
-      await this.upsertDevelopmentTenantModules(tenantId);
+      await this.upsertDevelopmentTenantModules(
+        tenantId,
+        config.slug === 'frittenwerk-demo'
+          ? this.frittenwerkDemoActiveModuleKeys
+          : this.tenantDemoActiveModuleKeys,
+      );
+      if (config.slug === 'frittenwerk-demo') {
+        await this.ensureFrittenwerkPayrollDemoData(
+          tenantId,
+          locationDocs,
+          tenantUsers,
+        );
+        const orderDemo = await this.ensureFrittenwerkOrderDemoData(
+          tenantId,
+          companyId,
+          locationDocs,
+          tenantUsers,
+        );
+        frittenwerkDemoTables += orderDemo.tables;
+        frittenwerkDemoMenuItems += orderDemo.menuItems;
+        frittenwerkDemoOrders += orderDemo.orders;
+      }
 
       areas += areaByName.size;
       regions += regionByName.size;
@@ -929,6 +1008,9 @@ export class DemoDataService implements OnApplicationBootstrap {
       locations,
       users,
       modules,
+      frittenwerkDemoTables,
+      frittenwerkDemoMenuItems,
+      frittenwerkDemoOrders,
     };
   }
 
@@ -1204,7 +1286,7 @@ export class DemoDataService implements OnApplicationBootstrap {
     }
 
     return Promise.all(
-      configs.map((user) =>
+      configs.map((user, index) =>
         this.userModel
           .findOneAndUpdate(
             { email: user.email },
@@ -1226,6 +1308,18 @@ export class DemoDataService implements OnApplicationBootstrap {
                 managedLocationIds: user.managedLocationIds,
                 departmentIds: [],
                 responsibilities: [],
+                employeeNumber: this.developmentEmployeeNumber(
+                  tenant.slug,
+                  index,
+                ),
+                employmentType: this.developmentEmploymentType(user.roles),
+                contractType: this.developmentEmploymentType(user.roles),
+                weeklyHours: this.developmentWeeklyHours(user.roles),
+                hourlyRate: this.developmentHourlyRate(user.email, user.roles),
+                monthlySalary: 0,
+                vacationDaysPerYear: 26,
+                remainingVacationDays: 18,
+                employeeStatus: 'Frei',
               },
             },
             {
@@ -1237,6 +1331,62 @@ export class DemoDataService implements OnApplicationBootstrap {
           .exec(),
       ),
     );
+  }
+
+  private developmentEmployeeNumber(tenantSlug: string, index: number): string {
+    return `${tenantSlug
+      .replaceAll('-', '')
+      .slice(0, 4)
+      .toUpperCase()}-${String(index + 1).padStart(3, '0')}`;
+  }
+
+  private developmentEmploymentType(roles: Role[]): string {
+    if (roles.includes(Role.TenantAdminCode) || roles.includes(Role.Regionalleiter)) {
+      return 'Vollzeit';
+    }
+    if (roles.includes(Role.Filialleiter)) {
+      return 'Vollzeit';
+    }
+    if (roles.includes(Role.Service)) {
+      return 'Teilzeit';
+    }
+    return 'Minijob';
+  }
+
+  private developmentWeeklyHours(roles: Role[]): number {
+    if (roles.includes(Role.TenantAdminCode) || roles.includes(Role.Regionalleiter)) {
+      return 40;
+    }
+    if (roles.includes(Role.Filialleiter)) {
+      return 38;
+    }
+    if (roles.includes(Role.Service)) {
+      return 24;
+    }
+    return 16;
+  }
+
+  private developmentHourlyRate(email: string, roles: Role[]): number {
+    if (
+      email.includes('service2.') ||
+      email.includes('kueche2.')
+    ) {
+      return 0;
+    }
+
+    if (roles.includes(Role.TenantAdminCode) || roles.includes(Role.Regionalleiter)) {
+      return 28;
+    }
+    if (roles.includes(Role.Filialleiter)) {
+      return 23;
+    }
+    if (roles.includes(Role.Service)) {
+      return 14.5;
+    }
+    if (roles.includes(Role.Kueche)) {
+      return 16.5;
+    }
+    return 13;
   }
 
   private getDevelopmentTenantUserNames(tenantSlug: string): {
@@ -1401,7 +1551,378 @@ export class DemoDataService implements OnApplicationBootstrap {
     );
   }
 
-  private async upsertDevelopmentTenantModules(tenantId: string): Promise<void> {
+  private async ensureFrittenwerkPayrollDemoData(
+    tenantId: string,
+    locations: LocationDocument[],
+    users: UserDocument[],
+  ): Promise<void> {
+    const location = locations[0];
+    if (!location) {
+      return;
+    }
+
+    const locationId = location._id.toString();
+    const currentRange = this.monthRange(0);
+    const previousRange = this.monthRange(-1);
+    const payrollUsers = users
+      .filter((user) =>
+        [Role.Service, Role.Kueche, Role.Filialleiter].some((role) =>
+          user.roles.includes(role),
+        ),
+      )
+      .slice(0, 4);
+
+    await Promise.all([
+      this.timeEntryModel
+        .deleteMany({ tenantId, note: /^Payroll-Demo-/ })
+        .exec(),
+      this.staffShiftModel
+        .deleteMany({ tenantId, notes: /^Payroll-Demo-/ })
+        .exec(),
+      this.staffAbsenceModel
+        .deleteMany({ tenantId, reason: /^Payroll-Demo-/ })
+        .exec(),
+    ]);
+
+    const currentPlans = this.createPayrollDemoPlans(
+      tenantId,
+      locationId,
+      payrollUsers,
+      currentRange.start,
+      'current',
+    );
+    const previousPlans = this.createPayrollDemoPlans(
+      tenantId,
+      locationId,
+      payrollUsers,
+      previousRange.start,
+      'previous',
+    );
+
+    await Promise.all([
+      this.staffShiftModel.insertMany([
+        ...currentPlans.shifts,
+        ...previousPlans.shifts,
+      ]),
+      this.timeEntryModel.insertMany([
+        ...currentPlans.entries,
+        ...previousPlans.entries,
+      ]),
+      this.staffAbsenceModel.insertMany([
+        ...currentPlans.absences,
+        ...previousPlans.absences,
+      ]),
+    ]);
+
+    await this.payrollPeriodModel
+      .findOneAndUpdate(
+        {
+          tenantId,
+          locationId: null,
+          employeeId: null,
+          start: currentRange.start,
+          end: currentRange.end,
+        },
+        {
+          $setOnInsert: {
+            tenantId,
+            locationId: null,
+            employeeId: null,
+            start: currentRange.start,
+            end: currentRange.end,
+            status: PayrollPeriodStatus.Open,
+            employeeSnapshots: [],
+            totalsSnapshot: {},
+          },
+        },
+        { setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+
+    const previousSnapshot = this.createPayrollDemoSnapshot(
+      users,
+      previousPlans,
+    );
+    await this.payrollPeriodModel
+      .findOneAndUpdate(
+        {
+          tenantId,
+          locationId: null,
+          employeeId: null,
+          start: previousRange.start,
+          end: previousRange.end,
+        },
+        {
+          $set: {
+            tenantId,
+            locationId: null,
+            employeeId: null,
+            start: previousRange.start,
+            end: previousRange.end,
+            status: PayrollPeriodStatus.Locked,
+            lockedAt: this.atTime(previousRange.end, 9, 15),
+            lockedByUserId:
+              users.find((user) => user.roles.includes(Role.TenantAdminCode))
+                ?._id.toString() ?? users[0]?._id.toString(),
+            employeeSnapshots: previousSnapshot.employees,
+            totalsSnapshot: previousSnapshot.totals,
+          },
+        },
+        { setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+  }
+
+  private createPayrollDemoPlans(
+    tenantId: string,
+    locationId: string,
+    users: UserDocument[],
+    monthStart: Date,
+    periodKey: 'current' | 'previous',
+  ): {
+    entries: Array<Record<string, unknown>>;
+    shifts: Array<Record<string, unknown>>;
+    absences: Array<Record<string, unknown>>;
+  } {
+    const entries: Array<Record<string, unknown>> = [];
+    const shifts: Array<Record<string, unknown>> = [];
+    const absences: Array<Record<string, unknown>> = [];
+
+    users.forEach((user, userIndex) => {
+      const employeeId = user._id.toString();
+      const role = user.roles.includes(Role.Kueche)
+        ? Role.Kueche
+        : user.roles.includes(Role.Filialleiter)
+          ? Role.Filialleiter
+          : Role.Service;
+
+      for (let shiftIndex = 0; shiftIndex < 3; shiftIndex += 1) {
+        const date = new Date(monthStart);
+        date.setDate(3 + userIndex * 2 + shiftIndex);
+        const startHour = role === Role.Kueche ? 10 : 9;
+        const endHour = role === Role.Filialleiter ? 17 : startHour + 7;
+        const startTime = this.atTime(date, startHour, 0);
+        const endTime = this.atTime(date, endHour, 30);
+        const breakMinutes = shiftIndex === 1 ? 45 : 30;
+        const durationMinutes = Math.round(
+          (endTime.getTime() - startTime.getTime()) / 60_000,
+        );
+
+        shifts.push({
+          tenantId,
+          locationId,
+          roleNeeded: role,
+          title: `Payroll-Demo-${periodKey}-${user.email}-${shiftIndex}`,
+          startTime,
+          endTime,
+          status: StaffShiftStatus.Published,
+          requiredStaffCount: 1,
+          assignedUserIds: [employeeId],
+          notes: `Payroll-Demo-${periodKey}-${user.email}`,
+          createdBy: employeeId,
+          publishedBy: employeeId,
+          publishedAt: startTime,
+        });
+        entries.push({
+          tenantId,
+          locationId,
+          employeeId,
+          clockIn: startTime,
+          clockOut: endTime,
+          breakMinutes,
+          durationMinutes,
+          netDurationMinutes: durationMinutes - breakMinutes,
+          status: TimeEntryStatus.Closed,
+          note: `Payroll-Demo-${periodKey}-${user.email}-${shiftIndex}`,
+        });
+      }
+    });
+
+    const vacationUser = users[0];
+    const sickUser = users[1];
+    if (vacationUser) {
+      const startDate = new Date(monthStart);
+      startDate.setDate(20);
+      absences.push({
+        tenantId,
+        locationId,
+        userId: vacationUser._id.toString(),
+        employeeId: vacationUser._id.toString(),
+        type: StaffAbsenceType.Vacation,
+        startDate,
+        endDate: startDate,
+        status: StaffAbsenceStatus.Approved,
+        reason: `Payroll-Demo-${periodKey}-Urlaub`,
+        approvedBy: users[0]?._id.toString(),
+        approvedAt: this.atTime(startDate, 8, 0),
+      });
+    }
+    if (sickUser) {
+      const startDate = new Date(monthStart);
+      startDate.setDate(22);
+      absences.push({
+        tenantId,
+        locationId,
+        userId: sickUser._id.toString(),
+        employeeId: sickUser._id.toString(),
+        type: StaffAbsenceType.Sick,
+        startDate,
+        endDate: startDate,
+        status: StaffAbsenceStatus.Approved,
+        reason: `Payroll-Demo-${periodKey}-Krank`,
+        approvedBy: users[0]?._id.toString(),
+        approvedAt: this.atTime(startDate, 8, 0),
+      });
+    }
+
+    return { entries, shifts, absences };
+  }
+
+  private createPayrollDemoSnapshot(
+    users: UserDocument[],
+    plans: {
+      entries: Array<Record<string, unknown>>;
+      shifts: Array<Record<string, unknown>>;
+      absences: Array<Record<string, unknown>>;
+    },
+  ): {
+    employees: Array<Record<string, unknown>>;
+    totals: Record<string, number>;
+  } {
+    const employees = users.map((user) => {
+      const employeeId = user._id.toString();
+      const employeeEntries = plans.entries.filter(
+        (entry) => entry.employeeId === employeeId,
+      );
+      const employeeShifts = plans.shifts.filter((shift) =>
+        ((shift.assignedUserIds as string[]) ?? []).includes(employeeId),
+      );
+      const employeeAbsences = plans.absences.filter(
+        (absence) => absence.userId === employeeId,
+      );
+      const plannedHours = this.demoRoundHours(
+        employeeShifts.reduce(
+          (sum, shift) =>
+            sum +
+            this.demoHoursBetween(
+              shift.startTime as Date,
+              shift.endTime as Date,
+            ),
+          0,
+        ),
+      );
+      const breakHours = this.demoRoundHours(
+        employeeEntries.reduce(
+          (sum, entry) => sum + Number(entry.breakMinutes ?? 0) / 60,
+          0,
+        ),
+      );
+      const actualHours = this.demoRoundHours(
+        employeeEntries.reduce(
+          (sum, entry) =>
+            sum + Number(entry.netDurationMinutes ?? 0) / 60,
+          0,
+        ),
+      );
+      const vacationDays = employeeAbsences.filter(
+        (absence) => absence.type === StaffAbsenceType.Vacation,
+      ).length;
+      const sickDays = employeeAbsences.filter(
+        (absence) => absence.type === StaffAbsenceType.Sick,
+      ).length;
+      const hourlyRate = user.hourlyRate ?? 0;
+      const grossPay = this.demoRoundMoney(actualHours * hourlyRate);
+      const warnings = [
+        !hourlyRate ? 'Stundenlohn fehlt' : '',
+        !actualHours && !plannedHours && !vacationDays && !sickDays
+          ? 'Keine Arbeitszeitdaten'
+          : '',
+      ].filter(Boolean);
+
+      return {
+        employee: {
+          _id: employeeId,
+          email: user.email,
+          name: `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim(),
+          firstName: user.firstName,
+          lastName: user.lastName,
+          employeeNumber: user.employeeNumber,
+          contractType: user.contractType,
+          hourlyRate: user.hourlyRate,
+          locationId: user.locationId,
+          locationIds: user.locationIds,
+          role: user.roles[0],
+          roles: user.roles,
+          isActive: user.isActive,
+        },
+        plannedHours,
+        actualHours,
+        breakHours,
+        overtimeHours: this.demoRoundHours(actualHours - plannedHours),
+        absenceDays: vacationDays + sickDays,
+        sickDays,
+        vacationDays,
+        unpaidDays: 0,
+        otherAbsenceDays: 0,
+        hourlyRate,
+        grossPay,
+        laborCost: grossPay,
+        minijobWarning:
+          user.contractType === 'Minijob' && grossPay >= 538 * 0.9,
+        warnings,
+      };
+    });
+
+    return {
+      employees,
+      totals: {
+        plannedHours: this.demoSum(employees, 'plannedHours'),
+        actualHours: this.demoSum(employees, 'actualHours'),
+        breakHours: this.demoSum(employees, 'breakHours'),
+        overtimeHours: this.demoSum(employees, 'overtimeHours'),
+        grossPay: this.demoSum(employees, 'grossPay'),
+        laborCost: this.demoSum(employees, 'laborCost'),
+        vacationDays: this.demoSum(employees, 'vacationDays'),
+        sickDays: this.demoSum(employees, 'sickDays'),
+        unpaidDays: 0,
+        otherAbsenceDays: 0,
+      },
+    };
+  }
+
+  private monthRange(offset: number): { start: Date; end: Date } {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1);
+    return { start, end };
+  }
+
+  private demoHoursBetween(start: Date, end: Date): number {
+    return Math.max(0, end.getTime() - start.getTime()) / 3_600_000;
+  }
+
+  private demoRoundHours(value: number): number {
+    return Math.round(value * 100) / 100;
+  }
+
+  private demoRoundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
+  }
+
+  private demoSum(rows: Array<Record<string, unknown>>, key: string): number {
+    return this.demoRoundMoney(
+      rows.reduce(
+        (sum, row) =>
+          sum + (typeof row[key] === 'number' ? Number(row[key]) : 0),
+        0,
+      ),
+    );
+  }
+
+  private async upsertDevelopmentTenantModules(
+    tenantId: string,
+    activeModuleKeys = this.tenantDemoActiveModuleKeys,
+  ): Promise<void> {
     await Promise.all(
       DEFAULT_MODULES.map((moduleConfig) =>
         this.tenantModuleModel
@@ -1413,7 +1934,7 @@ export class DemoDataService implements OnApplicationBootstrap {
                 moduleKey: moduleConfig.key,
                 enabled:
                   moduleConfig.systemLocked ||
-                  this.tenantDemoActiveModuleKeys.has(moduleConfig.key),
+                  activeModuleKeys.has(moduleConfig.key),
               },
             },
             {
@@ -1424,6 +1945,821 @@ export class DemoDataService implements OnApplicationBootstrap {
           )
           .exec(),
       ),
+    );
+  }
+
+  private async ensureFrittenwerkOrderDemoData(
+    tenantId: string,
+    companyId: string,
+    locations: LocationDocument[],
+    users: UserDocument[],
+  ): Promise<{ tables: number; menuItems: number; orders: number }> {
+    const location = await this.ensureFrittenwerkOrderDemoLocation(
+      tenantId,
+      companyId,
+      locations,
+    );
+    const menuItems = await this.upsertFrittenwerkDemoMenuItems();
+    const tables = await this.upsertFrittenwerkDemoTables(
+      tenantId,
+      companyId,
+      location,
+    );
+    const orders = await this.upsertFrittenwerkDemoOrders(
+      tenantId,
+      companyId,
+      location,
+      tables,
+      menuItems,
+      users,
+    );
+    await this.syncFrittenwerkDemoTableStatuses(location._id.toString(), orders);
+
+    return {
+      tables: tables.length,
+      menuItems: menuItems.length,
+      orders: orders.length,
+    };
+  }
+
+  private async ensureFrittenwerkOrderDemoLocation(
+    tenantId: string,
+    companyId: string,
+    locations: LocationDocument[],
+  ): Promise<LocationDocument> {
+    const existing = locations[0];
+    if (existing) {
+      await this.ensureCityForLocation(tenantId, existing);
+      return existing;
+    }
+
+    const area = await this.areaModel
+      .findOneAndUpdate(
+        { tenantId, name: 'NRW' },
+        {
+          $set: {
+            tenantId,
+            companyId,
+            name: 'NRW',
+            description: 'NRW Demo-Bereich',
+            isActive: true,
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+    const region = await this.regionModel
+      .findOneAndUpdate(
+        { tenantId, code: 'NRW-RHEINLAND' },
+        {
+          $set: {
+            tenantId,
+            companyId,
+            areaId: area._id.toString(),
+            name: 'Rheinland',
+            code: 'NRW-RHEINLAND',
+            description: 'Rheinland Demo-Region',
+            isActive: true,
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+    const city = await this.cityModel
+      .findOneAndUpdate(
+        { tenantId, regionId: region._id.toString(), name: 'Koeln' },
+        {
+          $set: {
+            tenantId,
+            areaId: area._id.toString(),
+            regionId: region._id.toString(),
+            name: 'Koeln',
+            description: 'Koeln Demo-Stadt',
+            isActive: true,
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+
+    return this.locationModel
+      .findOneAndUpdate(
+        { tenantId, slug: 'frittenwerk-demo-koeln-innenstadt' },
+        {
+          $set: {
+            tenantId,
+            companyId,
+            areaId: area._id.toString(),
+            regionId: region._id.toString(),
+            cityId: city._id.toString(),
+            name: 'Frittenwerk Demo Koeln Innenstadt',
+            slug: 'frittenwerk-demo-koeln-innenstadt',
+            address: 'Hohe Strasse 1, 50667 Koeln',
+            street: 'Hohe Strasse 1',
+            zip: '50667',
+            postalCode: '50667',
+            city: 'Koeln',
+            cityName: 'Koeln',
+            federalState: 'Nordrhein-Westfalen',
+            phone: '0221 123450',
+            email: 'koeln@frittenwerk-demo.demo',
+            icon: 'restaurant',
+            isActive: true,
+            tablePlanFloors: ['EG'],
+            tablePlanAreas: [
+              {
+                id: 'restaurant',
+                label: 'Restaurantbereich',
+                category: 'restaurant',
+                icon: 'table_restaurant',
+                floor: 'EG',
+                x: 5,
+                y: 8,
+                width: 52,
+                height: 52,
+              },
+              {
+                id: 'theke',
+                label: 'Theke',
+                category: 'bar',
+                icon: 'local_bar',
+                floor: 'EG',
+                x: 62,
+                y: 12,
+                width: 26,
+                height: 22,
+              },
+            ],
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+  }
+
+  private async ensureCityForLocation(
+    tenantId: string,
+    location: LocationDocument,
+  ): Promise<void> {
+    if (!location.areaId || !location.regionId || !location.city) {
+      return;
+    }
+
+    const city = await this.cityModel
+      .findOneAndUpdate(
+        {
+          tenantId,
+          regionId: location.regionId,
+          name: location.city,
+        },
+        {
+          $set: {
+            tenantId,
+            areaId: location.areaId,
+            regionId: location.regionId,
+            name: location.city,
+            description: `${location.city} Demo-Stadt`,
+            isActive: true,
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+
+    await this.locationModel
+      .updateOne(
+        { _id: location._id },
+        {
+          $set: {
+            cityId: city._id.toString(),
+            cityName: location.city,
+          },
+        },
+      )
+      .exec();
+  }
+
+  private async upsertFrittenwerkDemoMenuItems(): Promise<MenuItemDocument[]> {
+    const configs: Array<{
+      name: string;
+      category: string;
+      description: string;
+      price: number;
+      isKitchenItem: boolean;
+      productionArea: ProductionArea;
+      courseType: CourseType;
+      color: string;
+      icon: string;
+      backgroundColor: string;
+      textColor: string;
+      sortOrder: number;
+    }> = [
+      {
+        name: 'Classic Burger',
+        category: 'Burger',
+        description: 'Saftiger Burger mit Salat, Tomate und Haus-Sauce.',
+        price: 9.9,
+        isKitchenItem: true,
+        productionArea: ProductionArea.Grill,
+        courseType: CourseType.Main,
+        color: '#8b5a2b',
+        icon: 'burger',
+        backgroundColor: '#fff3e6',
+        textColor: '#4a2c16',
+        sortOrder: 10,
+      },
+      {
+        name: 'Cheese Burger',
+        category: 'Burger',
+        description: 'Classic Burger mit Cheddar und Gurken-Relish.',
+        price: 10.9,
+        isKitchenItem: true,
+        productionArea: ProductionArea.Grill,
+        courseType: CourseType.Main,
+        color: '#8b5a2b',
+        icon: 'burger',
+        backgroundColor: '#fff3e6',
+        textColor: '#4a2c16',
+        sortOrder: 20,
+      },
+      {
+        name: 'Veggie Burger',
+        category: 'Burger',
+        description: 'Vegetarischer Patty mit Krautsalat und Kraeuter-Sauce.',
+        price: 10.5,
+        isKitchenItem: true,
+        productionArea: ProductionArea.Grill,
+        courseType: CourseType.Main,
+        color: '#8b5a2b',
+        icon: 'burger',
+        backgroundColor: '#fff3e6',
+        textColor: '#4a2c16',
+        sortOrder: 30,
+      },
+      {
+        name: 'Pommes Klein',
+        category: 'Beilagen',
+        description: 'Kleine Portion knusprige Pommes mit Salz.',
+        price: 3.5,
+        isKitchenItem: true,
+        productionArea: ProductionArea.Kitchen,
+        courseType: CourseType.Other,
+        color: '#d97706',
+        icon: 'utensils',
+        backgroundColor: '#fff7ed',
+        textColor: '#7c2d12',
+        sortOrder: 40,
+      },
+      {
+        name: 'Pommes Gross',
+        category: 'Beilagen',
+        description: 'Grosse Portion Pommes mit Dip.',
+        price: 4.9,
+        isKitchenItem: true,
+        productionArea: ProductionArea.Kitchen,
+        courseType: CourseType.Other,
+        color: '#d97706',
+        icon: 'utensils',
+        backgroundColor: '#fff7ed',
+        textColor: '#7c2d12',
+        sortOrder: 50,
+      },
+      {
+        name: 'Currywurst',
+        category: 'Beilagen',
+        description: 'Currywurst mit hausgemachter Sauce.',
+        price: 6.9,
+        isKitchenItem: true,
+        productionArea: ProductionArea.Kitchen,
+        courseType: CourseType.Main,
+        color: '#d97706',
+        icon: 'utensils',
+        backgroundColor: '#fff7ed',
+        textColor: '#7c2d12',
+        sortOrder: 60,
+      },
+      {
+        name: 'Chicken Nuggets',
+        category: 'Beilagen',
+        description: 'Knusprige Nuggets mit Dip-Auswahl.',
+        price: 5.9,
+        isKitchenItem: true,
+        productionArea: ProductionArea.Kitchen,
+        courseType: CourseType.Main,
+        color: '#d97706',
+        icon: 'utensils',
+        backgroundColor: '#fff7ed',
+        textColor: '#7c2d12',
+        sortOrder: 70,
+      },
+      {
+        name: 'Cola',
+        category: 'Getraenke',
+        description: 'Cola 0,33 l.',
+        price: 3.2,
+        isKitchenItem: false,
+        productionArea: ProductionArea.Counter,
+        courseType: CourseType.Drink,
+        color: '#2563eb',
+        icon: 'glass-water',
+        backgroundColor: '#eff6ff',
+        textColor: '#1e3a8a',
+        sortOrder: 80,
+      },
+      {
+        name: 'Wasser',
+        category: 'Getraenke',
+        description: 'Mineralwasser 0,25 l.',
+        price: 2.5,
+        isKitchenItem: false,
+        productionArea: ProductionArea.Counter,
+        courseType: CourseType.Drink,
+        color: '#2563eb',
+        icon: 'glass-water',
+        backgroundColor: '#eff6ff',
+        textColor: '#1e3a8a',
+        sortOrder: 90,
+      },
+      {
+        name: 'Apfelschorle',
+        category: 'Getraenke',
+        description: 'Apfelschorle 0,33 l.',
+        price: 3.1,
+        isKitchenItem: false,
+        productionArea: ProductionArea.Counter,
+        courseType: CourseType.Drink,
+        color: '#2563eb',
+        icon: 'glass-water',
+        backgroundColor: '#eff6ff',
+        textColor: '#1e3a8a',
+        sortOrder: 100,
+      },
+      {
+        name: 'Kaffee',
+        category: 'Kaffee',
+        description: 'Frisch gebruehter Kaffee.',
+        price: 2.8,
+        isKitchenItem: false,
+        productionArea: ProductionArea.Counter,
+        courseType: CourseType.Drink,
+        color: '#5b341f',
+        icon: 'coffee',
+        backgroundColor: '#f5eee9',
+        textColor: '#2f1d13',
+        sortOrder: 110,
+      },
+    ];
+
+    return Promise.all(
+      configs.map((config) =>
+        this.menuItemModel
+          .findOneAndUpdate(
+            { category: config.category, name: config.name },
+            {
+              $set: {
+                ...config,
+                ingredients: config.description,
+                weight: config.courseType === CourseType.Drink ? '1 Glas' : '1 Portion',
+                sellingPrice: config.price,
+                isActive: true,
+              },
+            },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec(),
+      ),
+    );
+  }
+
+  private async upsertFrittenwerkDemoTables(
+    tenantId: string,
+    companyId: string,
+    location: LocationDocument,
+  ): Promise<RestaurantTableDocument[]> {
+    const locationId = location._id.toString();
+
+    return Promise.all(
+      Array.from({ length: 5 }, (_, index) => {
+        const tableNumber = index + 1;
+
+        return this.tableModel
+          .findOneAndUpdate(
+            { locationId, name: `Tisch ${tableNumber}` },
+            {
+              $set: {
+                tenantId,
+                companyId,
+                areaId: location.areaId,
+                regionId: location.regionId,
+                tableNumber: String(tableNumber),
+                tableName: `Tisch ${tableNumber}`,
+                name: `Tisch ${tableNumber}`,
+                locationId,
+                seats: tableNumber === 5 ? 6 : 4,
+                area: 'Restaurantbereich',
+                icon: 'table_restaurant',
+                status: TableStatus.Free,
+                isActive: true,
+                qrEnabled: true,
+                planX: 10 + index * 14,
+                planY: 18 + (index % 2) * 16,
+                planWidth: 12,
+                planHeight: 10,
+                planRotation: 0,
+                floorId: `${locationId}:eg`,
+                floorName: 'EG',
+                planFloor: 'EG',
+                planShape:
+                  tableNumber % 2 === 0 ? TableShape.Round : TableShape.Rectangle,
+              },
+            },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec();
+      }),
+    );
+  }
+
+  private async upsertFrittenwerkDemoOrders(
+    tenantId: string,
+    companyId: string,
+    location: LocationDocument,
+    tables: RestaurantTableDocument[],
+    menuItems: MenuItemDocument[],
+    users: UserDocument[],
+  ): Promise<OrderDocument[]> {
+    const locationId = location._id.toString();
+    const itemByName = new Map(menuItems.map((item) => [item.name, item]));
+    const tableByName = new Map(tables.map((table) => [table.name, table]));
+    const serviceUser =
+      users.find((user) => user.roles.includes(Role.Service)) ?? users[0];
+    const counterUser =
+      users.find((user) => user.roles.includes(Role.Theke)) ?? serviceUser;
+    const configs: Array<{
+      orderNumber: string;
+      source: OrderSource;
+      status: OrderStatus;
+      paymentStatus: PaymentStatus;
+      paymentMethod?: PaymentMethod;
+      tableName?: string;
+      pickupNumber?: string;
+      customerName?: string;
+      minutesAgo: number;
+      employee?: UserDocument;
+      items: Array<{ name: string; quantity: number; status: OrderItemStatus }>;
+    }> = [
+      {
+        orderNumber: 'FRITTENWERK-DEMO-T001',
+        source: OrderSource.Internal,
+        status: OrderStatus.New,
+        paymentStatus: PaymentStatus.Open,
+        tableName: 'Tisch 1',
+        minutesAgo: 14,
+        employee: serviceUser,
+        items: [
+          { name: 'Classic Burger', quantity: 2, status: OrderItemStatus.Open },
+          { name: 'Pommes Klein', quantity: 2, status: OrderItemStatus.Open },
+          { name: 'Cola', quantity: 2, status: OrderItemStatus.Open },
+        ],
+      },
+      {
+        orderNumber: 'FRITTENWERK-DEMO-T002',
+        source: OrderSource.Internal,
+        status: OrderStatus.Preparing,
+        paymentStatus: PaymentStatus.Open,
+        tableName: 'Tisch 2',
+        minutesAgo: 32,
+        employee: serviceUser,
+        items: [
+          { name: 'Cheese Burger', quantity: 1, status: OrderItemStatus.Started },
+          { name: 'Pommes Gross', quantity: 1, status: OrderItemStatus.Preparing },
+          { name: 'Apfelschorle', quantity: 1, status: OrderItemStatus.Open },
+        ],
+      },
+      {
+        orderNumber: 'FRITTENWERK-DEMO-T003',
+        source: OrderSource.Internal,
+        status: OrderStatus.Ready,
+        paymentStatus: PaymentStatus.Open,
+        tableName: 'Tisch 3',
+        minutesAgo: 41,
+        employee: serviceUser,
+        items: [
+          { name: 'Veggie Burger', quantity: 1, status: OrderItemStatus.Ready },
+          { name: 'Chicken Nuggets', quantity: 1, status: OrderItemStatus.Ready },
+          { name: 'Wasser', quantity: 2, status: OrderItemStatus.Ready },
+        ],
+      },
+      {
+        orderNumber: 'FRITTENWERK-DEMO-T004',
+        source: OrderSource.Internal,
+        status: OrderStatus.Closed,
+        paymentStatus: PaymentStatus.Paid,
+        paymentMethod: PaymentMethod.Card,
+        tableName: 'Tisch 4',
+        minutesAgo: 74,
+        employee: serviceUser,
+        items: [
+          { name: 'Currywurst', quantity: 2, status: OrderItemStatus.Served },
+          { name: 'Pommes Klein', quantity: 2, status: OrderItemStatus.Served },
+          { name: 'Cola', quantity: 2, status: OrderItemStatus.Served },
+        ],
+      },
+      {
+        orderNumber: 'FRITTENWERK-DEMO-C101',
+        pickupNumber: '101',
+        source: OrderSource.Counter,
+        status: OrderStatus.New,
+        paymentStatus: PaymentStatus.Open,
+        customerName: 'Abholung 101',
+        minutesAgo: 9,
+        employee: counterUser,
+        items: [
+          { name: 'Cheese Burger', quantity: 1, status: OrderItemStatus.Open },
+          { name: 'Cola', quantity: 1, status: OrderItemStatus.Open },
+        ],
+      },
+      {
+        orderNumber: 'FRITTENWERK-DEMO-C102',
+        pickupNumber: '102',
+        source: OrderSource.Counter,
+        status: OrderStatus.Preparing,
+        paymentStatus: PaymentStatus.Open,
+        customerName: 'Abholung 102',
+        minutesAgo: 22,
+        employee: counterUser,
+        items: [
+          { name: 'Currywurst', quantity: 1, status: OrderItemStatus.Preparing },
+          { name: 'Pommes Gross', quantity: 1, status: OrderItemStatus.Started },
+        ],
+      },
+      {
+        orderNumber: 'FRITTENWERK-DEMO-C103',
+        pickupNumber: '103',
+        source: OrderSource.Counter,
+        status: OrderStatus.Ready,
+        paymentStatus: PaymentStatus.Open,
+        customerName: 'Abholung 103',
+        minutesAgo: 28,
+        employee: counterUser,
+        items: [
+          { name: 'Kaffee', quantity: 1, status: OrderItemStatus.Ready },
+          { name: 'Wasser', quantity: 1, status: OrderItemStatus.Ready },
+        ],
+      },
+      {
+        orderNumber: 'FRITTENWERK-DEMO-QR201',
+        source: OrderSource.Qr,
+        status: OrderStatus.Accepted,
+        paymentStatus: PaymentStatus.Open,
+        tableName: 'Tisch 5',
+        minutesAgo: 16,
+        employee: serviceUser,
+        items: [
+          { name: 'Chicken Nuggets', quantity: 2, status: OrderItemStatus.Open },
+          { name: 'Pommes Klein', quantity: 1, status: OrderItemStatus.Open },
+        ],
+      },
+      {
+        orderNumber: 'FRITTENWERK-DEMO-CANCEL',
+        pickupNumber: '199',
+        source: OrderSource.Counter,
+        status: OrderStatus.Cancelled,
+        paymentStatus: PaymentStatus.Cancelled,
+        customerName: 'Storno Demo',
+        minutesAgo: 65,
+        employee: counterUser,
+        items: [
+          { name: 'Veggie Burger', quantity: 1, status: OrderItemStatus.Cancelled },
+        ],
+      },
+    ];
+
+    return Promise.all(
+      configs.map((config) => {
+        const table = config.tableName
+          ? tableByName.get(config.tableName)
+          : undefined;
+        const order = this.frittenwerkDemoOrder({
+          tenantId,
+          companyId,
+          locationId,
+          table,
+          itemByName,
+          ...config,
+        });
+
+        return this.orderModel
+          .findOneAndUpdate(
+            { tenantId, locationId, orderNumber: config.orderNumber },
+            {
+              $set: order,
+            },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec();
+      }),
+    );
+  }
+
+  private frittenwerkDemoOrder(config: {
+    tenantId: string;
+    companyId: string;
+    locationId: string;
+    orderNumber: string;
+    source: OrderSource;
+    status: OrderStatus;
+    paymentStatus: PaymentStatus;
+    paymentMethod?: PaymentMethod;
+    table?: RestaurantTableDocument;
+    pickupNumber?: string;
+    customerName?: string;
+    minutesAgo: number;
+    employee?: UserDocument;
+    itemByName: Map<string, MenuItemDocument>;
+    items: Array<{ name: string; quantity: number; status: OrderItemStatus }>;
+  }): Record<string, unknown> {
+    const createdAt = this.minutesAgo(config.minutesAgo);
+    const changedAt = this.minutesAgo(Math.max(config.minutesAgo - 4, 1));
+    const items = config.items.flatMap((item) => {
+      const menuItem = config.itemByName.get(item.name);
+
+      if (!menuItem) {
+        return [];
+      }
+
+      const price = menuItem.sellingPrice ?? menuItem.price;
+      const totalPrice = this.roundPrice(price * item.quantity);
+      const productionArea =
+        item.name === 'Cola' ||
+        item.name === 'Wasser' ||
+        item.name === 'Apfelschorle' ||
+        item.name === 'Kaffee'
+          ? ProductionArea.Counter
+          : item.name.includes('Burger')
+            ? ProductionArea.Grill
+            : ProductionArea.Kitchen;
+
+      return [
+        {
+          menuItemId: menuItem._id.toString(),
+          productId: menuItem._id.toString(),
+          name: menuItem.name,
+          quantity: item.quantity,
+          price,
+          totalPrice,
+          note: item.name === 'Cheese Burger' ? 'Extra Sauce' : undefined,
+          isKitchenItem: menuItem.isKitchenItem,
+          status: item.status,
+          productionArea,
+          courseType:
+            productionArea === ProductionArea.Counter
+              ? CourseType.Drink
+              : CourseType.Main,
+          changedAt,
+          startedAt:
+            item.status === OrderItemStatus.Started ? changedAt : undefined,
+          inPreparationAt:
+            item.status === OrderItemStatus.Preparing ? changedAt : undefined,
+          readyAt: item.status === OrderItemStatus.Ready ? changedAt : undefined,
+          servedAt:
+            item.status === OrderItemStatus.Served ? changedAt : undefined,
+          cancelledAt:
+            item.status === OrderItemStatus.Cancelled ? changedAt : undefined,
+        },
+      ];
+    });
+    const subtotal = this.roundPrice(
+      items.reduce((sum, item) => sum + Number(item.totalPrice ?? 0), 0),
+    );
+    const paymentMethod = config.paymentMethod ?? PaymentMethod.Other;
+    const isPaid = config.paymentStatus === PaymentStatus.Paid;
+    const isCancelled = config.status === OrderStatus.Cancelled;
+
+    return {
+      tenantId: config.tenantId,
+      tenantResolutionStatus: OrderTenantResolutionStatus.Resolved,
+      tenantResolvedAt: createdAt,
+      companyId: config.companyId,
+      locationId: config.locationId,
+      orderNumber: config.orderNumber,
+      source: config.source,
+      tableId: config.table?._id.toString(),
+      pickupNumber: config.pickupNumber,
+      customerName: config.customerName,
+      guestCount: config.table?.seats ?? 1,
+      status: config.status,
+      paymentStatus: config.paymentStatus,
+      paymentMethod,
+      items,
+      subtotal,
+      tax: this.roundPrice(subtotal * 0.19),
+      total: subtotal,
+      discountTotal: 0,
+      refundTotal: isCancelled ? subtotal : 0,
+      tipTotal: 0,
+      cashAmount: isPaid && paymentMethod === PaymentMethod.Cash ? subtotal : 0,
+      cardAmount: isPaid && paymentMethod === PaymentMethod.Card ? subtotal : 0,
+      onlineAmount:
+        isPaid && paymentMethod === PaymentMethod.Online ? subtotal : 0,
+      voucherAmount: 0,
+      otherAmount:
+        isPaid && paymentMethod === PaymentMethod.Other ? subtotal : 0,
+      employeeId: config.employee?._id.toString(),
+      employeeName: config.employee
+        ? `${config.employee.firstName ?? ''} ${config.employee.lastName ?? ''}`.trim()
+        : 'Frittenwerk Demo',
+      createdBy: config.employee?._id.toString(),
+      assignedWaiterId: config.employee?._id.toString(),
+      statusTimestamps: {
+        [OrderStatus.New]: createdAt,
+        [config.status]: changedAt,
+      },
+      completedAt:
+        config.status === OrderStatus.Closed ? this.minutesAgo(20) : undefined,
+      cancelledAt: isCancelled ? changedAt : undefined,
+      paidAt: isPaid ? this.minutesAgo(18) : undefined,
+      paidBy: isPaid ? config.employee?._id.toString() : undefined,
+      cancelReason: isCancelled ? 'Gast hat Bestellung storniert' : undefined,
+      inventoryDeducted: false,
+      inventoryMovementIds: [],
+      inventoryWarnings: [],
+      notes: 'Frittenwerk Demo-Order',
+      createdAt,
+      updatedAt: changedAt,
+    };
+  }
+
+  private async syncFrittenwerkDemoTableStatuses(
+    locationId: string,
+    orders: OrderDocument[],
+  ): Promise<void> {
+    const tableNames = ['Tisch 1', 'Tisch 2', 'Tisch 3', 'Tisch 4', 'Tisch 5'];
+
+    await this.tableModel
+      .updateMany(
+        { locationId, name: { $in: tableNames } },
+        {
+          $set: {
+            status: TableStatus.Free,
+            activeOrderIds: [],
+            currentTotal: 0,
+            guestCount: 0,
+          },
+          $unset: {
+            waitingSince: '',
+            lastStatusChange: '',
+            assignedWaiterId: '',
+          },
+        },
+      )
+      .exec();
+
+    await Promise.all(
+      orders
+        .filter((order) => Boolean(order.tableId))
+        .map((order) => {
+          const isActive = ![
+            OrderStatus.Cancelled,
+            OrderStatus.Closed,
+          ].includes(order.status);
+          const tableStatus = mapOrderStatusToTableStatus(
+            order.status,
+            order.paymentStatus,
+          );
+
+          return this.tableModel
+            .updateOne(
+              { _id: order.tableId },
+              {
+                $set: {
+                  status: tableStatus,
+                  activeOrderIds: isActive ? [order._id.toString()] : [],
+                  currentTotal: order.total ?? 0,
+                  guestCount: order.guestCount ?? 0,
+                  waitingSince: isActive
+                    ? ((order as OrderDocument & { createdAt?: Date }).createdAt ??
+                      this.minutesAgo(1))
+                    : undefined,
+                  lastStatusChange: new Date(),
+                  assignedWaiterId: order.assignedWaiterId,
+                },
+              },
+            )
+            .exec();
+        }),
     );
   }
 
@@ -1852,6 +3188,9 @@ export class DemoDataService implements OnApplicationBootstrap {
 
     return {
       companyId: config.companyId,
+      tenantId: config.companyId,
+      tenantResolutionStatus: OrderTenantResolutionStatus.Resolved,
+      tenantResolvedAt: createdAt,
       locationId: config.locationId,
       orderNumber: config.orderNumber,
       source: config.source ?? OrderSource.Internal,
@@ -2083,6 +3422,7 @@ export class DemoDataService implements OnApplicationBootstrap {
   }
 
   private async recreateSalesDemoTimeEntries(
+    tenantId: string,
     locationId: string,
     users: UserDocument[],
   ): Promise<TimeEntryDocument[]> {
@@ -2099,6 +3439,7 @@ export class DemoDataService implements OnApplicationBootstrap {
       [service, kitchen, manager]
         .filter((user): user is UserDocument => Boolean(user))
         .map((user, index) => ({
+          tenantId,
           locationId,
           employeeId: user._id.toString(),
           clockIn: this.hoursAgo(index === 0 ? 3 : 2),
@@ -3140,10 +4481,17 @@ export class DemoDataService implements OnApplicationBootstrap {
       },
     ];
 
-    return this.orderModel.insertMany([
+    const legacyOrders = [
       ...baseOrders,
       ...this.createGeneratedOrders(locationId, tables, 50),
-    ]);
+    ].map((order) => ({
+      ...order,
+      tenantResolutionStatus: OrderTenantResolutionStatus.LegacyOrphan,
+      tenantResolutionReason: 'Legacy-Demo-Order ohne Tenant-Kontext',
+      tenantResolvedAt: new Date(),
+    }));
+
+    return this.orderModel.insertMany(legacyOrders);
   }
 
   private createGeneratedOrders(

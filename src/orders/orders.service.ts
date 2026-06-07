@@ -29,12 +29,20 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import {
+  aggregateOrderStatus,
+  getTableEventForOrderStatus,
+  getTableStatusForOrders,
+  getTableWaitingSince,
+} from './order-status.utils';
+import {
   CourseType,
   Order,
   OrderDocument,
   OrderItem,
   OrderItemStatus,
+  OrderSource,
   OrderStatus,
+  OrderTenantResolutionStatus,
   PaymentStatus,
   ProductionArea,
 } from './schemas/order.schema';
@@ -66,11 +74,14 @@ export class OrdersService {
     createOrderDto: CreateOrderDto,
     actor: AuthenticatedUser,
   ): Promise<OrderDocument> {
+    this.assertTenantOperationalUser(actor);
     this.validateObjectId(createOrderDto.locationId, 'Standort-ID');
-    await this.accessPolicy.assertCanAccessLocation(
+    const location = await this.accessPolicy.assertLocationExistsAndReadable(
       actor,
       createOrderDto.locationId,
     );
+    const tenantId = this.resolveOrderTenantId(actor, location);
+
     if (createOrderDto.tableId) {
       this.validateObjectId(createOrderDto.tableId, 'Tisch-ID');
     }
@@ -80,6 +91,10 @@ export class OrdersService {
     const order = await this.orderModel.create({
       ...createOrderDto,
       companyId: actor.companyId,
+      tenantId,
+      tenantResolutionStatus: OrderTenantResolutionStatus.Resolved,
+      tenantResolvedAt: new Date(),
+      source: OrderSource.Internal,
       createdBy: actor.sub,
       employeeId: createOrderDto.employeeId ?? actor.sub,
       assignedWaiterId: createOrderDto.assignedWaiterId ?? actor.sub,
@@ -121,9 +136,13 @@ export class OrdersService {
     actor: AuthenticatedUser,
     filters: OrderFilters = {},
   ): Promise<OrderDocument[]> {
-    const query = await this.accessPolicy.getScopedResourceFilter(
+    this.assertTenantOperationalUser(actor);
+    const query = this.applyTenantScope(
+      await this.accessPolicy.getScopedResourceFilter(
+        actor,
+        filters.locationId,
+      ),
       actor,
-      filters.locationId,
     );
 
     if (filters.locationId) {
@@ -165,13 +184,17 @@ export class OrdersService {
 
   async findOne(id: string, actor?: AuthenticatedUser): Promise<OrderDocument> {
     this.validateObjectId(id, 'Bestell-ID');
+    if (actor) {
+      this.assertTenantOperationalUser(actor);
+    }
 
     const order = await this.orderModel.findById(id).exec();
 
     if (
       !order ||
       (actor &&
-        !(await this.accessPolicy.canAccessLocation(actor, order.locationId)))
+        (!(await this.accessPolicy.canAccessLocation(actor, order.locationId)) ||
+          !this.isOrderInTenantScope(order, actor)))
     ) {
       throw new NotFoundException('Bestellung nicht gefunden');
     }
@@ -193,10 +216,15 @@ export class OrdersService {
 
     if (updateOrderDto.locationId) {
       this.validateObjectId(updateOrderDto.locationId, 'Standort-ID');
-      await this.accessPolicy.assertCanAccessLocation(
+      const location = await this.accessPolicy.assertLocationExistsAndReadable(
         actor,
         updateOrderDto.locationId,
       );
+      updateOrderDto = {
+        ...updateOrderDto,
+        locationId: updateOrderDto.locationId,
+      };
+      currentOrder.tenantId = this.resolveOrderTenantId(actor, location);
     }
 
     if (updateOrderDto.tableId) {
@@ -206,8 +234,10 @@ export class OrdersService {
     const totals = updateOrderDto.items
       ? this.calculateTotals(updateOrderDto.items)
       : undefined;
+    const { source: _ignoredSource, ...trustedUpdateDto } = updateOrderDto;
     const updatePayload = {
-      ...updateOrderDto,
+      ...trustedUpdateDto,
+      tenantId: currentOrder.tenantId ?? actor.tenantId,
       ...(updateOrderDto.items
         ? {
             items: updateOrderDto.items.map((item) => ({
@@ -353,7 +383,7 @@ export class OrdersService {
     this.applyItemStatusAuditFields(item, dto.status, actor.sub, changedAt);
 
     const previousOrderStatus = order.status;
-    const nextOrderStatus = this.aggregateOrderStatus(order);
+    const nextOrderStatus = aggregateOrderStatus(order);
     order.status = nextOrderStatus;
     order.statusTimestamps = {
       ...(order.statusTimestamps ?? {}),
@@ -596,7 +626,7 @@ export class OrdersService {
     }
 
     const activeOrders = await this.getActiveOrdersForTable(order.tableId);
-    const status = this.getTableStatusForOrders(activeOrders, order, removed);
+    const status = getTableStatusForOrders(activeOrders, order, { removed });
     const activeOrderIds = activeOrders.map((activeOrder) =>
       activeOrder._id.toString(),
     );
@@ -608,7 +638,7 @@ export class OrdersService {
       (sum, activeOrder) => sum + (activeOrder.guestCount ?? 0),
       0,
     );
-    const waitingSince = this.getTableWaitingSince(activeOrders);
+    const waitingSince = getTableWaitingSince(activeOrders);
     const assignedWaiterId =
       activeOrders.find((activeOrder) => activeOrder.assignedWaiterId)
         ?.assignedWaiterId ?? undefined;
@@ -678,7 +708,7 @@ export class OrdersService {
       );
     }
 
-    const mappedEvent = this.getTableEventForOrderStatus(
+    const mappedEvent = getTableEventForOrderStatus(
       order.status,
       order.paymentStatus,
     );
@@ -699,33 +729,6 @@ export class OrdersService {
     }
   }
 
-  private getTableStatusForOrder(
-    status: OrderStatus,
-    paymentStatus?: PaymentStatus,
-  ): TableStatus {
-    if (paymentStatus === PaymentStatus.Paid) {
-      return TableStatus.Paid;
-    }
-
-    switch (status) {
-      case OrderStatus.Draft:
-      case OrderStatus.New:
-        return TableStatus.Ordering;
-      case OrderStatus.Accepted:
-        return TableStatus.OrderSent;
-      case OrderStatus.Preparing:
-        return TableStatus.InPreparation;
-      case OrderStatus.Ready:
-        return TableStatus.ReadyToServe;
-      case OrderStatus.Served:
-        return TableStatus.Served;
-      case OrderStatus.Closed:
-        return TableStatus.Paid;
-      case OrderStatus.Cancelled:
-        return TableStatus.Free;
-    }
-  }
-
   private async getActiveOrdersForTable(
     tableId: string,
   ): Promise<OrderDocument[]> {
@@ -733,95 +736,13 @@ export class OrdersService {
       .find({
         tableId,
         status: { $nin: [OrderStatus.Cancelled, OrderStatus.Closed] },
+        tenantId: { $exists: true, $nin: [null, ''] },
+        tenantResolutionStatus: {
+          $ne: OrderTenantResolutionStatus.LegacyOrphan,
+        },
       })
       .sort({ createdAt: 1 })
       .exec();
-  }
-
-  private getTableStatusForOrders(
-    activeOrders: OrderDocument[],
-    fallbackOrder: Pick<OrderDocument, 'status' | 'paymentStatus'>,
-    removed: boolean,
-  ): TableStatus {
-    if (removed || !activeOrders.length) {
-      if (removed) {
-        return TableStatus.Free;
-      }
-
-      return fallbackOrder.paymentStatus === PaymentStatus.Paid
-        ? TableStatus.Paid
-        : TableStatus.Free;
-    }
-
-    if (
-      activeOrders.some((order) => order.paymentStatus === PaymentStatus.Paid)
-    ) {
-      return TableStatus.Paid;
-    }
-    if (activeOrders.some((order) => order.status === OrderStatus.Served)) {
-      return TableStatus.Served;
-    }
-    if (activeOrders.some((order) => order.status === OrderStatus.Ready)) {
-      return TableStatus.ReadyToServe;
-    }
-    if (activeOrders.some((order) => order.status === OrderStatus.Preparing)) {
-      return TableStatus.InPreparation;
-    }
-    if (activeOrders.some((order) => order.status === OrderStatus.Accepted)) {
-      return TableStatus.OrderSent;
-    }
-    if (
-      activeOrders.some((order) =>
-        [OrderStatus.Draft, OrderStatus.New].includes(order.status),
-      )
-    ) {
-      return TableStatus.Ordering;
-    }
-
-    return this.getTableStatusForOrder(
-      fallbackOrder.status,
-      fallbackOrder.paymentStatus,
-    );
-  }
-
-  private getTableWaitingSince(
-    activeOrders: OrderDocument[],
-  ): Date | undefined {
-    const timestamps = activeOrders
-      .map(
-        (order) =>
-          order.statusTimestamps?.[OrderStatus.Accepted] ??
-          order.statusTimestamps?.[OrderStatus.Preparing] ??
-          order.statusTimestamps?.[OrderStatus.New] ??
-          (order as OrderDocument & { createdAt?: Date }).createdAt,
-      )
-      .filter((value): value is Date => Boolean(value))
-      .sort((first, second) => first.getTime() - second.getTime());
-
-    return timestamps[0];
-  }
-
-  private getTableEventForOrderStatus(
-    status: OrderStatus,
-    paymentStatus?: PaymentStatus,
-  ): string | null {
-    if (paymentStatus === PaymentStatus.Paid || status === OrderStatus.Closed) {
-      return 'table.paid';
-    }
-
-    if (status === OrderStatus.Accepted) {
-      return 'table.order.sent';
-    }
-
-    if (status === OrderStatus.Ready) {
-      return 'table.order.ready';
-    }
-
-    if ([OrderStatus.Draft, OrderStatus.New].includes(status)) {
-      return 'table.order.created';
-    }
-
-    return null;
   }
 
   private getPrimaryTableEventForOrderUpdate(
@@ -834,7 +755,7 @@ export class OrdersService {
     }
 
     return (
-      this.getTableEventForOrderStatus(status, paymentStatus) ??
+      getTableEventForOrderStatus(status, paymentStatus) ??
       'table.status.changed'
     );
   }
@@ -893,64 +814,20 @@ export class OrdersService {
     });
   }
 
-  private aggregateOrderStatus(order: OrderDocument): OrderStatus {
-    const statuses = order.items.map(
-      (item) => item.status ?? OrderItemStatus.Open,
-    );
-
-    if (!statuses.length) {
-      return order.status;
-    }
-
-    const activeStatuses = statuses.filter(
-      (status) => status !== OrderItemStatus.Cancelled,
-    );
-
-    if (!activeStatuses.length) {
-      return OrderStatus.Cancelled;
-    }
-
-    if (activeStatuses.every((status) => status === OrderItemStatus.Served)) {
-      return OrderStatus.Served;
-    }
-
-    if (
-      activeStatuses.every((status) =>
-        [OrderItemStatus.Ready, OrderItemStatus.Served].includes(status),
-      )
-    ) {
-      return OrderStatus.Ready;
-    }
-
-    if (
-      activeStatuses.some((status) =>
-        [
-          OrderItemStatus.Started,
-          OrderItemStatus.Preparing,
-          OrderItemStatus.Ready,
-          OrderItemStatus.Served,
-        ].includes(status),
-      )
-    ) {
-      return OrderStatus.Preparing;
-    }
-
-    return OrderStatus.New;
-  }
-
   private assertCanSetItemStatus(
     actor: AuthenticatedUser,
     status: OrderItemStatus,
   ): void {
     const managementRoles = [
-      Role.PlatformAdmin,
-      Role.SuperAdmin,
+      Role.TenantAdminCode,
+      Role.TenantAdmin,
       Role.CompanyAdmin,
       Role.RegionAdmin,
       Role.Admin,
       Role.Regionalleiter,
       Role.Bereichsleiter,
       Role.Filialleiter,
+      Role.LocationManager,
       Role.Restaurantleiter,
       Role.Schichtleiter,
     ];
@@ -961,7 +838,12 @@ export class OrdersService {
 
     if (
       status === OrderItemStatus.Served &&
-      hasAnyRole(actor.roles, [Role.Service, Role.Theke])
+      hasAnyRole(actor.roles, [
+        Role.Waiter,
+        Role.Service,
+        Role.Counter,
+        Role.Theke,
+      ])
     ) {
       return;
     }
@@ -972,13 +854,87 @@ export class OrdersService {
         OrderItemStatus.Preparing,
         OrderItemStatus.Ready,
       ].includes(status) &&
-      hasAnyRole(actor.roles, [Role.Kueche, Role.Bar, Role.Theke])
+      hasAnyRole(actor.roles, [
+        Role.Kitchen,
+        Role.Kueche,
+        Role.Bar,
+        Role.Counter,
+        Role.Theke,
+      ])
     ) {
       return;
     }
 
     throw new ForbiddenException(
       'Keine Berechtigung fuer diesen Artikelstatus',
+    );
+  }
+
+  private assertTenantOperationalUser(actor: AuthenticatedUser): void {
+    if (this.accessPolicy.isPlatformAdmin(actor)) {
+      throw new ForbiddenException('Platform Admin darf keine operativen Bestellungen nutzen');
+    }
+
+    if (!actor.tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext fuer Bestellungen');
+    }
+  }
+
+  private resolveOrderTenantId(
+    actor: AuthenticatedUser,
+    location: { tenantId?: string },
+  ): string {
+    if (location.tenantId && location.tenantId !== actor.tenantId) {
+      throw new ForbiddenException('Standort gehoert nicht zu diesem Tenant');
+    }
+
+    if (actor.tenantId) {
+      return actor.tenantId;
+    }
+
+    if (location.tenantId) {
+      return location.tenantId;
+    }
+
+    throw new ForbiddenException('Tenant der Bestellung konnte nicht ermittelt werden');
+  }
+
+  private applyTenantScope(
+    query: Record<string, unknown>,
+    actor: AuthenticatedUser,
+  ): Record<string, unknown> {
+    if (!actor.tenantId) {
+      return query;
+    }
+
+    const existingAnd = Array.isArray(query.$and)
+      ? (query.$and as Record<string, unknown>[])
+      : [];
+
+    return {
+      ...query,
+      $and: [
+        ...existingAnd,
+        {
+          tenantId: actor.tenantId,
+        },
+        {
+          tenantResolutionStatus: {
+            $ne: OrderTenantResolutionStatus.LegacyOrphan,
+          },
+        },
+      ],
+    };
+  }
+
+  private isOrderInTenantScope(
+    order: Pick<OrderDocument, 'tenantId' | 'tenantResolutionStatus'>,
+    actor: AuthenticatedUser,
+  ): boolean {
+    return (
+      Boolean(actor.tenantId) &&
+      order.tenantId === actor.tenantId &&
+      order.tenantResolutionStatus !== OrderTenantResolutionStatus.LegacyOrphan
     );
   }
 
@@ -1077,6 +1033,9 @@ export class OrdersService {
     return this.orderModel
       .countDocuments({
         locationId,
+        tenantResolutionStatus: {
+          $ne: OrderTenantResolutionStatus.LegacyOrphan,
+        },
         createdAt: {
           $gte: start,
           $lt: end,

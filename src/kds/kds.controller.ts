@@ -20,6 +20,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { KDS_MODULE_KEY } from '../modules/constants/module-definitions';
+import { RequireModule } from '../modules/decorators/require-module.decorator';
+import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import { ProductionArea } from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
@@ -31,22 +34,27 @@ import { UpdateKdsSettingsDto } from './dto/update-kds-settings.dto';
 import { KdsService } from './kds.service';
 
 const KDS_ROLES = [
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,
   Role.Regionalleiter,
   Role.Bereichsleiter,
   Role.Filialleiter,
+  Role.LocationManager,
+  Role.Kitchen,
   Role.Kueche,
   Role.Bar,
+  Role.Counter,
   Role.Theke,
+  Role.Waiter,
   Role.Service,
 ];
 
 @Controller('kds')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@RequireModule(KDS_MODULE_KEY)
+@UseGuards(JwtAuthGuard, ModuleEnabledGuard, RolesGuard, PermissionsGuard)
 @Roles(...KDS_ROLES)
 export class KdsController {
   constructor(
@@ -144,14 +152,15 @@ export class KdsController {
   @Patch('settings')
   @Permissions('kds.manage')
   @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
+    Role.TenantAdminCode,
+    Role.TenantAdmin,
     Role.CompanyAdmin,
     Role.RegionAdmin,
     Role.Admin,
     Role.Regionalleiter,
     Role.Bereichsleiter,
     Role.Filialleiter,
+    Role.LocationManager,
   )
   updateSettings(
     @Query('locationId') locationId: string,
@@ -185,10 +194,6 @@ export class KdsController {
   async events(
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<Observable<MessageEvent>> {
-    if (this.accessPolicy.isPlatformAdmin(user)) {
-      return this.realtimeService.stream();
-    }
-
     const locationIds = await this.accessPolicy.getReadableLocationIds(user);
 
     return this.realtimeService.streamWhere((event) =>

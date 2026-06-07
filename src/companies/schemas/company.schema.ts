@@ -11,7 +11,7 @@ export class Company {
 
   updatedAt?: Date;
 
-  @Prop({ required: true, trim: true, index: true })
+  @Prop({ required: true, trim: true })
   name!: string;
 
   @Prop({ trim: true })

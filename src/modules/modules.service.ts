@@ -208,6 +208,26 @@ export class ModulesService implements OnModuleInit {
     }
   }
 
+  async assertEnabledForTenant(key: string, tenantId?: string): Promise<void> {
+    const normalizedKey = normalizeModuleKey(key);
+
+    if (!tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext fuer Modulstatus');
+    }
+
+    await this.assertTenantOperational(tenantId);
+    await this.ensureTenantDefaults(tenantId);
+    const tenantModule = await this.tenantModuleModel
+      .findOne({ tenantId, moduleKey: normalizedKey })
+      .exec();
+
+    if (!tenantModule?.enabled) {
+      throw new ForbiddenException(
+        `Module ${normalizedKey} is disabled for this tenant.`,
+      );
+    }
+  }
+
   async ensureTenantDefaults(tenantId: string): Promise<void> {
     await this.seedDefaults();
     await Promise.all(

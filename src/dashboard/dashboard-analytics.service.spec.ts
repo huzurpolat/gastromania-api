@@ -35,6 +35,7 @@ describe('DashboardAnalyticsService', () => {
     email: 'admin@gastromania-demo.de',
     roles: [Role.Admin],
     permissions: ['dashboard.view'],
+    tenantId: 'tenant-1',
     locationIds: ['loc-1'],
   };
 
@@ -165,12 +166,14 @@ describe('DashboardAnalyticsService', () => {
     expect(orderModel.countDocuments).toHaveBeenCalledWith(
       expect.objectContaining({
         locationId: { $in: ['loc-1'] },
+        tenantId: 'tenant-1',
         status: { $ne: OrderStatus.Cancelled },
       }),
     );
     expect(orderModel.countDocuments).toHaveBeenCalledWith(
       expect.objectContaining({
         locationId: { $in: ['loc-1'] },
+        tenantId: 'tenant-1',
         source: OrderSource.Counter,
         status: { $ne: OrderStatus.Cancelled },
       }),
@@ -178,6 +181,7 @@ describe('DashboardAnalyticsService', () => {
     expect(orderModel.countDocuments).toHaveBeenCalledWith(
       expect.objectContaining({
         locationId: { $in: ['loc-1'] },
+        tenantId: 'tenant-1',
         paymentStatus: { $ne: PaymentStatus.Paid },
         status: { $nin: [OrderStatus.Cancelled, OrderStatus.Closed] },
       }),
@@ -185,12 +189,14 @@ describe('DashboardAnalyticsService', () => {
     expect(reservationModel.countDocuments).toHaveBeenCalledWith(
       expect.objectContaining({
         locationId: { $in: ['loc-1'] },
+        tenantId: 'tenant-1',
         status: { $ne: ReservationStatus.Cancelled },
       }),
     );
     expect(tableModel.countDocuments).toHaveBeenCalledWith(
       expect.objectContaining({
         locationId: { $in: ['loc-1'] },
+        tenantId: 'tenant-1',
         isActive: true,
         status: TableStatus.Occupied,
       }),
@@ -201,6 +207,7 @@ describe('DashboardAnalyticsService', () => {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           $match: expect.objectContaining({
             locationId: { $in: ['loc-1'] },
+            tenantId: 'tenant-1',
             status: { $ne: ChecklistStatus.Done },
           }),
         }),
@@ -212,6 +219,7 @@ describe('DashboardAnalyticsService', () => {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           $match: expect.objectContaining({
             locationId: { $in: ['loc-1'] },
+            tenantId: 'tenant-1',
             type: {
               $in: [
                 StockMovementType.Shrinkage,
@@ -270,10 +278,12 @@ describe('DashboardAnalyticsService', () => {
     });
     expect(employeeDocumentModel.countDocuments).toHaveBeenCalledWith({
       locationId: { $in: ['loc-1'] },
+      tenantId: 'tenant-1',
     });
     expect(jobApplicantModel.countDocuments).toHaveBeenCalledWith(
       expect.objectContaining({
         locationId: { $in: ['loc-1'] },
+        tenantId: 'tenant-1',
       }),
     );
   });
@@ -287,5 +297,21 @@ describe('DashboardAnalyticsService', () => {
     expect(resolved.to.getHours()).toBe(23);
     expect(resolved.to.getMinutes()).toBe(59);
     expect(resolved.locationIds).toEqual(['loc-1']);
+    expect(resolved.tenantId).toBe('tenant-1');
+  });
+
+  it('blocks platform admins from operative dashboard analytics', () => {
+    const { service } = createService();
+
+    expect(() =>
+      service.resolveQuery(
+        {
+          sub: 'platform-1',
+          email: 'platform@test.local',
+          roles: [Role.PlatformAdminCode],
+        },
+        { range: 'today' },
+      ),
+    ).toThrow(ForbiddenException);
   });
 });

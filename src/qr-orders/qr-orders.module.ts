@@ -6,6 +6,7 @@ import {
   MenuItem,
   MenuItemSchema,
 } from '../menu-items/schemas/menu-item.schema';
+import { ModulesModule } from '../modules/modules.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import {
@@ -18,6 +19,7 @@ import { QrOrdersService } from './qr-orders.service';
 @Module({
   imports: [
     RealtimeModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: RestaurantTable.name, schema: RestaurantTableSchema },
       { name: Location.name, schema: LocationSchema },

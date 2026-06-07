@@ -7,7 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { STAFF_MANAGEMENT_MODULE_KEY } from '../modules/constants/module-definitions';
+import { PAYROLL_MODULE_KEY } from '../modules/constants/module-definitions';
 import { RequireModule } from '../modules/decorators/require-module.decorator';
 import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import {
@@ -19,13 +19,10 @@ import { PayrollService } from './payroll.service';
 
 const payrollRoles = [
   Role.TenantAdminCode,
+  Role.TenantAdmin,
   Role.CompanyAdmin,
-  Role.RegionAdmin,
+  Role.RestaurantAdmin,
   Role.Admin,
-  Role.Regionalleiter,
-  Role.Bereichsleiter,
-  Role.Filialleiter,
-  Role.Restaurantleiter,
   Role.Personalabteilung,
   Role.Buchhaltung,
 ];
@@ -33,7 +30,7 @@ const payrollRoles = [
 @Controller('payroll')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, ModuleEnabledGuard)
 @Roles(...payrollRoles)
-@RequireModule(STAFF_MANAGEMENT_MODULE_KEY)
+@RequireModule(PAYROLL_MODULE_KEY)
 export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}
 

@@ -23,6 +23,7 @@ import {
   OrderPriority,
   OrderSource,
   OrderStatus,
+  OrderTenantResolutionStatus,
   PaymentStatus,
   ProductionArea,
 } from '../orders/schemas/order.schema';
@@ -83,9 +84,14 @@ export class CounterOrderService {
     dto: CreateCounterOrderDto,
     actor: AuthenticatedUser,
   ): Promise<OrderDocument> {
+    this.assertTenantOperationalUser(actor);
     this.validateObjectId(dto.locationId, 'Standort-ID');
     this.assertCounterOrderRole(actor);
-    await this.accessPolicy.assertCanAccessLocation(actor, dto.locationId);
+    const location = await this.accessPolicy.assertLocationExistsAndReadable(
+      actor,
+      dto.locationId,
+    );
+    const tenantId = this.resolveOrderTenantId(actor, location);
 
     const pickupNumber = await this.pickupNumbers.nextPickupNumber(
       dto.locationId,
@@ -138,6 +144,9 @@ export class CounterOrderService {
 
     const order = await this.orderModel.create({
       companyId: actor.companyId,
+      tenantId,
+      tenantResolutionStatus: OrderTenantResolutionStatus.Resolved,
+      tenantResolvedAt: new Date(),
       locationId: dto.locationId,
       orderNumber: `T${pickupNumber}`,
       source: OrderSource.Counter,
@@ -190,13 +199,15 @@ export class CounterOrderService {
   }
 
   async findOne(id: string, actor: AuthenticatedUser): Promise<OrderDocument> {
+    this.assertTenantOperationalUser(actor);
     this.validateObjectId(id, 'Bestell-ID');
     const order = await this.orderModel.findById(id).exec();
 
     if (
       !order ||
       order.source !== OrderSource.Counter ||
-      !(await this.accessPolicy.canAccessLocation(actor, order.locationId))
+      !(await this.accessPolicy.canAccessLocation(actor, order.locationId)) ||
+      !this.isOrderInTenantScope(order, actor)
     ) {
       throw new NotFoundException('Thekenbestellung nicht gefunden');
     }
@@ -607,10 +618,11 @@ export class CounterOrderService {
     actor: AuthenticatedUser,
     locationId?: string,
   ): Promise<CounterOrderQuery> {
+    this.assertTenantOperationalUser(actor);
     if (locationId) this.validateObjectId(locationId, 'Standort-ID');
-    const query = await this.accessPolicy.getScopedResourceFilter(
+    const query = this.applyTenantScope(
+      await this.accessPolicy.getScopedResourceFilter(actor, locationId),
       actor,
-      locationId,
     );
 
     query.source = OrderSource.Counter;
@@ -620,18 +632,23 @@ export class CounterOrderService {
   private assertCounterOrderRole(actor: AuthenticatedUser): void {
     if (
       hasAnyRole(actor.roles, [
-        Role.PlatformAdmin,
-        Role.SuperAdmin,
+        Role.TenantAdminCode,
+        Role.TenantAdmin,
         Role.CompanyAdmin,
         Role.RegionAdmin,
         Role.Admin,
         Role.Regionalleiter,
         Role.Bereichsleiter,
         Role.Filialleiter,
+        Role.LocationManager,
         Role.Restaurantleiter,
         Role.Schichtleiter,
+        Role.Waiter,
         Role.Service,
+        Role.Counter,
         Role.Theke,
+        Role.Cashier,
+        Role.Kasse,
       ])
     ) {
       return;
@@ -646,14 +663,15 @@ export class CounterOrderService {
   ): void {
     if (
       hasAnyRole(actor.roles, [
-        Role.PlatformAdmin,
-        Role.SuperAdmin,
+        Role.TenantAdminCode,
+        Role.TenantAdmin,
         Role.CompanyAdmin,
         Role.RegionAdmin,
         Role.Admin,
         Role.Regionalleiter,
         Role.Bereichsleiter,
         Role.Filialleiter,
+        Role.LocationManager,
         Role.Restaurantleiter,
         Role.Schichtleiter,
       ])
@@ -665,19 +683,102 @@ export class CounterOrderService {
       [OrderStatus.Accepted, OrderStatus.Preparing, OrderStatus.Ready].includes(
         status,
       ) &&
-      hasAnyRole(actor.roles, [Role.Kueche, Role.Bar, Role.Theke])
+      hasAnyRole(actor.roles, [
+        Role.Kitchen,
+        Role.Kueche,
+        Role.Bar,
+        Role.Counter,
+        Role.Theke,
+      ])
     ) {
       return;
     }
 
     if (
       [OrderStatus.Served, OrderStatus.Closed].includes(status) &&
-      hasAnyRole(actor.roles, [Role.Service, Role.Theke])
+      hasAnyRole(actor.roles, [
+        Role.Waiter,
+        Role.Service,
+        Role.Counter,
+        Role.Theke,
+        Role.Cashier,
+        Role.Kasse,
+      ])
     ) {
       return;
     }
 
     throw new ForbiddenException('Keine Berechtigung fuer diesen Thekenstatus');
+  }
+
+  private assertTenantOperationalUser(actor: AuthenticatedUser): void {
+    if (this.accessPolicy.isPlatformAdmin(actor)) {
+      throw new ForbiddenException(
+        'Platform Admin darf keine operativen Thekenbestellungen nutzen',
+      );
+    }
+
+    if (!actor.tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext fuer Thekenbestellungen');
+    }
+  }
+
+  private resolveOrderTenantId(
+    actor: AuthenticatedUser,
+    location: { tenantId?: string },
+  ): string {
+    if (location.tenantId && location.tenantId !== actor.tenantId) {
+      throw new ForbiddenException('Standort gehoert nicht zu diesem Tenant');
+    }
+
+    if (actor.tenantId) {
+      return actor.tenantId;
+    }
+
+    if (location.tenantId) {
+      return location.tenantId;
+    }
+
+    throw new ForbiddenException('Tenant der Bestellung konnte nicht ermittelt werden');
+  }
+
+  private applyTenantScope(
+    query: Record<string, unknown>,
+    actor: AuthenticatedUser,
+  ): Record<string, unknown> {
+    if (!actor.tenantId) {
+      return query;
+    }
+
+    const existingAnd = Array.isArray(query.$and)
+      ? (query.$and as Record<string, unknown>[])
+      : [];
+
+    return {
+      ...query,
+      $and: [
+        ...existingAnd,
+        {
+          tenantId: actor.tenantId,
+        },
+        {
+          tenantResolutionStatus: {
+            $ne: OrderTenantResolutionStatus.LegacyOrphan,
+          },
+        },
+      ],
+    };
+  }
+
+  private isOrderInTenantScope(
+    order: Pick<OrderDocument, 'tenantId' | 'tenantResolutionStatus'>,
+    actor: AuthenticatedUser,
+  ): boolean {
+    return (
+      Boolean(actor.tenantId) &&
+      order.tenantId === actor.tenantId &&
+      order.tenantResolutionStatus !== OrderTenantResolutionStatus.LegacyOrphan
+    );
   }
 
   private assertStatusTransition(from: OrderStatus, to: OrderStatus): void {

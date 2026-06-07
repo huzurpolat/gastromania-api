@@ -16,6 +16,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { TABLE_ORDERS_MODULE_KEY } from '../modules/constants/module-definitions';
+import { RequireModule } from '../modules/decorators/require-module.decorator';
+import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import {
   CreateMobileOrderDto,
   UpdateMobileOrderDto,
@@ -25,24 +28,28 @@ import { UpdateMobileTaskDto } from './dto/update-mobile-task.dto';
 import { MobileService } from './mobile.service';
 
 const MOBILE_ROLES = [
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,
   Role.Regionalleiter,
   Role.Bereichsleiter,
   Role.Filialleiter,
+  Role.LocationManager,
   Role.Restaurantleiter,
   Role.Schichtleiter,
+  Role.Waiter,
   Role.Service,
   Role.Bar,
+  Role.Counter,
   Role.Theke,
+  Role.Kitchen,
   Role.Kueche,
 ];
 
 @Controller('mobile')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, ModuleEnabledGuard, RolesGuard, PermissionsGuard)
 @Roles(...MOBILE_ROLES)
 export class MobileController {
   constructor(private readonly mobileService: MobileService) {}
@@ -72,6 +79,7 @@ export class MobileController {
   }
 
   @Get('orders')
+  @RequireModule(TABLE_ORDERS_MODULE_KEY)
   @Permissions('orders.view')
   orders(
     @CurrentUser() actor: AuthenticatedUser,
@@ -81,6 +89,7 @@ export class MobileController {
   }
 
   @Post('orders')
+  @RequireModule(TABLE_ORDERS_MODULE_KEY)
   @Permissions('orders.create')
   createOrder(
     @CurrentUser() actor: AuthenticatedUser,
@@ -90,6 +99,7 @@ export class MobileController {
   }
 
   @Patch('orders/:id')
+  @RequireModule(TABLE_ORDERS_MODULE_KEY)
   @Permissions('orders.update')
   updateOrder(
     @CurrentUser() actor: AuthenticatedUser,

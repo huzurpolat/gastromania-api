@@ -5,7 +5,7 @@ export type InventoryCategoryDocument = HydratedDocument<InventoryCategory>;
 
 @Schema({ timestamps: true, versionKey: false })
 export class InventoryCategory {
-  @Prop({ required: true, trim: true, index: true })
+  @Prop({ required: true, trim: true })
   name!: string;
 
   @Prop({ trim: true })

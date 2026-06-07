@@ -10,6 +10,7 @@ import { AccessPolicyService } from '../access/access-policy.service';
 import { LocationGuard } from '../auth/guards/location.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Tenant } from '../tenants/schemas/tenant.schema';
+import { User } from '../users/schemas/user.schema';
 
 describe('LocationsController', () => {
   let controller: LocationsController;
@@ -82,6 +83,12 @@ describe('LocationsController', () => {
                 }),
               }),
             }),
+          },
+        },
+        {
+          provide: getModelToken(User.name),
+          useValue: {
+            findById: jest.fn(),
           },
         },
       ],

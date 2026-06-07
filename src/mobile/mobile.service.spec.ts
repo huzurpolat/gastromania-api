@@ -56,6 +56,7 @@ describe('MobileService', () => {
         sub: 'u1',
         email: 'service@test.local',
         roles: ['Service'],
+        tenantId: 'tenant-1',
         locationIds: ['loc-1'],
       },
       {
@@ -81,13 +82,32 @@ describe('MobileService', () => {
     await expect(
       service.createOrder(
         {
-          sub: 'u1',
-          email: 'service@test.local',
-          roles: ['Service'],
-          locationIds: ['loc-1'],
+        sub: 'u1',
+        email: 'service@test.local',
+        roles: ['Service'],
+        tenantId: 'tenant-1',
+        locationIds: ['loc-1'],
         },
         {
           locationId: 'loc-2',
+          items: [
+            { name: 'Cola', quantity: 1, price: 3, isKitchenItem: false },
+          ],
+        },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('blocks platform admins from mobile operative order access', async () => {
+    await expect(
+      service.createOrder(
+        {
+          sub: 'platform-1',
+          email: 'platform@test.local',
+          roles: ['PLATFORM_ADMIN'],
+        },
+        {
+          locationId: 'loc-1',
           items: [
             { name: 'Cola', quantity: 1, price: 3, isKitchenItem: false },
           ],

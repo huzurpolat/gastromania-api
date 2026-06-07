@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,12 +10,18 @@ import { Company } from '../companies/schemas/company.schema';
 import { Location } from '../locations/schemas/location.schema';
 import { MenuItem } from '../menu-items/schemas/menu-item.schema';
 import {
+  DIGITAL_MENU_MODULE_KEY,
+  QR_ORDERS_MODULE_KEY,
+} from '../modules/constants/module-definitions';
+import { ModulesService } from '../modules/modules.service';
+import {
   CourseType,
   Order,
   OrderDocument,
   OrderItemStatus,
   OrderSource,
   OrderStatus,
+  OrderTenantResolutionStatus,
   PaymentMethod,
   PaymentStatus,
   ProductionArea,
@@ -47,10 +54,12 @@ export class QrOrdersService {
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
     private readonly realtimeService: RealtimeService,
+    private readonly modulesService: ModulesService,
   ) {}
 
   async getPublicMenu(token: string) {
     const context = await this.validateToken(token);
+    await this.assertPublicModuleEnabled(context, DIGITAL_MENU_MODULE_KEY);
     const menuItems = await this.menuItemModel
       .find({ isActive: true })
       .sort({ category: 1, name: 1 })
@@ -99,6 +108,7 @@ export class QrOrdersService {
     metadata: { userAgent?: string } = {},
   ) {
     const context = await this.validateToken(token);
+    await this.assertPublicModuleEnabled(context, QR_ORDERS_MODULE_KEY);
     const itemIds = [...new Set(dto.items.map((item) => item.menuItemId))];
     const menuItems = await this.menuItemModel
       .find({ _id: { $in: itemIds }, isActive: true })
@@ -147,6 +157,9 @@ export class QrOrdersService {
     );
     const order = await this.orderModel.create({
       companyId: context.location.companyId,
+      tenantId: context.location.tenantId,
+      tenantResolutionStatus: OrderTenantResolutionStatus.Resolved,
+      tenantResolvedAt: new Date(),
       locationId: this.stringifyId(context.location._id),
       tableId: context.table._id.toString(),
       source: OrderSource.Qr,
@@ -195,12 +208,17 @@ export class QrOrdersService {
 
   async getOrderStatus(token: string, orderId: string) {
     const context = await this.validateToken(token);
+    await this.assertPublicModuleEnabled(context, QR_ORDERS_MODULE_KEY);
     const order = await this.orderModel
       .findOne({
         _id: orderId,
         qrTokenId: token,
         tableId: context.table._id.toString(),
         locationId: this.stringifyId(context.location._id),
+        tenantId: context.location.tenantId,
+        tenantResolutionStatus: {
+          $ne: OrderTenantResolutionStatus.LegacyOrphan,
+        },
       })
       .lean();
 
@@ -256,6 +274,20 @@ export class QrOrdersService {
     };
   }
 
+  private async assertPublicModuleEnabled(
+    context: ValidatedQrContext,
+    moduleKey: string,
+  ): Promise<void> {
+    if (!context.location.tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext fuer QR-Bestellungen');
+    }
+
+    await this.modulesService.assertEnabledForTenant(
+      moduleKey,
+      context.location.tenantId,
+    );
+  }
+
   private async syncTableForQrOrder(
     table: RestaurantTableDocument,
     order: OrderDocument,
@@ -303,6 +335,9 @@ export class QrOrdersService {
     end.setDate(end.getDate() + 1);
     const count = await this.orderModel.countDocuments({
       locationId,
+      tenantResolutionStatus: {
+        $ne: OrderTenantResolutionStatus.LegacyOrphan,
+      },
       createdAt: { $gte: start, $lt: end },
     });
 

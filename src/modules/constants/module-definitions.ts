@@ -9,17 +9,22 @@ export interface ModuleDefinition {
 }
 
 export const COUNTER_ORDERS_MODULE_KEY = 'counter_orders';
+export const POS_MODULE_KEY = 'pos';
 export const STAFF_MANAGEMENT_MODULE_KEY = 'staff_management';
+export const PAYROLL_MODULE_KEY = 'payroll';
 export const TIME_TRACKING_MODULE_KEY = 'time_tracking';
 export const INVENTORY_MODULE_KEY = 'inventory';
 export const KDS_MODULE_KEY = 'kds';
 export const REPORTING_MODULE_KEY = 'reporting';
 export const QR_ORDERS_MODULE_KEY = 'qr_orders';
 export const DIGITAL_MENU_MODULE_KEY = 'digital_menu';
+export const TABLE_ORDERS_MODULE_KEY = 'table_orders';
+export const TABLE_MANAGEMENT_MODULE_KEY = 'table_management';
+export const DAILY_CLOSING_MODULE_KEY = 'daily_closing';
 
 export const DEFAULT_MODULES: ModuleDefinition[] = [
   {
-    key: 'pos',
+    key: POS_MODULE_KEY,
     name: 'POS / Kassensystem',
     description: 'Kassierfunktionen und Verkaufsabschluss am Standort.',
     category: 'Verkauf',
@@ -37,7 +42,7 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
     sortOrder: 20,
   },
   {
-    key: 'table_orders',
+    key: TABLE_ORDERS_MODULE_KEY,
     name: 'Tischbestellungen',
     description: 'Bestellungen am Tisch durch Service oder digitale Kanaele.',
     category: 'Betrieb',
@@ -46,7 +51,7 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
     sortOrder: 30,
   },
   {
-    key: 'table_management',
+    key: TABLE_MANAGEMENT_MODULE_KEY,
     name: 'Tischverwaltung',
     description: 'Tische, Tischstatus und Tischplaner fuer den Service.',
     category: 'Betrieb',
@@ -109,7 +114,7 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
     sortOrder: 100,
   },
   {
-    key: 'daily_closing',
+    key: DAILY_CLOSING_MODULE_KEY,
     name: 'Tagesabschluss',
     description: 'Tagesabschluss, Kassenabschluss und Exportvorbereitung.',
     category: 'Verkauf',
@@ -134,6 +139,15 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
     defaultEnabled: true,
     systemLocked: false,
     sortOrder: 125,
+  },
+  {
+    key: PAYROLL_MODULE_KEY,
+    name: 'Payroll / Lohnbasis',
+    description: 'Bruttolohn-Auswertung, Payroll-Perioden und CSV-Export.',
+    category: 'Personal',
+    defaultEnabled: true,
+    systemLocked: false,
+    sortOrder: 127,
   },
   {
     key: 'reporting',
@@ -187,6 +201,7 @@ export const MODULE_KEY_ALIASES: Record<string, string> = {
   margins: 'cost_of_goods',
   daily_closings: 'daily_closing',
   staff: STAFF_MANAGEMENT_MODULE_KEY,
+  payroll: PAYROLL_MODULE_KEY,
   timeTracking: TIME_TRACKING_MODULE_KEY,
 };
 

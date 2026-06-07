@@ -11,7 +11,7 @@ export class SystemModule {
 
   updatedAt?: Date;
 
-  @Prop({ required: true, unique: true, trim: true })
+  @Prop({ required: true, trim: true })
   key!: string;
 
   @Prop({ required: true, trim: true })

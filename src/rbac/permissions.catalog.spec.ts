@@ -73,6 +73,7 @@ describe('permissions catalog', () => {
       expect.not.arrayContaining([
         'companies.create',
         'companies.update',
+        'payroll.view',
         'regions.create',
         'regions.update',
         'roles.update',
@@ -86,6 +87,7 @@ describe('permissions catalog', () => {
       expect.not.arrayContaining([
         'companies.view',
         'companies.update',
+        'payroll.view',
         'regions.update',
         'roles.view',
         'settings.view',
@@ -97,6 +99,7 @@ describe('permissions catalog', () => {
     expect(DEFAULT_ROLE_PERMISSIONS.Bereichsleiter).toEqual(
       expect.not.arrayContaining([
         'companies.view',
+        'payroll.view',
         'regions.update',
         'roles.view',
         'locations.create',
@@ -119,6 +122,7 @@ describe('permissions catalog', () => {
     expect(DEFAULT_ROLE_PERMISSIONS.Filialleiter).toEqual(
       expect.not.arrayContaining([
         'companies.view',
+        'payroll.view',
         'regions.view',
         'roles.view',
         'locations.create',
@@ -134,6 +138,13 @@ describe('permissions catalog', () => {
         'users.update',
         'roles.view',
       ]),
+    );
+
+    expect(DEFAULT_ROLE_PERMISSIONS.Restaurantleiter).toEqual(
+      expect.not.arrayContaining(['payroll.view', 'payroll.lock']),
+    );
+    expect(DEFAULT_ROLE_PERMISSIONS.Personalabteilung).toEqual(
+      expect.arrayContaining(['payroll.view', 'payroll.export', 'payroll.lock']),
     );
   });
 

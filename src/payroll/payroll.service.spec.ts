@@ -171,8 +171,12 @@ describe('PayrollService', () => {
         breakHours: 0.5,
         overtimeHours: 0,
         vacationDays: 1,
+        sickDays: 0,
+        unpaidDays: 0,
+        otherAbsenceDays: 0,
         laborCost: 120,
         grossPay: 120,
+        warnings: ['Keine Standortzuordnung'],
       }),
     );
     expect(result.period.status).toBe(PayrollPeriodStatus.Open);
@@ -215,10 +219,13 @@ describe('PayrollService', () => {
         absenceDays: 0,
         sickDays: 0,
         vacationDays: 0,
+        unpaidDays: 0,
+        otherAbsenceDays: 0,
         hourlyRate: 20,
         grossPay: 40,
         laborCost: 40,
         minijobWarning: false,
+        warnings: [],
       },
     ];
     payrollPeriod.totalsSnapshot = {
@@ -230,6 +237,8 @@ describe('PayrollService', () => {
       laborCost: 40,
       vacationDays: 0,
       sickDays: 0,
+      unpaidDays: 0,
+      otherAbsenceDays: 0,
     };
 
     const result = await service.summary(actor, {
@@ -255,5 +264,7 @@ describe('PayrollService', () => {
     expect(exported.content).toContain('"Sina Service"');
     expect(exported.content).toContain('"120"');
     expect(exported.content).toContain('"Bruttolohn"');
+    expect(exported.content).toContain('"Iststunden / Netto"');
+    expect(exported.content).toContain('"Waehrung"');
   });
 });

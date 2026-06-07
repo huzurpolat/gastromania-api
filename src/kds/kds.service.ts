@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,11 +9,18 @@ import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
+  aggregateOrderStatus,
+  getTableEventForOrderStatus,
+  getTableStatusForOrders,
+  getTableWaitingSince,
+} from '../orders/order-status.utils';
+import {
   Order,
   OrderDocument,
   OrderItem,
   OrderItemStatus,
   OrderStatus,
+  OrderTenantResolutionStatus,
   ProductionArea,
 } from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -85,9 +93,13 @@ export class KdsService {
     actor: AuthenticatedUser,
     filters: KdsOrderFilters = {},
   ): Promise<OrderDocument[]> {
-    const query = await this.accessPolicy.getScopedResourceFilter(
+    this.assertTenantOperationalUser(actor);
+    const query = this.applyTenantScope(
+      await this.accessPolicy.getScopedResourceFilter(
+        actor,
+        filters.locationId,
+      ),
       actor,
-      filters.locationId,
     );
 
     if (filters.status) {
@@ -114,12 +126,14 @@ export class KdsService {
   }
 
   async findOne(id: string, actor: AuthenticatedUser): Promise<OrderDocument> {
+    this.assertTenantOperationalUser(actor);
     this.validateObjectId(id, 'Bestell-ID');
     const order = await this.orderModel.findById(id).exec();
 
     if (
       !order ||
-      !(await this.accessPolicy.canAccessLocation(actor, order.locationId))
+      !(await this.accessPolicy.canAccessLocation(actor, order.locationId)) ||
+      !this.isOrderInTenantScope(order, actor)
     ) {
       throw new NotFoundException('Bestellung nicht gefunden');
     }
@@ -216,7 +230,7 @@ export class KdsService {
     item.changedAt = changedAt;
     this.applyItemStatusAuditFields(item, dto.status, actor.sub, changedAt);
     const previousOrderStatus = order.status;
-    order.status = this.aggregateOrderStatus(order);
+    order.status = aggregateOrderStatus(order);
     order.statusTimestamps = {
       ...(order.statusTimestamps ?? {}),
       [order.status]: changedAt,
@@ -316,6 +330,7 @@ export class KdsService {
     locationId: string,
     actor: AuthenticatedUser,
   ): Promise<KdsSettingsDocument> {
+    this.assertTenantOperationalUser(actor);
     this.validateObjectId(locationId, 'Standort-ID');
     await this.accessPolicy.assertCanAccessLocation(actor, locationId);
 
@@ -360,9 +375,13 @@ export class KdsService {
       orderId?: string;
     } = {},
   ): Promise<KdsStatusLogDocument[]> {
-    const query = await this.accessPolicy.getScopedResourceFilter(
+    this.assertTenantOperationalUser(actor);
+    const query = this.applyTenantScope(
+      await this.accessPolicy.getScopedResourceFilter(
+        actor,
+        filters.locationId,
+      ),
       actor,
-      filters.locationId,
     );
 
     if (filters.orderId) {
@@ -374,10 +393,11 @@ export class KdsService {
   }
 
   async pickupDisplay(actor: AuthenticatedUser, locationId?: string) {
+    this.assertTenantOperationalUser(actor);
     const activeOrders = await this.findActive(actor, { locationId });
-    const calledFilter = await this.accessPolicy.getScopedResourceFilter(
+    const calledFilter = this.applyTenantScope(
+      await this.accessPolicy.getScopedResourceFilter(actor, locationId),
       actor,
-      locationId,
     );
     const called = await this.orderModel
       .find({
@@ -412,6 +432,57 @@ export class KdsService {
         `Statuswechsel von ${fromStatus} zu ${toStatus} ist nicht erlaubt`,
       );
     }
+  }
+
+  private assertTenantOperationalUser(actor: AuthenticatedUser): void {
+    if (this.accessPolicy.isPlatformAdmin(actor)) {
+      throw new ForbiddenException(
+        'Platform Admin darf keine operativen KDS-Daten nutzen',
+      );
+    }
+
+    if (!actor.tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext fuer KDS');
+    }
+  }
+
+  private applyTenantScope(
+    query: Record<string, unknown>,
+    actor: AuthenticatedUser,
+  ): Record<string, unknown> {
+    if (!actor.tenantId) {
+      return query;
+    }
+
+    const existingAnd = Array.isArray(query.$and)
+      ? (query.$and as Record<string, unknown>[])
+      : [];
+
+    return {
+      ...query,
+      $and: [
+        ...existingAnd,
+        {
+          tenantId: actor.tenantId,
+        },
+        {
+          tenantResolutionStatus: {
+            $ne: OrderTenantResolutionStatus.LegacyOrphan,
+          },
+        },
+      ],
+    };
+  }
+
+  private isOrderInTenantScope(
+    order: Pick<OrderDocument, 'tenantId' | 'tenantResolutionStatus'>,
+    actor: AuthenticatedUser,
+  ): boolean {
+    return (
+      Boolean(actor.tenantId) &&
+      order.tenantId === actor.tenantId &&
+      order.tenantResolutionStatus !== OrderTenantResolutionStatus.LegacyOrphan
+    );
   }
 
   private markOpenItems(order: OrderDocument, status: OrderItemStatus): void {
@@ -477,51 +548,6 @@ export class KdsService {
     return [...new Set(values.filter(Boolean))];
   }
 
-  private aggregateOrderStatus(order: OrderDocument): OrderStatus {
-    const statuses = order.items.map(
-      (item) => item.status ?? OrderItemStatus.Open,
-    );
-
-    if (!statuses.length) {
-      return order.status;
-    }
-
-    const activeStatuses = statuses.filter(
-      (status) => status !== OrderItemStatus.Cancelled,
-    );
-
-    if (!activeStatuses.length) {
-      return OrderStatus.Cancelled;
-    }
-
-    if (activeStatuses.every((status) => status === OrderItemStatus.Served)) {
-      return OrderStatus.Served;
-    }
-
-    if (
-      activeStatuses.every((status) =>
-        [OrderItemStatus.Ready, OrderItemStatus.Served].includes(status),
-      )
-    ) {
-      return OrderStatus.Ready;
-    }
-
-    if (
-      activeStatuses.some((status) =>
-        [
-          OrderItemStatus.Started,
-          OrderItemStatus.Preparing,
-          OrderItemStatus.Ready,
-          OrderItemStatus.Served,
-        ].includes(status),
-      )
-    ) {
-      return OrderStatus.Preparing;
-    }
-
-    return OrderStatus.New;
-  }
-
   private applyItemStatusAuditFields(
     item: OrderItem,
     status: OrderItemStatus,
@@ -569,10 +595,16 @@ export class KdsService {
       .find({
         tableId: order.tableId,
         status: { $nin: [OrderStatus.Cancelled, OrderStatus.Closed] },
+        tenantId: { $exists: true, $nin: [null, ''] },
+        tenantResolutionStatus: {
+          $ne: OrderTenantResolutionStatus.LegacyOrphan,
+        },
       })
       .sort({ createdAt: 1 })
       .exec();
-    const status = this.getTableStatusForOrders(activeOrders, order);
+    const status = getTableStatusForOrders(activeOrders, order, {
+      emptyTableStatusMode: 'kds',
+    });
     const changedAt = new Date();
 
     const updatedTable = await this.tableModel
@@ -593,7 +625,7 @@ export class KdsService {
             (sum, activeOrder) => sum + (activeOrder.guestCount ?? 0),
             0,
           ),
-          waitingSince: this.getTableWaitingSince(activeOrders),
+          waitingSince: getTableWaitingSince(activeOrders),
           assignedWaiterId:
             activeOrders.find((activeOrder) => activeOrder.assignedWaiterId)
               ?.assignedWaiterId ?? undefined,
@@ -646,7 +678,7 @@ export class KdsService {
       );
     }
 
-    const mappedEvent = this.getTableEventForOrderStatus(order.status);
+    const mappedEvent = getTableEventForOrderStatus(order.status);
     if (mappedEvent) {
       this.publishTableStatusEvent(
         mappedEvent,
@@ -658,63 +690,6 @@ export class KdsService {
         changedAt,
       );
     }
-  }
-
-  private getTableStatusForOrders(
-    activeOrders: OrderDocument[],
-    fallbackOrder: OrderDocument,
-  ): TableStatus {
-    if (!activeOrders.length) {
-      return fallbackOrder.status === OrderStatus.Cancelled
-        ? TableStatus.Free
-        : TableStatus.Paid;
-    }
-
-    if (activeOrders.some((order) => order.status === OrderStatus.Served)) {
-      return TableStatus.Served;
-    }
-    if (activeOrders.some((order) => order.status === OrderStatus.Ready)) {
-      return TableStatus.ReadyToServe;
-    }
-    if (activeOrders.some((order) => order.status === OrderStatus.Preparing)) {
-      return TableStatus.InPreparation;
-    }
-    if (activeOrders.some((order) => order.status === OrderStatus.Accepted)) {
-      return TableStatus.OrderSent;
-    }
-
-    return TableStatus.Ordering;
-  }
-
-  private getTableWaitingSince(
-    activeOrders: OrderDocument[],
-  ): Date | undefined {
-    const timestamps = activeOrders
-      .map(
-        (order) =>
-          order.statusTimestamps?.[OrderStatus.Accepted] ??
-          order.statusTimestamps?.[OrderStatus.Preparing] ??
-          order.statusTimestamps?.[OrderStatus.New] ??
-          (order as OrderDocument & { createdAt?: Date }).createdAt,
-      )
-      .filter((value): value is Date => Boolean(value))
-      .sort((first, second) => first.getTime() - second.getTime());
-
-    return timestamps[0];
-  }
-
-  private getTableEventForOrderStatus(status: OrderStatus): string | null {
-    if (status === OrderStatus.Accepted) {
-      return 'table.order.sent';
-    }
-    if (status === OrderStatus.Ready) {
-      return 'table.order.ready';
-    }
-    if (status === OrderStatus.Closed) {
-      return 'table.paid';
-    }
-
-    return null;
   }
 
   private publishTableStatusEvent(

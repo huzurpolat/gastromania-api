@@ -192,6 +192,45 @@ describe('ModulesService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('checks module state for an explicit tenant context', async () => {
+    const service = createService(
+      {
+        updateOne: jest.fn().mockReturnValue(query({ acknowledged: true })),
+      },
+      {
+        updateOne: jest.fn().mockReturnValue(query({ acknowledged: true })),
+        findOne: jest
+          .fn()
+          .mockReturnValue(query({ moduleKey: 'qr_orders', enabled: true })),
+      },
+      {
+        findById: jest.fn().mockReturnValue(leanQuery({ status: 'active' })),
+      },
+    );
+
+    await expect(
+      service.assertEnabledForTenant('qr_orders', 'tenant-1'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects explicit tenant module checks without tenant context', async () => {
+    const service = createService(
+      {
+        updateOne: jest.fn().mockReturnValue(query({ acknowledged: true })),
+      },
+      {
+        updateOne: jest.fn().mockReturnValue(query({ acknowledged: true })),
+      },
+      {
+        findById: jest.fn().mockReturnValue(leanQuery({ status: 'active' })),
+      },
+    );
+
+    await expect(
+      service.assertEnabledForTenant('qr_orders'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('seeds module definitions without a global enabled state', async () => {
     const updateOne = jest.fn().mockReturnValue(query({ acknowledged: true }));
     const service = createService({

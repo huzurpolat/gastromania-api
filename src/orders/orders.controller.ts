@@ -17,30 +17,90 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { TABLE_ORDERS_MODULE_KEY } from '../modules/constants/module-definitions';
+import { RequireModule } from '../modules/decorators/require-module.decorator';
+import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { OrdersService } from './orders.service';
 
+const ORDER_VIEW_ROLES = [
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
+  Role.CompanyAdmin,
+  Role.RegionAdmin,
+  Role.Admin,
+  Role.Regionalleiter,
+  Role.Bereichsleiter,
+  Role.Filialleiter,
+  Role.LocationManager,
+  Role.Waiter,
+  Role.Service,
+  Role.Kitchen,
+  Role.Kueche,
+  Role.Bar,
+  Role.Counter,
+  Role.Theke,
+];
+
+const ORDER_WRITE_ROLES = [
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
+  Role.CompanyAdmin,
+  Role.RegionAdmin,
+  Role.Admin,
+  Role.Regionalleiter,
+  Role.Bereichsleiter,
+  Role.Filialleiter,
+  Role.LocationManager,
+  Role.Waiter,
+  Role.Service,
+  Role.Counter,
+  Role.Theke,
+];
+
+const ORDER_ITEM_STATUS_ROLES = [
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
+  Role.CompanyAdmin,
+  Role.RegionAdmin,
+  Role.Admin,
+  Role.Regionalleiter,
+  Role.Bereichsleiter,
+  Role.Filialleiter,
+  Role.LocationManager,
+  Role.Schichtleiter,
+  Role.Waiter,
+  Role.Service,
+  Role.Kitchen,
+  Role.Kueche,
+  Role.Bar,
+  Role.Counter,
+  Role.Theke,
+];
+
+const ORDER_MANAGE_ROLES = [
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
+  Role.CompanyAdmin,
+  Role.RegionAdmin,
+  Role.Admin,
+  Role.Regionalleiter,
+  Role.Bereichsleiter,
+  Role.Filialleiter,
+  Role.LocationManager,
+];
+
 @Controller('orders')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@RequireModule(TABLE_ORDERS_MODULE_KEY)
+@UseGuards(JwtAuthGuard, ModuleEnabledGuard, RolesGuard, PermissionsGuard)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
   @Permissions('orders.create')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Theke,
-  )
+  @Roles(...ORDER_WRITE_ROLES)
   create(
     @Body() createOrderDto: CreateOrderDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -50,20 +110,7 @@ export class OrdersController {
 
   @Get()
   @Permissions('orders.view')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Kueche,
-    Role.Bar,
-    Role.Theke,
-  )
+  @Roles(...ORDER_VIEW_ROLES)
   findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -75,20 +122,7 @@ export class OrdersController {
 
   @Get('today')
   @Permissions('orders.view')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Kueche,
-    Role.Bar,
-    Role.Theke,
-  )
+  @Roles(...ORDER_VIEW_ROLES)
   findToday(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
@@ -98,20 +132,7 @@ export class OrdersController {
 
   @Get('location/:locationId')
   @Permissions('orders.view')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Kueche,
-    Role.Bar,
-    Role.Theke,
-  )
+  @Roles(...ORDER_VIEW_ROLES)
   findByLocation(
     @Param('locationId') locationId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -121,40 +142,14 @@ export class OrdersController {
 
   @Get(':id')
   @Permissions('orders.view')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Kueche,
-    Role.Bar,
-    Role.Theke,
-  )
+  @Roles(...ORDER_VIEW_ROLES)
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.findOne(id, user);
   }
 
   @Patch(':id')
   @Permissions('orders.update')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Kueche,
-    Role.Bar,
-    Role.Theke,
-  )
+  @Roles(...ORDER_ITEM_STATUS_ROLES)
   update(
     @Param('id') id: string,
     @Body() updateOrderDto: UpdateOrderDto,
@@ -165,21 +160,7 @@ export class OrdersController {
 
   @Patch(':orderId/items/:itemId/status')
   @Permissions('orders.update')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Schichtleiter,
-    Role.Service,
-    Role.Kueche,
-    Role.Bar,
-    Role.Theke,
-  )
+  @Roles(...ORDER_ITEM_STATUS_ROLES)
   updateItemStatus(
     @Param('orderId') orderId: string,
     @Param('itemId') itemId: string,
@@ -191,18 +172,7 @@ export class OrdersController {
 
   @Post(':id/send-to-kitchen')
   @Permissions('orders.update')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Theke,
-  )
+  @Roles(...ORDER_WRITE_ROLES)
   sendToKitchen(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -212,54 +182,21 @@ export class OrdersController {
 
   @Post(':id/mark-paid')
   @Permissions('orders.update')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Theke,
-  )
+  @Roles(...ORDER_WRITE_ROLES)
   markPaid(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.markPaid(id, user);
   }
 
   @Post(':id/close')
   @Permissions('orders.update')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Theke,
-  )
+  @Roles(...ORDER_WRITE_ROLES)
   close(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.close(id, user);
   }
 
   @Post(':id/release-table')
   @Permissions('orders.update')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Service,
-    Role.Theke,
-  )
+  @Roles(...ORDER_WRITE_ROLES)
   releaseTable(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -269,16 +206,7 @@ export class OrdersController {
 
   @Delete(':id')
   @Permissions('orders.cancel')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-  )
+  @Roles(...ORDER_MANAGE_ROLES)
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.ordersService.remove(id, user);
   }

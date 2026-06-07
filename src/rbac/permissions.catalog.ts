@@ -223,6 +223,7 @@ const regionAdminPermissions = withoutPermissions(
   'audit.view',
   'companies.create',
   'companies.update',
+  'payroll.',
   'regions.create',
   'regions.update',
   'roles.create',
@@ -236,6 +237,7 @@ const regionAdminPermissions = withoutPermissions(
 const regionalleiterPermissions = withoutPermissions(
   'audit.view',
   'companies.',
+  'payroll.',
   'regions.create',
   'regions.update',
   'roles.',
@@ -246,6 +248,7 @@ const regionalleiterPermissions = withoutPermissions(
 const bereichsleiterPermissions = withoutPermissions(
   'audit.view',
   'companies.',
+  'payroll.',
   'regions.create',
   'regions.update',
   'roles.',
@@ -258,6 +261,7 @@ const bereichsleiterPermissions = withoutPermissions(
 const filialleiterPermissions = withoutPermissions(
   'audit.view',
   'companies.',
+  'payroll.',
   'regions.',
   'roles.',
   'settings.',
@@ -323,8 +327,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'absence.view',
     'absence.request',
     'absence.approve',
-    'payroll.view',
-    'payroll.lock',
   ],
   Schichtleiter: [
     'dashboard.view',
@@ -571,6 +573,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'absence.approve',
     'payroll.view',
     'payroll.export',
+    'payroll.lock',
   ],
   Reinigung: [
     'dashboard.view',

@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
@@ -8,10 +9,16 @@ import { RestaurantTable, TableStatus } from '../tables/schemas/table.schema';
 import { TableStatusLog } from '../tables/schemas/table-status-log.schema';
 import { KdsStatusLog } from '../kds/schemas/kds-status-log.schema';
 import { OrdersService } from './orders.service';
-import { Order, OrderItemStatus, OrderStatus } from './schemas/order.schema';
+import {
+  Order,
+  OrderItemStatus,
+  OrderSource,
+  OrderStatus,
+} from './schemas/order.schema';
 
 describe('OrdersService', () => {
   let service: OrdersService;
+  const tenantId = 'tenant-1';
   const locationId = '507f1f77bcf86cd799439012';
   const tableId = '507f1f77bcf86cd799439013';
   const orderModel = {
@@ -41,7 +48,10 @@ describe('OrdersService', () => {
   };
   const accessPolicy = {
     assertCanAccessLocation: jest.fn(),
+    assertLocationExistsAndReadable: jest.fn(),
     canAccessLocation: jest.fn(),
+    getScopedResourceFilter: jest.fn(),
+    isPlatformAdmin: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -62,6 +72,7 @@ describe('OrdersService', () => {
         exec: jest.fn().mockResolvedValue([
           {
             _id: { toString: () => '507f1f77bcf86cd799439014' },
+            tenantId,
             locationId,
             tableId,
             status: OrderStatus.New,
@@ -79,6 +90,7 @@ describe('OrdersService', () => {
     tableModel.findById.mockReturnValue({
       exec: jest.fn().mockResolvedValue({
         _id: { toString: () => tableId },
+        tenantId,
         name: 'Fenster 01',
         locationId,
         status: TableStatus.Free,
@@ -108,7 +120,14 @@ describe('OrdersService', () => {
       warnings: [],
     });
     accessPolicy.assertCanAccessLocation.mockResolvedValue(undefined);
+    accessPolicy.assertLocationExistsAndReadable.mockResolvedValue({
+      _id: { toString: () => locationId },
+      tenantId,
+      locationId,
+    });
     accessPolicy.canAccessLocation.mockResolvedValue(true);
+    accessPolicy.getScopedResourceFilter.mockResolvedValue({ locationId });
+    accessPolicy.isPlatformAdmin.mockReturnValue(false);
     logModel.create.mockResolvedValue({});
     tableStatusLogModel.create.mockResolvedValue({});
 
@@ -147,12 +166,15 @@ describe('OrdersService', () => {
         email: 'service@test.local',
         roles: [],
         companyId: 'company-1',
+        tenantId,
       },
     );
 
     expect(order).toEqual(
       expect.objectContaining({
         companyId: 'company-1',
+        tenantId,
+        source: OrderSource.Internal,
         createdBy: 'waiter-1',
         assignedWaiterId: 'waiter-1',
         guestCount: 4,
@@ -178,6 +200,7 @@ describe('OrdersService', () => {
     const currentOrder = {
       _id: { toString: () => '507f1f77bcf86cd799439014' },
       companyId: 'company-1',
+      tenantId,
       locationId,
       tableId,
       status: OrderStatus.New,
@@ -213,6 +236,7 @@ describe('OrdersService', () => {
       email: 'service@test.local',
       roles: [Role.Service],
       companyId: 'company-1',
+      tenantId,
     });
 
     expect(result.status).toBe(OrderStatus.Accepted);
@@ -228,6 +252,7 @@ describe('OrdersService', () => {
     const order = {
       _id: { toString: () => '507f1f77bcf86cd799439014' },
       companyId: 'company-1',
+      tenantId,
       locationId,
       tableId,
       orderNumber: 'B0001',
@@ -281,6 +306,7 @@ describe('OrdersService', () => {
         email: 'kueche@test.local',
         roles: [Role.Kueche],
         companyId: 'company-1',
+        tenantId,
       },
     );
 
@@ -315,6 +341,7 @@ describe('OrdersService', () => {
     const order = {
       _id: { toString: () => '507f1f77bcf86cd799439014' },
       companyId: 'company-1',
+      tenantId,
       locationId,
       tableId,
       orderNumber: 'B0002',
@@ -357,6 +384,7 @@ describe('OrdersService', () => {
         email: 'kueche@test.local',
         roles: [Role.Kueche],
         companyId: 'company-1',
+        tenantId,
       },
     );
 
@@ -380,6 +408,7 @@ describe('OrdersService', () => {
     const order = {
       _id: { toString: () => '507f1f77bcf86cd799439014' },
       companyId: 'company-1',
+      tenantId,
       locationId,
       tableId,
       orderNumber: 'B0003',
@@ -422,9 +451,30 @@ describe('OrdersService', () => {
         email: 'kueche@test.local',
         roles: [Role.Kueche],
         companyId: 'company-1',
+        tenantId,
       },
     );
 
     expect(updated.status).toBe(OrderStatus.Preparing);
+  });
+
+  it('blocks platform admins from operative order access', async () => {
+    accessPolicy.isPlatformAdmin.mockReturnValue(true);
+
+    await expect(
+      service.create(
+        {
+          locationId,
+          items: [
+            { name: 'Cola', quantity: 1, price: 3, isKitchenItem: false },
+          ],
+        },
+        {
+          sub: 'platform-1',
+          email: 'platform@test.local',
+          roles: [Role.PlatformAdminCode],
+        },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

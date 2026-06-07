@@ -10,6 +10,7 @@ import {
   MenuItem,
   MenuItemSchema,
 } from '../menu-items/schemas/menu-item.schema';
+import { ModulesModule } from '../modules/modules.module';
 import { OrdersModule } from '../orders/orders.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import {
@@ -27,6 +28,7 @@ import { MobileService } from './mobile.service';
   imports: [
     AuthJwtModule,
     OrdersModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: Location.name, schema: LocationSchema },
       { name: RestaurantTable.name, schema: RestaurantTableSchema },

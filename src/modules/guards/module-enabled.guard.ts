@@ -12,7 +12,7 @@ export class ModuleEnabledGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const moduleKey = this.reflector.getAllAndOverride<string>(
+    const moduleKey = this.reflector.getAllAndOverride<string | string[]>(
       REQUIRE_MODULE_KEY,
       [context.getHandler(), context.getClass()],
     );
@@ -22,7 +22,11 @@ export class ModuleEnabledGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    await this.modulesService.assertEnabled(moduleKey, request.user);
+    const moduleKeys = Array.isArray(moduleKey) ? moduleKey : [moduleKey];
+
+    for (const requiredModule of moduleKeys) {
+      await this.modulesService.assertEnabled(requiredModule, request.user);
+    }
 
     return true;
   }

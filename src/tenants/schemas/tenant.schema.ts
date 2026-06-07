@@ -35,7 +35,7 @@ export class Tenant {
   @Prop({ required: true, trim: true, index: true })
   name!: string;
 
-  @Prop({ required: true, trim: true, lowercase: true, unique: true })
+  @Prop({ required: true, trim: true, lowercase: true })
   slug!: string;
 
   @Prop({

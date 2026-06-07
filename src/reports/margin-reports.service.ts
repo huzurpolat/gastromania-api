@@ -35,6 +35,7 @@ interface Period {
 }
 
 interface ResolvedScope {
+  tenantId: string;
   period: Period;
   locationIds: string[];
   locations: Array<Location & { _id: unknown }>;
@@ -187,6 +188,7 @@ export class MarginReportsService {
     scope: ResolvedScope,
   ): Promise<MenuItemMarginReportRow[]> {
     const orderFilter = {
+      tenantId: scope.tenantId,
       locationId: { $in: scope.locationIds },
       status: { $in: this.marginRelevantStatuses() },
       createdAt: { $gte: scope.period.from, $lte: scope.period.to },
@@ -582,6 +584,20 @@ export class MarginReportsService {
   ): Promise<ResolvedScope> {
     const period = this.resolvePeriod(query);
     if (
+      hasAnyRole(user.roles, [
+        Role.PlatformAdminCode,
+        Role.PlatformAdmin,
+        Role.SuperAdmin,
+      ])
+    ) {
+      throw new ForbiddenException(
+        'Platform Admin darf keine operativen Margenreports nutzen',
+      );
+    }
+    if (!user.tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext fuer Margenreports');
+    }
+    if (
       query.companyId &&
       !this.accessPolicy.canAccessCompany(user, query.companyId)
     ) {
@@ -602,6 +618,7 @@ export class MarginReportsService {
     const readableLocationIds =
       await this.accessPolicy.getReadableLocationIds(user);
     const locationFilter: Record<string, unknown> = {
+      tenantId: user.tenantId,
       _id: { $in: query.locationId ? [query.locationId] : readableLocationIds },
       ...(query.companyId ? { companyId: query.companyId } : {}),
       ...(query.regionId ? { regionId: query.regionId } : {}),
@@ -611,6 +628,7 @@ export class MarginReportsService {
 
     return {
       period,
+      tenantId: user.tenantId,
       locationIds: locations.map((location) => this.stringifyId(location._id)),
       locations: locations as Array<Location & { _id: unknown }>,
       companyId: query.companyId,
@@ -717,8 +735,8 @@ export class MarginReportsService {
   private assertCanViewMargins(user: AuthenticatedUser): void {
     if (
       !hasAnyRole(user.roles, [
-        Role.PlatformAdmin,
-        Role.SuperAdmin,
+        Role.TenantAdminCode,
+        Role.TenantAdmin,
         Role.CompanyAdmin,
         Role.RegionAdmin,
         Role.Admin,

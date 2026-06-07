@@ -62,6 +62,11 @@ export enum OrderSource {
   Counter = 'counter',
 }
 
+export enum OrderTenantResolutionStatus {
+  Resolved = 'resolved',
+  LegacyOrphan = 'legacy_orphan',
+}
+
 export enum CourseType {
   Drink = 'Getränk',
   Starter = 'Vorspeise',
@@ -170,6 +175,22 @@ export const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
 export class Order {
   @Prop({ trim: true, index: true })
   companyId?: string;
+
+  @Prop({ trim: true, index: true })
+  tenantId?: string;
+
+  @Prop({
+    type: String,
+    enum: Object.values(OrderTenantResolutionStatus),
+    index: true,
+  })
+  tenantResolutionStatus?: OrderTenantResolutionStatus;
+
+  @Prop({ trim: true })
+  tenantResolutionReason?: string;
+
+  @Prop()
+  tenantResolvedAt?: Date;
 
   @Prop({ required: true, trim: true, index: true })
   locationId!: string;
@@ -343,5 +364,13 @@ export class Order {
 export const OrderSchema = SchemaFactory.createForClass(Order);
 
 OrderSchema.index({ locationId: 1, createdAt: -1 });
+OrderSchema.index({ tenantId: 1, locationId: 1, createdAt: -1 });
+OrderSchema.index({
+  tenantId: 1,
+  tenantResolutionStatus: 1,
+  locationId: 1,
+  createdAt: -1,
+});
+OrderSchema.index({ tenantResolutionStatus: 1, createdAt: -1 });
 OrderSchema.index({ tableId: 1, status: 1 });
 OrderSchema.index({ locationId: 1, pickupNumber: 1 });

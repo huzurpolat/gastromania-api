@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { CounterOrderService } from './counter-order.service';
 import {
   OrderItemStatus,
@@ -38,14 +38,18 @@ describe('CounterOrderService', () => {
   };
   const accessPolicy = {
     assertCanAccessLocation: jest.fn(),
+    assertLocationExistsAndReadable: jest.fn(),
     getScopedResourceFilter: jest.fn(),
     canAccessLocation: jest.fn(),
+    isPlatformAdmin: jest.fn(),
   };
+  const tenantId = 'tenant-1';
   const actor = {
     sub: 'user-1',
     email: 'service@test.local',
     roles: [Role.Service],
     companyId: 'company-1',
+    tenantId,
     locationIds: ['64f000000000000000000001'],
   };
   const locationId = '64f000000000000000000001';
@@ -70,6 +74,13 @@ describe('CounterOrderService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     accessPolicy.assertCanAccessLocation.mockResolvedValue(undefined);
+    accessPolicy.assertLocationExistsAndReadable.mockResolvedValue({
+      _id: { toString: () => locationId },
+      tenantId,
+    });
+    accessPolicy.canAccessLocation.mockResolvedValue(true);
+    accessPolicy.getScopedResourceFilter.mockResolvedValue({ locationId });
+    accessPolicy.isPlatformAdmin.mockReturnValue(false);
     pickupNumbers.nextPickupNumber.mockResolvedValue('A001');
     menuItemModel.find.mockReturnValue(
       execResult([
@@ -93,6 +104,7 @@ describe('CounterOrderService', () => {
     const createdOrder = {
       _id: { toString: () => 'order-1' },
       companyId: 'company-1',
+      tenantId,
       locationId,
       source: OrderSource.Counter,
       pickupNumber: 'A001',
@@ -127,6 +139,12 @@ describe('CounterOrderService', () => {
 
     expect(order.source).toBe(OrderSource.Counter);
     expect(order.pickupNumber).toBe('A001');
+    expect(orderModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId,
+        source: OrderSource.Counter,
+      }),
+    );
     expect(recipeInventoryService.consumeOrder).toHaveBeenCalledTimes(1);
     expect(createdOrder.inventoryDeducted).toBe(true);
   });
@@ -142,5 +160,23 @@ describe('CounterOrderService', () => {
         OrderStatus.Ready,
       ),
     ).toThrow(BadRequestException);
+  });
+
+  it('blocks platform admins from creating counter orders', async () => {
+    accessPolicy.isPlatformAdmin.mockReturnValue(true);
+
+    await expect(
+      service().create(
+        {
+          locationId,
+          items: [{ menuItemId, quantity: 1 }],
+        },
+        {
+          sub: 'platform-1',
+          email: 'platform@test.local',
+          roles: [Role.PlatformAdminCode],
+        },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

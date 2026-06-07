@@ -33,6 +33,7 @@ import {
 import { UpdateMobileTaskDto } from './dto/update-mobile-task.dto';
 
 interface MobileResolvedQuery {
+  tenantId: string;
   locationIds?: string[];
   locationId?: string;
   from: Date;
@@ -385,16 +386,13 @@ export class MobileService {
   ): MobileResolvedQuery {
     const day = query.date ? new Date(query.date) : new Date();
     const range = this.dayRange(day);
-    const canSeeAll =
-      actor.roles.includes(Role.PlatformAdmin) ||
-      actor.roles.includes(Role.SuperAdmin);
-
-    if (canSeeAll) {
-      return {
-        locationId: query.locationId,
-        locationIds: query.locationId ? [query.locationId] : undefined,
-        ...range,
-      };
+    if (this.isPlatformAdmin(actor)) {
+      throw new ForbiddenException(
+        'Platform Admin darf keine operativen Mobile-Daten nutzen',
+      );
+    }
+    if (!actor.tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext fuer Mobile-Daten');
     }
 
     if (query.locationId) {
@@ -403,6 +401,7 @@ export class MobileService {
 
     const actorLocationIds = actor.locationIds ?? [];
     return {
+      tenantId: actor.tenantId,
       locationId: query.locationId,
       locationIds: query.locationId ? [query.locationId] : actorLocationIds,
       ...range,
@@ -410,30 +409,46 @@ export class MobileService {
   }
 
   private assertCanUseLocation(actor: AuthenticatedUser, locationId: string) {
-    if (
-      actor.roles.includes(Role.PlatformAdmin) ||
-      actor.roles.includes(Role.SuperAdmin)
-    )
-      return;
+    if (this.isPlatformAdmin(actor)) {
+      throw new ForbiddenException(
+        'Platform Admin darf keine operativen Mobile-Daten nutzen',
+      );
+    }
     if (!(actor.locationIds ?? []).includes(locationId)) {
       throw new ForbiddenException('Kein Zugriff auf diese Filiale');
     }
   }
 
   private actorLocationFilter(actor: AuthenticatedUser) {
-    if (
-      actor.roles.includes(Role.PlatformAdmin) ||
-      actor.roles.includes(Role.SuperAdmin)
-    )
-      return {};
-    return { _id: { $in: actor.locationIds ?? [] } };
+    if (this.isPlatformAdmin(actor)) {
+      throw new ForbiddenException(
+        'Platform Admin darf keine operativen Mobile-Daten nutzen',
+      );
+    }
+    if (!actor.tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext fuer Mobile-Daten');
+    }
+    return { tenantId: actor.tenantId, _id: { $in: actor.locationIds ?? [] } };
   }
 
   private locationFilter(resolved: MobileResolvedQuery) {
-    if (resolved.locationId) return { locationId: resolved.locationId };
+    if (resolved.locationId) {
+      return { tenantId: resolved.tenantId, locationId: resolved.locationId };
+    }
     if (resolved.locationIds)
-      return { locationId: { $in: resolved.locationIds } };
-    return {};
+      return {
+        tenantId: resolved.tenantId,
+        locationId: { $in: resolved.locationIds },
+      };
+    return { tenantId: resolved.tenantId };
+  }
+
+  private isPlatformAdmin(actor: AuthenticatedUser): boolean {
+    return (
+      actor.roles.includes(Role.PlatformAdminCode) ||
+      actor.roles.includes(Role.PlatformAdmin) ||
+      actor.roles.includes(Role.SuperAdmin)
+    );
   }
 
   private activeStatuses() {

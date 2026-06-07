@@ -14,12 +14,14 @@ describe('MarginReportsService', () => {
     email: 'filialleiter@bonn.local',
     roles: [Role.Filialleiter],
     permissions: ['reports.view'],
+    tenantId: 'tenant-1',
     locationIds: ['loc-1'],
   };
   const location = {
     _id: 'loc-1',
     name: 'Bonn',
     city: 'Bonn',
+    tenantId: 'tenant-1',
     isActive: true,
   };
   const createService = (data: {
@@ -63,6 +65,7 @@ describe('MarginReportsService', () => {
       orders: [
         {
           _id: 'order-1',
+          tenantId: 'tenant-1',
           locationId: 'loc-1',
           status: OrderStatus.Accepted,
           createdAt: new Date(),
@@ -175,6 +178,7 @@ describe('MarginReportsService', () => {
 
     expect(orderModel.find).toHaveBeenCalledWith(
       expect.objectContaining({
+        tenantId: 'tenant-1',
         status: {
           $in: expect.not.arrayContaining([
             OrderStatus.Cancelled,
@@ -191,6 +195,7 @@ describe('MarginReportsService', () => {
       orders: [
         {
           _id: 'order-1',
+          tenantId: 'tenant-1',
           locationId: 'loc-1',
           status: OrderStatus.Accepted,
           createdAt: new Date(),
@@ -221,6 +226,7 @@ describe('MarginReportsService', () => {
       orders: [
         {
           _id: 'order-1',
+          tenantId: 'tenant-1',
           locationId: 'loc-1',
           status: OrderStatus.Accepted,
           createdAt: new Date(),
@@ -338,6 +344,21 @@ describe('MarginReportsService', () => {
     await expect(
       service.getMargins(
         { ...user, roles: [Role.Service] },
+        { range: 'today' },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('blocks platform admins from operative margin reports', async () => {
+    const { service } = createService({});
+
+    await expect(
+      service.getMargins(
+        {
+          sub: 'platform-1',
+          email: 'platform@test.local',
+          roles: [Role.PlatformAdminCode],
+        },
         { range: 'today' },
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);

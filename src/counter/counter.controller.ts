@@ -16,7 +16,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { COUNTER_ORDERS_MODULE_KEY } from '../modules/constants/module-definitions';
+import {
+  COUNTER_ORDERS_MODULE_KEY,
+  POS_MODULE_KEY,
+} from '../modules/constants/module-definitions';
 import { RequireModule } from '../modules/decorators/require-module.decorator';
 import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import { OrderStatus, PaymentStatus } from '../orders/schemas/order.schema';
@@ -28,36 +31,45 @@ import { UpdateCounterStatusDto } from './dto/update-counter-status.dto';
 import { CounterOrderService } from './counter-order.service';
 
 const COUNTER_VIEW_ROLES = [
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,
   Role.Regionalleiter,
   Role.Bereichsleiter,
   Role.Filialleiter,
+  Role.LocationManager,
   Role.Restaurantleiter,
   Role.Schichtleiter,
+  Role.Waiter,
   Role.Service,
+  Role.Kitchen,
   Role.Kueche,
   Role.Bar,
+  Role.Counter,
   Role.Theke,
+  Role.Cashier,
   Role.Kasse,
 ];
 
 const COUNTER_WRITE_ROLES = [
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,
   Role.Regionalleiter,
   Role.Bereichsleiter,
   Role.Filialleiter,
+  Role.LocationManager,
   Role.Restaurantleiter,
   Role.Schichtleiter,
+  Role.Waiter,
   Role.Service,
+  Role.Counter,
   Role.Theke,
+  Role.Cashier,
   Role.Kasse,
 ];
 
@@ -68,6 +80,7 @@ export class CounterController {
   constructor(private readonly counterService: CounterOrderService) {}
 
   @Get('dashboard')
+  @RequireModule([COUNTER_ORDERS_MODULE_KEY, POS_MODULE_KEY])
   @Roles(...COUNTER_VIEW_ROLES)
   @Permissions('counter.orders.view')
   dashboard(
@@ -78,6 +91,7 @@ export class CounterController {
   }
 
   @Get('reports/summary')
+  @RequireModule([COUNTER_ORDERS_MODULE_KEY, POS_MODULE_KEY])
   @Roles(...COUNTER_VIEW_ROLES, Role.Buchhaltung)
   @Permissions('counter.reports.view')
   report(
@@ -90,6 +104,7 @@ export class CounterController {
   }
 
   @Get('reports/export')
+  @RequireModule([COUNTER_ORDERS_MODULE_KEY, POS_MODULE_KEY])
   @Roles(...COUNTER_VIEW_ROLES, Role.Buchhaltung)
   @Permissions('counter.reports.export')
   exportReport(
@@ -164,6 +179,7 @@ export class CounterController {
   }
 
   @Post('orders/:id/pay')
+  @RequireModule([COUNTER_ORDERS_MODULE_KEY, POS_MODULE_KEY])
   @Roles(...COUNTER_WRITE_ROLES)
   @Permissions('counter.orders.pay')
   pay(
@@ -214,14 +230,15 @@ export class CounterController {
 
   @Patch('settings')
   @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
+    Role.TenantAdminCode,
+    Role.TenantAdmin,
     Role.CompanyAdmin,
     Role.RegionAdmin,
     Role.Admin,
     Role.Regionalleiter,
     Role.Bereichsleiter,
     Role.Filialleiter,
+    Role.LocationManager,
   )
   @Permissions('counter.settings.update')
   updateSettings(

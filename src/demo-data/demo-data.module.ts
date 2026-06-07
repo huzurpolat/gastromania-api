@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Area, AreaSchema } from '../areas/schemas/area.schema';
+import { City, CitySchema } from '../cities/schemas/city.schema';
 import {
   Checklist,
   ChecklistSchema,
@@ -15,6 +16,14 @@ import {
   DutyShift,
   DutyShiftSchema,
 } from '../duty-schedules/schemas/duty-shift.schema';
+import {
+  StaffAbsence,
+  StaffAbsenceSchema,
+} from '../staff-planning/schemas/staff-absence.schema';
+import {
+  StaffShift,
+  StaffShiftSchema,
+} from '../staff-planning/schemas/staff-shift.schema';
 import {
   InternalMessage,
   InternalMessageSchema,
@@ -53,6 +62,10 @@ import {
   TenantModuleSchema,
 } from '../modules/schemas/tenant-module.schema';
 import {
+  PayrollPeriod,
+  PayrollPeriodSchema,
+} from '../payroll/schemas/payroll-period.schema';
+import {
   TimeEntry,
   TimeEntrySchema,
 } from '../time-tracking/schemas/time-entry.schema';
@@ -79,6 +92,9 @@ import { DemoDataService } from './demo-data.service';
       { name: Reservation.name, schema: ReservationSchema },
       { name: User.name, schema: UserSchema },
       { name: DutyShift.name, schema: DutyShiftSchema },
+      { name: StaffShift.name, schema: StaffShiftSchema },
+      { name: StaffAbsence.name, schema: StaffAbsenceSchema },
+      { name: PayrollPeriod.name, schema: PayrollPeriodSchema },
       { name: TimeEntry.name, schema: TimeEntrySchema },
       { name: WeeklyMenu.name, schema: WeeklyMenuSchema },
       { name: InternalMessage.name, schema: InternalMessageSchema },
@@ -89,6 +105,7 @@ import { DemoDataService } from './demo-data.service';
       { name: Supplier.name, schema: SupplierSchema },
       { name: Checklist.name, schema: ChecklistSchema },
       { name: Area.name, schema: AreaSchema },
+      { name: City.name, schema: CitySchema },
       { name: Tenant.name, schema: TenantSchema },
       { name: TenantModule.name, schema: TenantModuleSchema },
     ]),

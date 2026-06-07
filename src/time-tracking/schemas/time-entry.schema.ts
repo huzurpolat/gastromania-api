@@ -60,7 +60,6 @@ export class TimeEntry {
 export const TimeEntrySchema = SchemaFactory.createForClass(TimeEntry);
 
 TimeEntrySchema.index({ employeeId: 1, clockOut: 1 });
-TimeEntrySchema.index({ tenantId: 1, employeeId: 1, status: 1 });
 TimeEntrySchema.index(
   { tenantId: 1, employeeId: 1, status: 1 },
   {

@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { KdsService } from './kds.service';
@@ -18,8 +18,10 @@ import { TableStatusLog } from '../tables/schemas/table-status-log.schema';
 
 describe('KdsService', () => {
   let service: KdsService;
+  const tenantId = 'tenant-1';
   const order = {
     _id: { toString: () => '507f1f77bcf86cd799439011' },
+    tenantId,
     locationId: '507f1f77bcf86cd799439012',
     status: OrderStatus.New,
     tableId: '507f1f77bcf86cd799439013',
@@ -63,6 +65,7 @@ describe('KdsService', () => {
     canAccessLocation: jest.fn(),
     assertCanManageLocation: jest.fn(),
     getScopedResourceFilter: jest.fn(),
+    isPlatformAdmin: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -108,6 +111,7 @@ describe('KdsService', () => {
     accessPolicy.canAccessLocation.mockResolvedValue(true);
     accessPolicy.assertCanManageLocation.mockResolvedValue(undefined);
     accessPolicy.getScopedResourceFilter.mockResolvedValue({});
+    accessPolicy.isPlatformAdmin.mockReturnValue(false);
     recipeInventoryService.consumeOrder.mockResolvedValue({
       movementIds: ['mov-1'],
       warnings: [],
@@ -142,7 +146,7 @@ describe('KdsService', () => {
       service.updateStatus(
         '507f1f77bcf86cd799439011',
         { status: OrderStatus.Accepted, employeeName: 'Klara' },
-        { sub: 'user-1', email: 'kueche@test.local', roles: [] },
+        { sub: 'user-1', email: 'kueche@test.local', roles: [], tenantId },
       ),
     ).resolves.toBe(order);
 
@@ -175,7 +179,7 @@ describe('KdsService', () => {
       service.updateStatus(
         '507f1f77bcf86cd799439011',
         { status: OrderStatus.Ready },
-        { sub: 'user-1', email: 'kueche@test.local', roles: [] },
+        { sub: 'user-1', email: 'kueche@test.local', roles: [], tenantId },
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -202,7 +206,12 @@ describe('KdsService', () => {
       '507f1f77bcf86cd799439011',
       'item-1',
       { status: OrderItemStatus.Started },
-      { sub: 'user-1', email: 'kueche@test.local', roles: [Role.Kueche] },
+      {
+        sub: 'user-1',
+        email: 'kueche@test.local',
+        roles: [Role.Kueche],
+        tenantId,
+      },
     );
 
     expect(updated.status).toBe(OrderStatus.Preparing);
@@ -243,7 +252,12 @@ describe('KdsService', () => {
       '507f1f77bcf86cd799439011',
       'item-1',
       { status: OrderItemStatus.Ready },
-      { sub: 'user-1', email: 'kueche@test.local', roles: [Role.Kueche] },
+      {
+        sub: 'user-1',
+        email: 'kueche@test.local',
+        roles: [Role.Kueche],
+        tenantId,
+      },
     );
 
     expect(updated.status).toBe(OrderStatus.Preparing);
@@ -272,7 +286,12 @@ describe('KdsService', () => {
       '507f1f77bcf86cd799439011',
       'item-2',
       { status: OrderItemStatus.Ready },
-      { sub: 'user-1', email: 'kueche@test.local', roles: [Role.Kueche] },
+      {
+        sub: 'user-1',
+        email: 'kueche@test.local',
+        roles: [Role.Kueche],
+        tenantId,
+      },
     );
 
     expect(updated.status).toBe(OrderStatus.Ready);
@@ -301,7 +320,12 @@ describe('KdsService', () => {
       '507f1f77bcf86cd799439011',
       'item-2',
       { status: OrderItemStatus.Served },
-      { sub: 'service-1', email: 'service@test.local', roles: [Role.Service] },
+      {
+        sub: 'service-1',
+        email: 'service@test.local',
+        roles: [Role.Service],
+        tenantId,
+      },
     );
 
     expect(updated.status).toBe(OrderStatus.Served);
@@ -330,9 +354,29 @@ describe('KdsService', () => {
       '507f1f77bcf86cd799439011',
       'item-2',
       { status: OrderItemStatus.Cancelled },
-      { sub: 'user-1', email: 'kueche@test.local', roles: [Role.Kueche] },
+      {
+        sub: 'user-1',
+        email: 'kueche@test.local',
+        roles: [Role.Kueche],
+        tenantId,
+      },
     );
 
     expect(updated.status).toBe(OrderStatus.Cancelled);
+  });
+
+  it('blocks platform admins from KDS order access', async () => {
+    accessPolicy.isPlatformAdmin.mockReturnValue(true);
+
+    await expect(
+      service.findOrders(
+        {
+          sub: 'platform-1',
+          email: 'platform@test.local',
+          roles: [Role.PlatformAdminCode],
+        },
+        { locationId: order.locationId },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

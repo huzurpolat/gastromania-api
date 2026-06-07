@@ -23,8 +23,8 @@ import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { UpdateDashboardPreferencesDto } from './dto/update-dashboard-preferences.dto';
 
 const DASHBOARD_ROLES = [
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,

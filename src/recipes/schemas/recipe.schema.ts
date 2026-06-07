@@ -181,7 +181,7 @@ export class Recipe {
   @Prop({ required: true, unique: true, trim: true, index: true })
   recipeNumber!: string;
 
-  @Prop({ trim: true, index: true })
+  @Prop({ trim: true })
   menuItemId?: string;
 
   @Prop({ required: true, trim: true, index: true })

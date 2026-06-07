@@ -2,5 +2,5 @@ import { SetMetadata } from '@nestjs/common';
 
 export const REQUIRE_MODULE_KEY = 'requireModule';
 
-export const RequireModule = (moduleKey: string) =>
+export const RequireModule = (moduleKey: string | string[]) =>
   SetMetadata(REQUIRE_MODULE_KEY, moduleKey);

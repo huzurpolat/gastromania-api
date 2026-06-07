@@ -12,6 +12,11 @@ import {
   MenuItemDocument,
 } from '../menu-items/schemas/menu-item.schema';
 import {
+  Order,
+  OrderDocument,
+  OrderTenantResolutionStatus,
+} from '../orders/schemas/order.schema';
+import {
   RestaurantTable,
   RestaurantTableDocument,
 } from '../tables/schemas/table.schema';
@@ -55,6 +60,9 @@ async function verifySalesDemo() {
     const tableModel = app.get<Model<RestaurantTableDocument>>(
       getModelToken(RestaurantTable.name),
     );
+    const orderModel = app.get<Model<OrderDocument>>(
+      getModelToken(Order.name),
+    );
     const menuItemModel = app.get<Model<MenuItemDocument>>(
       getModelToken(MenuItem.name),
     );
@@ -78,6 +86,40 @@ async function verifySalesDemo() {
         })),
       })
       .exec();
+    const unsafeVisibleOrders = await orderModel
+      .countDocuments({
+        $or: [
+          {
+            tenantId: { $exists: false },
+            tenantResolutionStatus: {
+              $ne: OrderTenantResolutionStatus.LegacyOrphan,
+            },
+          },
+          {
+            tenantId: null,
+            tenantResolutionStatus: {
+              $ne: OrderTenantResolutionStatus.LegacyOrphan,
+            },
+          },
+          {
+            tenantId: '',
+            tenantResolutionStatus: {
+              $ne: OrderTenantResolutionStatus.LegacyOrphan,
+            },
+          },
+        ],
+      })
+      .exec();
+    const legacyOrphanOrders = await orderModel
+      .countDocuments({
+        $or: [
+          { tenantId: { $exists: false } },
+          { tenantId: null },
+          { tenantId: '' },
+        ],
+        tenantResolutionStatus: OrderTenantResolutionStatus.LegacyOrphan,
+      })
+      .exec();
     const adminLogin = await authService.login({
       email: 'admin@gastromania-demo.de',
       password: 'Demo2026!',
@@ -98,6 +140,8 @@ async function verifySalesDemo() {
           ),
           tables,
           menuItems,
+          unsafeVisibleOrders,
+          legacyOrphanOrders,
           logins: {
             admin: Boolean(adminLogin.accessToken),
             service: Boolean(serviceLogin.accessToken),

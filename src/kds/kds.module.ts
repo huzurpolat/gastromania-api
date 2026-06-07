@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
+import { ModulesModule } from '../modules/modules.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { RecipesModule } from '../recipes/recipes.module';
 import { RealtimeModule } from '../realtime/realtime.module';
@@ -32,6 +33,7 @@ import {
   imports: [
     AuthJwtModule,
     RealtimeModule,
+    ModulesModule,
     RecipesModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },

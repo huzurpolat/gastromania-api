@@ -11,8 +11,8 @@ import { MarginReportQueryDto } from './dto/margin-report-query.dto';
 import { MarginReportsService } from './margin-reports.service';
 
 const MARGIN_REPORT_ROLES = [
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,

@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
+import { Location, LocationSchema } from '../locations/schemas/location.schema';
+import { ModulesModule } from '../modules/modules.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { Recipe, RecipeSchema } from '../recipes/schemas/recipe.schema';
@@ -30,6 +32,7 @@ import {
   KdsStatusLogSchema,
 } from '../kds/schemas/kds-status-log.schema';
 import { Order, OrderSchema } from './schemas/order.schema';
+import { OrderTenantBackfillService } from './order-tenant-backfill.service';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 
@@ -37,8 +40,10 @@ import { OrdersService } from './orders.service';
   imports: [
     AuthJwtModule,
     RealtimeModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
+      { name: Location.name, schema: LocationSchema },
       { name: Recipe.name, schema: RecipeSchema },
       { name: StockItem.name, schema: StockItemSchema },
       { name: StockAlert.name, schema: StockAlertSchema },
@@ -50,7 +55,7 @@ import { OrdersService } from './orders.service';
     ]),
   ],
   controllers: [OrdersController],
-  providers: [OrdersService, RecipeInventoryService],
+  providers: [OrdersService, RecipeInventoryService, OrderTenantBackfillService],
   exports: [OrdersService],
 })
 export class OrdersModule {}

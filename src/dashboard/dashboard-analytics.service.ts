@@ -43,6 +43,7 @@ import {
 } from '../hr/schemas/job-applicant.schema';
 
 export interface ResolvedDashboardQuery {
+  tenantId: string;
   locationIds?: string[];
   locationId?: string;
   range: DashboardRange;
@@ -114,17 +115,18 @@ export class DashboardAnalyticsService {
     const range = query.range ?? 'today';
     const { from, to } = this.resolvePeriod(range, query.from, query.to);
     const isGlobalUser =
+      user.roles.includes(Role.PlatformAdminCode) ||
       user.roles.includes(Role.PlatformAdmin) ||
       user.roles.includes(Role.SuperAdmin);
 
     if (isGlobalUser) {
-      return {
-        range,
-        from,
-        to,
-        locationId: query.locationId,
-        locationIds: query.locationId ? [query.locationId] : undefined,
-      };
+      throw new ForbiddenException(
+        'Platform Admin darf keine operativen Dashboard-Daten nutzen',
+      );
+    }
+
+    if (!user.tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext fuer Dashboard');
     }
 
     const allowedLocationIds = user.locationIds?.length
@@ -138,6 +140,7 @@ export class DashboardAnalyticsService {
     }
 
     return {
+      tenantId: user.tenantId,
       range,
       from,
       to,
@@ -635,11 +638,22 @@ export class DashboardAnalyticsService {
 
   private async availableLocations(user: AuthenticatedUser) {
     const isGlobalUser =
+      user.roles.includes(Role.PlatformAdminCode) ||
       user.roles.includes(Role.PlatformAdmin) ||
       user.roles.includes(Role.SuperAdmin);
-    const filter = isGlobalUser
-      ? { isActive: true }
-      : { isActive: true, _id: { $in: user.locationIds ?? [] } };
+    if (isGlobalUser || !user.tenantId) {
+      throw new ForbiddenException(
+        'Platform Admin darf keine operativen Dashboard-Daten nutzen',
+      );
+    }
+    const filter: Record<string, unknown> = {
+      tenantId: user.tenantId,
+      isActive: true,
+    };
+
+    if (user.locationIds?.length) {
+      filter._id = { $in: user.locationIds };
+    }
 
     return this.locationModel
       .find(filter)
@@ -650,19 +664,23 @@ export class DashboardAnalyticsService {
 
   private locationFilter(resolved: ResolvedDashboardQuery) {
     if (resolved.locationId) {
-      return { locationId: resolved.locationId };
+      return { tenantId: resolved.tenantId, locationId: resolved.locationId };
     }
 
     if (resolved.locationIds) {
-      return { locationId: { $in: resolved.locationIds } };
+      return {
+        tenantId: resolved.tenantId,
+        locationId: { $in: resolved.locationIds },
+      };
     }
 
-    return {};
+    return { tenantId: resolved.tenantId };
   }
 
   private userLocationFilter(resolved: ResolvedDashboardQuery) {
     if (resolved.locationId) {
       return {
+        tenantId: resolved.tenantId,
         $or: [
           { locationId: resolved.locationId },
           { locationIds: resolved.locationId },
@@ -672,6 +690,7 @@ export class DashboardAnalyticsService {
 
     if (resolved.locationIds) {
       return {
+        tenantId: resolved.tenantId,
         $or: [
           { locationId: { $in: resolved.locationIds } },
           { locationIds: { $in: resolved.locationIds } },
@@ -679,7 +698,7 @@ export class DashboardAnalyticsService {
       };
     }
 
-    return {};
+    return { tenantId: resolved.tenantId };
   }
 
   private async sumOrders(filter: Record<string, unknown>, field: string) {

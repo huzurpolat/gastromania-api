@@ -50,10 +50,13 @@ export interface PayrollEmployeeSummary {
   absenceDays: number;
   sickDays: number;
   vacationDays: number;
+  unpaidDays: number;
+  otherAbsenceDays: number;
   hourlyRate: number;
   grossPay: number;
   laborCost: number;
   minijobWarning: boolean;
+  warnings: string[];
 }
 
 export interface PayrollPeriodResponse {
@@ -81,6 +84,8 @@ export interface PayrollSummary {
     laborCost: number;
     vacationDays: number;
     sickDays: number;
+    unpaidDays: number;
+    otherAbsenceDays: number;
   };
 }
 
@@ -93,6 +98,8 @@ interface PayrollTotals {
   laborCost: number;
   vacationDays: number;
   sickDays: number;
+  unpaidDays: number;
+  otherAbsenceDays: number;
 }
 
 @Injectable()
@@ -181,36 +188,46 @@ export class PayrollService {
       [
         'Periode',
         'Status',
+        'Standort',
         'Personalnummer',
         'Name',
+        'E-Mail',
         'Vertragsart',
-        'Stundenlohn',
         'Sollstunden',
-        'Iststunden',
+        'Iststunden / Netto',
         'Pausen',
-        'Ueberstunden',
-        'Urlaubstage',
-        'Krankheitstage',
+        'Urlaub',
+        'Krankheit',
+        'Unbezahlt',
+        'Sonstige Abwesenheit',
+        'Abweichung',
+        'Stundenlohn',
         'Bruttolohn',
-        'Minijob-Warnung',
+        'Waehrung',
+        'Warnungen',
       ],
       ...summary.employees.map((item) => [
         `${summary.start.slice(0, 10)} bis ${summary.end.slice(0, 10)}`,
         summary.period.status === PayrollPeriodStatus.Locked
           ? 'gesperrt'
           : 'offen',
+        item.employee.locationId ?? '',
         item.employee.employeeNumber ?? '',
         item.employee.name,
+        item.employee.email,
         item.employee.contractType ?? '',
-        item.hourlyRate,
         item.plannedHours,
         item.actualHours,
         item.breakHours,
-        item.overtimeHours,
         item.vacationDays,
         item.sickDays,
+        item.unpaidDays,
+        item.otherAbsenceDays,
+        item.overtimeHours,
+        item.hourlyRate,
         item.grossPay,
-        item.minijobWarning ? 'ja' : 'nein',
+        'EUR',
+        item.warnings.join(', '),
       ]),
     ];
 
@@ -320,6 +337,32 @@ export class PayrollService {
         employeeAbsences,
         StaffAbsenceType.Sick,
       );
+      const unpaidDays = this.countAbsenceDays(
+        employeeAbsences,
+        StaffAbsenceType.Unpaid,
+      );
+      const otherAbsenceDays =
+        this.countAbsenceDays(employeeAbsences, StaffAbsenceType.Other) +
+        this.countAbsenceDays(employeeAbsences, StaffAbsenceType.Unavailable);
+      const minijobWarning =
+        employee.contractType === 'Minijob' && grossPay >= 538 * 0.9;
+      const hasLocationAssignment = Boolean(
+        employee.locationId || employee.locationIds?.length,
+      );
+      const hasWorkData =
+        plannedHours > 0 ||
+        actualHours > 0 ||
+        vacationDays > 0 ||
+        sickDays > 0 ||
+        unpaidDays > 0 ||
+        otherAbsenceDays > 0;
+      const warnings = [
+        !hourlyRate ? 'Stundenlohn fehlt' : '',
+        !hasWorkData ? 'Keine Arbeitszeitdaten' : '',
+        !hasLocationAssignment ? 'Keine Standortzuordnung' : '',
+        !hourlyRate && !employee.monthlySalary ? 'Payroll-Profil unvollstaendig' : '',
+        minijobWarning ? 'Minijob-Grenze pruefen' : '',
+      ].filter(Boolean);
 
       return {
         employee: toUserResponse(employee),
@@ -327,14 +370,16 @@ export class PayrollService {
         actualHours,
         breakHours,
         overtimeHours,
-        absenceDays: vacationDays + sickDays,
+        absenceDays: vacationDays + sickDays + unpaidDays + otherAbsenceDays,
         sickDays,
         vacationDays,
+        unpaidDays,
+        otherAbsenceDays,
         hourlyRate,
         grossPay,
         laborCost: grossPay,
-        minijobWarning:
-          employee.contractType === 'Minijob' && grossPay >= 538 * 0.9,
+        minijobWarning,
+        warnings,
       };
     });
 
@@ -349,6 +394,8 @@ export class PayrollService {
         laborCost: this.sum(summaries, 'laborCost'),
         vacationDays: this.sum(summaries, 'vacationDays'),
         sickDays: this.sum(summaries, 'sickDays'),
+        unpaidDays: this.sum(summaries, 'unpaidDays'),
+        otherAbsenceDays: this.sum(summaries, 'otherAbsenceDays'),
       },
     };
   }
@@ -462,6 +509,8 @@ export class PayrollService {
       laborCost: this.numberFrom(value.laborCost ?? value.grossPay),
       vacationDays: this.numberFrom(value.vacationDays),
       sickDays: this.numberFrom(value.sickDays),
+      unpaidDays: this.numberFrom(value.unpaidDays),
+      otherAbsenceDays: this.numberFrom(value.otherAbsenceDays),
     };
   }
 

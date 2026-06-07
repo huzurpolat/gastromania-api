@@ -5,6 +5,11 @@ import { Company } from '../companies/schemas/company.schema';
 import { Location } from '../locations/schemas/location.schema';
 import { MenuItem } from '../menu-items/schemas/menu-item.schema';
 import {
+  DIGITAL_MENU_MODULE_KEY,
+  QR_ORDERS_MODULE_KEY,
+} from '../modules/constants/module-definitions';
+import { ModulesService } from '../modules/modules.service';
+import {
   Order,
   OrderSource,
   OrderStatus,
@@ -18,6 +23,7 @@ describe('QrOrdersService', () => {
   const token = 'abcdefghijklmnopqrstuvwxyzABCDEF_1234567890';
   const tableId = '507f1f77bcf86cd799439013';
   const locationId = '507f1f77bcf86cd799439012';
+  const tenantId = 'tenant-1';
   const companyId = 'company-1';
   const menuItemId = '507f1f77bcf86cd799439014';
   const table = {
@@ -39,6 +45,7 @@ describe('QrOrdersService', () => {
     _id: { toString: () => locationId },
     name: 'Bonn',
     city: 'Bonn',
+    tenantId,
     companyId,
     isActive: true,
   };
@@ -79,6 +86,9 @@ describe('QrOrdersService', () => {
   };
   const realtimeService = {
     publish: jest.fn(),
+  };
+  const modulesService = {
+    assertEnabledForTenant: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -122,6 +132,7 @@ describe('QrOrdersService', () => {
         items: [{ name: 'Cheeseburger', quantity: 1, status: 'Offen' }],
       }),
     });
+    modulesService.assertEnabledForTenant.mockResolvedValue(undefined);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -132,6 +143,7 @@ describe('QrOrdersService', () => {
         { provide: getModelToken(MenuItem.name), useValue: menuItemModel },
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: RealtimeService, useValue: realtimeService },
+        { provide: ModulesService, useValue: modulesService },
       ],
     }).compile();
 
@@ -152,6 +164,10 @@ describe('QrOrdersService', () => {
       }),
     ]);
     expect(result.menu.items[0]).not.toHaveProperty('recipeId');
+    expect(modulesService.assertEnabledForTenant).toHaveBeenCalledWith(
+      DIGITAL_MENU_MODULE_KEY,
+      tenantId,
+    );
   });
 
   it('rejects disabled or revoked table tokens', async () => {
@@ -182,6 +198,7 @@ describe('QrOrdersService', () => {
     expect(orderModel.create).toHaveBeenCalledWith(
       expect.objectContaining({
         companyId,
+        tenantId,
         locationId,
         tableId,
         source: OrderSource.Qr,
@@ -205,6 +222,10 @@ describe('QrOrdersService', () => {
         tableId,
         locationId,
       }),
+    );
+    expect(modulesService.assertEnabledForTenant).toHaveBeenCalledWith(
+      QR_ORDERS_MODULE_KEY,
+      tenantId,
     );
   });
 });
