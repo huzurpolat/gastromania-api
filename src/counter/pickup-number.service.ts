@@ -47,7 +47,7 @@ export class PickupNumberService {
             receiptPrinterEnabled: false,
           },
         },
-        { new: true, upsert: true, runValidators: true },
+        { returnDocument: 'after', upsert: true, runValidators: true },
       )
       .exec();
   }
@@ -68,7 +68,7 @@ export class PickupNumberService {
           companyId: current.companyId ?? actor.companyId,
           locationId,
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec()
       .then((settings) => settings ?? current);
@@ -137,7 +137,7 @@ export class PickupNumberService {
 
     return this.sequenceModel
       .findOneAndUpdate({ locationId, businessDate, prefix }, update, {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       })
       .exec();

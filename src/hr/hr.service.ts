@@ -100,7 +100,7 @@ export class HrService {
             ? new Date(payload.expiresAt)
             : undefined,
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
     if (!updated) throw new NotFoundException('Dokument nicht gefunden');
@@ -195,7 +195,7 @@ export class HrService {
             ? new Date(payload.trialWorkAt)
             : undefined,
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
     if (!updated) throw new NotFoundException('Bewerber nicht gefunden');
@@ -239,7 +239,7 @@ export class HrService {
           ...payload,
           dueDate: payload.dueDate ? new Date(payload.dueDate) : undefined,
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
     if (!updated) throw new NotFoundException('Feedback nicht gefunden');

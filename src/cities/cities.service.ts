@@ -140,7 +140,7 @@ export class CitiesService {
           ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
   }

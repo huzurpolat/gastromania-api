@@ -274,7 +274,7 @@ export class OrdersService {
         id,
         { ...updatePayload, statusTimestamps },
         {
-          new: true,
+          returnDocument: 'after',
           runValidators: true,
         },
       )
@@ -656,7 +656,7 @@ export class OrdersService {
           assignedWaiterId,
           lastStatusChange: changedAt,
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
 

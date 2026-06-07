@@ -713,7 +713,7 @@ export class TimeTrackingService {
               )
             : {}),
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 

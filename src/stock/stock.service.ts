@@ -767,7 +767,7 @@ export class StockService {
           difference,
           differenceValue: difference * unitPriceNet,
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
       counts.push(count);
       await this.movementModel.create({
@@ -996,7 +996,7 @@ export class StockService {
               : 'warning',
           isResolved: false,
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
       return;
     }
@@ -1034,7 +1034,7 @@ export class StockService {
           severity: daysUntilExpiry <= 2 ? 'critical' : 'warning',
           isResolved: false,
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
       return;
     }

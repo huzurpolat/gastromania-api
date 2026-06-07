@@ -187,7 +187,7 @@ describe('OrdersService', () => {
     expect(tableModel.findByIdAndUpdate).toHaveBeenCalledWith(
       tableId,
       expect.objectContaining({ status: TableStatus.Ordering }),
-      { new: true },
+      { returnDocument: 'after' },
     );
     expect(realtimeService.publish).toHaveBeenCalledWith(
       'order.created',

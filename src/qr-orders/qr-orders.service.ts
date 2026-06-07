@@ -308,7 +308,7 @@ export class QrOrdersService {
           waitingSince: table.waitingSince ?? new Date(),
           lastStatusChange: new Date(),
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
 

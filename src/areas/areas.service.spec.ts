@@ -270,7 +270,7 @@ describe('AreasService', () => {
     expect(scopedUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
       '507f1f77bcf86cd799439012',
       { areaIds: ['507f1f77bcf86cd799439011'] },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
     expect(users).toEqual([
       expect.objectContaining({

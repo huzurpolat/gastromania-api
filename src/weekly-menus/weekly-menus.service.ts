@@ -94,7 +94,7 @@ export class WeeklyMenusService {
     try {
       const updatedMenu = await this.weeklyMenuModel
         .findByIdAndUpdate(id, this.normalizePayload(updateWeeklyMenuDto), {
-          new: true,
+          returnDocument: 'after',
           runValidators: true,
         })
         .exec();

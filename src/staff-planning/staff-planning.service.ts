@@ -188,7 +188,7 @@ export class StaffPlanningService {
     }
     const previousValue = this.snapshot(template);
     const updated = await this.templateModel
-      .findByIdAndUpdate(id, payload, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, payload, { returnDocument: 'after', runValidators: true })
       .exec();
     if (!updated) {
       throw new NotFoundException('Schichtvorlage nicht gefunden');
@@ -322,7 +322,7 @@ export class StaffPlanningService {
           endTime,
           assignedUserIds,
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 
@@ -564,7 +564,7 @@ export class StaffPlanningService {
           ...payload,
           date: payload.date ? new Date(payload.date) : availability.date,
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 

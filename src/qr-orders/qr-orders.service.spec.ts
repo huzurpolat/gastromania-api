@@ -214,7 +214,7 @@ describe('QrOrdersService', () => {
         status: TableStatus.Ordering,
         currentTotal: 28,
       }),
-      { new: true },
+      { returnDocument: 'after' },
     );
     expect(realtimeService.publish).toHaveBeenCalledWith(
       'qr.order.created',

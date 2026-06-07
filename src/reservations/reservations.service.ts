@@ -119,7 +119,7 @@ export class ReservationsService {
 
     const updatedReservation = await this.reservationModel
       .findByIdAndUpdate(id, updateReservationDto, {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       })
       .exec();

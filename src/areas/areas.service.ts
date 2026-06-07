@@ -112,7 +112,7 @@ export class AreasService {
     };
 
     const updated = await this.areaModel
-      .findByIdAndUpdate(id, update, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, update, { returnDocument: 'after', runValidators: true })
       .exec();
 
     if (!updated) {
@@ -174,7 +174,7 @@ export class AreasService {
 
     const areaIds = [...new Set([...(user.areaIds ?? []), area._id.toString()])];
     await this.userModel
-      .findByIdAndUpdate(user._id, { areaIds }, { new: true, runValidators: true })
+      .findByIdAndUpdate(user._id, { areaIds }, { returnDocument: 'after', runValidators: true })
       .exec();
 
     return this.findAreaUsers(area);
@@ -200,7 +200,7 @@ export class AreasService {
       (assignedAreaId) => assignedAreaId !== area._id.toString(),
     );
     await this.userModel
-      .findByIdAndUpdate(user._id, { areaIds }, { new: true, runValidators: true })
+      .findByIdAndUpdate(user._id, { areaIds }, { returnDocument: 'after', runValidators: true })
       .exec();
 
     return this.findAreaUsers(area);

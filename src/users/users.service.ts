@@ -528,7 +528,7 @@ export class UsersService {
 
     try {
       const user = await this.userModel
-        .findByIdAndUpdate(id, update, { new: true })
+        .findByIdAndUpdate(id, update, { returnDocument: 'after' })
         .exec();
 
       if (!user) {

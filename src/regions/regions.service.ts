@@ -126,7 +126,7 @@ export class RegionsService {
     }
 
     const updated = await this.regionModel
-      .findByIdAndUpdate(id, update, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, update, { returnDocument: 'after', runValidators: true })
       .exec();
 
     if (!updated) {

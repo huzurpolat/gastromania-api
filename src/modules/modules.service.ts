@@ -165,7 +165,7 @@ export class ModulesService implements OnModuleInit {
             enabled,
           },
         },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
+        { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
       )
       .exec();
 

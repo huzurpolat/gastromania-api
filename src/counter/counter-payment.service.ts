@@ -72,7 +72,7 @@ export class CounterPaymentService {
 
     const saved = await this.orderModel
       .findByIdAndUpdate(order._id, order.toObject(), {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       })
       .exec();

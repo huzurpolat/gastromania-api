@@ -80,7 +80,7 @@ export class CompaniesService {
     };
 
     const company = await this.companyModel
-      .findByIdAndUpdate(id, update, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, update, { returnDocument: 'after', runValidators: true })
       .exec();
     if (!company) {
       throw new NotFoundException('Unternehmen nicht gefunden');

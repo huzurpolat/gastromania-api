@@ -33,7 +33,7 @@ export class DepartmentsService {
           type: dto.type,
         },
         { $set: { ...dto, isActive: dto.isActive ?? true } },
-        { new: true, upsert: true, runValidators: true },
+        { returnDocument: 'after', upsert: true, runValidators: true },
       )
       .exec();
 

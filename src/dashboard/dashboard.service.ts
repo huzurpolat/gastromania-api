@@ -81,7 +81,7 @@ export class DashboardService {
       .findOneAndUpdate(
         { userId: user.sub },
         { $set: { ...payload, userId: user.sub } },
-        { new: true, upsert: true },
+        { returnDocument: 'after', upsert: true },
       )
       .lean();
 

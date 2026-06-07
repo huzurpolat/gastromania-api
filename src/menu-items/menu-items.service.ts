@@ -74,7 +74,7 @@ export class MenuItemsService {
     try {
       const updatedMenuItem = await this.menuItemModel
         .findByIdAndUpdate(id, updateMenuItemDto, {
-          new: true,
+          returnDocument: 'after',
           runValidators: true,
         })
         .exec();

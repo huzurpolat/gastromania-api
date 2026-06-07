@@ -60,7 +60,7 @@ describe('DashboardService', () => {
     expect(preferenceModel.findOneAndUpdate).toHaveBeenCalledWith(
       { userId: 'user-1' },
       { $set: { userId: 'user-1', defaultRange: '7d' } },
-      { new: true, upsert: true },
+      { returnDocument: 'after', upsert: true },
     );
   });
 

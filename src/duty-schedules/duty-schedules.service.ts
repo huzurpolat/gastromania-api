@@ -126,7 +126,7 @@ export class DutySchedulesService {
             ? { endTime: new Date(updateDutyShiftDto.endTime) }
             : {}),
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 

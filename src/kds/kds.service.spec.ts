@@ -170,7 +170,7 @@ describe('KdsService', () => {
     expect(tableModel.findByIdAndUpdate).toHaveBeenCalledWith(
       order.tableId,
       expect.objectContaining({ status: TableStatus.OrderSent }),
-      { new: true },
+      { returnDocument: 'after' },
     );
   });
 

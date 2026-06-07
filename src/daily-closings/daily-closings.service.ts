@@ -182,7 +182,7 @@ export class DailyClosingsService {
           },
         },
         {
-          new: true,
+          returnDocument: 'after',
           upsert: true,
           runValidators: true,
           setDefaultsOnInsert: true,
@@ -237,7 +237,7 @@ export class DailyClosingsService {
             ),
           },
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .lean();
   }
@@ -317,7 +317,7 @@ export class DailyClosingsService {
             ),
           },
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .lean();
 
@@ -392,7 +392,7 @@ export class DailyClosingsService {
             ),
           },
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .lean();
 
@@ -454,7 +454,7 @@ export class DailyClosingsService {
             ),
           },
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .lean();
   }

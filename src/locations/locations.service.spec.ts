@@ -363,7 +363,7 @@ describe('LocationsService', () => {
       '6627d9a2c6f2d8f3e2b1a001',
       dto,
       {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       },
     );

@@ -50,7 +50,7 @@ export class RbacService implements OnModuleInit {
               },
               $set: { permissions },
             },
-            { new: true, upsert: true, runValidators: true },
+            { returnDocument: 'after', upsert: true, runValidators: true },
           )
           .exec(),
       ),

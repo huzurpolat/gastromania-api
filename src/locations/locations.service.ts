@@ -228,7 +228,7 @@ export class LocationsService {
 
     const updated = await this.locationModel
       .findOneAndUpdate({ _id: id, tenantId }, payload, {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       })
       .exec();
@@ -405,7 +405,7 @@ export class LocationsService {
     );
     const updatedLocation = await this.locationModel
       .findByIdAndUpdate(id, payload, {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       })
       .exec();

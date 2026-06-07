@@ -294,7 +294,7 @@ export class TablesService {
     try {
       const updatedTable = await this.tableModel
         .findByIdAndUpdate(id, payload, {
-          new: true,
+          returnDocument: 'after',
           runValidators: true,
         })
         .exec();
@@ -363,7 +363,7 @@ export class TablesService {
           qrTokenRevokedAt: undefined,
           qrEnabled: true,
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 
@@ -388,7 +388,7 @@ export class TablesService {
           qrEnabled: false,
           qrTokenRevokedAt: new Date(),
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 
@@ -418,7 +418,7 @@ export class TablesService {
     }
 
     const updated = await this.tableModel
-      .findByIdAndUpdate(id, patch, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, patch, { returnDocument: 'after', runValidators: true })
       .exec();
 
     if (!updated) {
@@ -630,7 +630,7 @@ export class TablesService {
     };
 
     const updatedTable = await this.tableModel
-      .findByIdAndUpdate(id, patch, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, patch, { returnDocument: 'after', runValidators: true })
       .exec();
 
     if (!updatedTable) {

@@ -338,7 +338,7 @@ export class KdsService {
       .findOneAndUpdate(
         { locationId },
         { $setOnInsert: { locationId } },
-        { new: true, upsert: true, runValidators: true },
+        { returnDocument: 'after', upsert: true, runValidators: true },
       )
       .exec();
   }
@@ -353,7 +353,7 @@ export class KdsService {
 
     return this.settingsModel
       .findOneAndUpdate({ locationId }, dto, {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       })
       .exec()
@@ -631,7 +631,7 @@ export class KdsService {
               ?.assignedWaiterId ?? undefined,
           lastStatusChange: changedAt,
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
 
