@@ -18,6 +18,8 @@ export const KDS_MODULE_KEY = 'kds';
 export const REPORTING_MODULE_KEY = 'reporting';
 export const QR_ORDERS_MODULE_KEY = 'qr_orders';
 export const DIGITAL_MENU_MODULE_KEY = 'digital_menu';
+export const RECIPES_MODULE_KEY = 'recipes';
+export const COST_OF_GOODS_MODULE_KEY = 'cost_of_goods';
 export const TABLE_ORDERS_MODULE_KEY = 'table_orders';
 export const TABLE_MANAGEMENT_MODULE_KEY = 'table_management';
 export const DAILY_CLOSING_MODULE_KEY = 'daily_closing';
@@ -44,7 +46,7 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
   {
     key: TABLE_ORDERS_MODULE_KEY,
     name: 'Tischbestellungen',
-    description: 'Bestellungen am Tisch durch Service oder digitale Kanaele.',
+    description: 'Bestellungen am Tisch durch Service oder digitale Kanäle.',
     category: 'Betrieb',
     defaultEnabled: true,
     systemLocked: false,
@@ -53,7 +55,7 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
   {
     key: TABLE_MANAGEMENT_MODULE_KEY,
     name: 'Tischverwaltung',
-    description: 'Tische, Tischstatus und Tischplaner fuer den Service.',
+    description: 'Tische, Tischstatus und Tischplaner für den Service.',
     category: 'Betrieb',
     defaultEnabled: true,
     systemLocked: false,
@@ -61,8 +63,8 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
   },
   {
     key: 'kds',
-    name: 'Kuechenmonitor / KDS',
-    description: 'Produktionsboard fuer Kueche, Bar und Ausgabe.',
+    name: 'Küchenmonitor / KDS',
+    description: 'Produktionsboard für Küche, Bar und Ausgabe.',
     category: 'Produktion',
     defaultEnabled: true,
     systemLocked: false,
@@ -71,7 +73,7 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
   {
     key: 'qr_orders',
     name: 'QR-Bestellungen',
-    description: 'Gastbestellungen ueber QR-Code und digitale Tischbestellung.',
+    description: 'Gastbestellungen über QR-Code und digitale Tischbestellung.',
     category: 'Verkauf',
     defaultEnabled: true,
     systemLocked: false,
@@ -81,7 +83,7 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
     key: 'digital_menu',
     name: 'Digitale Speisekarte',
     description: 'Digitale Darstellung von Artikeln, Kategorien und Wochenkarten.',
-    category: 'Speisen & Getraenke',
+    category: 'Speisen & Getränke',
     defaultEnabled: true,
     systemLocked: false,
     sortOrder: 70,
@@ -96,16 +98,16 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
     sortOrder: 80,
   },
   {
-    key: 'recipes',
+    key: RECIPES_MODULE_KEY,
     name: 'Rezeptverwaltung',
     description: 'Rezepte, Zutatenverbrauch und Kalkulation pro Artikel.',
-    category: 'Speisen & Getraenke',
+    category: 'Speisen & Getränke',
     defaultEnabled: true,
     systemLocked: false,
     sortOrder: 90,
   },
   {
-    key: 'cost_of_goods',
+    key: COST_OF_GOODS_MODULE_KEY,
     name: 'Wareneinsatz',
     description: 'Marge, Rezeptkosten und Wareneinsatz-Auswertungen.',
     category: 'Auswertungen',
@@ -134,7 +136,7 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
   {
     key: TIME_TRACKING_MODULE_KEY,
     name: 'Zeiterfassung',
-    description: 'Einfache Stempeluhr fuer Mitarbeiter und Standortleiter.',
+    description: 'Einfache Stempeluhr für Mitarbeiter und Standortleiter.',
     category: 'Personal',
     defaultEnabled: true,
     systemLocked: false,
@@ -170,7 +172,7 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
   {
     key: 'invoices',
     name: 'Rechnungen',
-    description: 'Rechnungs- und Belegfunktionen fuer Bestellungen.',
+    description: 'Rechnungs- und Belegfunktionen für Bestellungen.',
     category: 'Verkauf',
     defaultEnabled: true,
     systemLocked: false,
@@ -179,7 +181,7 @@ export const DEFAULT_MODULES: ModuleDefinition[] = [
   {
     key: 'cancellations',
     name: 'Stornos',
-    description: 'Stornierungen, Stornogruende und Nachvollziehbarkeit.',
+    description: 'Stornierungen, Stornogründe und Nachvollziehbarkeit.',
     category: 'Verkauf',
     defaultEnabled: true,
     systemLocked: false,

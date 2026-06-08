@@ -13,6 +13,7 @@ import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { AuditLog, AuditLogDocument } from '../audit-logs/schemas/audit-log.schema';
 import { Company, CompanyDocument } from '../companies/schemas/company.schema';
 import { ModulesService } from '../modules/modules.service';
+import { normalizeModuleKey } from '../modules/constants/module-definitions';
 import { User, UserDocument, toUserResponse } from '../users/schemas/user.schema';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantModuleDto } from './dto/update-tenant-module.dto';
@@ -53,6 +54,7 @@ export class TenantsService {
   async create(dto: CreateTenantDto, actor: AuthenticatedUser) {
     const slug = this.normalizeSlug(dto.slug);
     const adminEmail = dto.adminEmail.toLowerCase();
+    await this.validateStartModules(dto.enabledModules);
 
     if (await this.tenantModel.exists({ slug })) {
       throw new ConflictException('Tenant-Slug existiert bereits');
@@ -298,7 +300,9 @@ export class TenantsService {
       return;
     }
 
-    const enabledKeys = new Set(enabledModules);
+    const enabledKeys = new Set(
+      enabledModules.map((moduleKey) => normalizeModuleKey(moduleKey)),
+    );
     const modules = await this.modulesService.findTenantModules(tenantId);
     await Promise.all(
       modules.map((moduleConfig) =>
@@ -311,6 +315,26 @@ export class TenantsService {
             ),
       ),
     );
+  }
+
+  private async validateStartModules(enabledModules?: string[]): Promise<void> {
+    if (enabledModules === undefined) {
+      return;
+    }
+
+    const definitions = await this.modulesService.findAll();
+    const knownModuleKeys = new Set(
+      definitions.map((definition) => definition.key),
+    );
+    const invalidModuleKeys = enabledModules
+      .map((key) => normalizeModuleKey(key))
+      .filter((key) => !knownModuleKeys.has(key));
+
+    if (invalidModuleKeys.length > 0) {
+      throw new BadRequestException(
+        `Unbekannte Module: ${[...new Set(invalidModuleKeys)].join(', ')}`,
+      );
+    }
   }
 
   private async getTenant(id: string): Promise<TenantDocument> {

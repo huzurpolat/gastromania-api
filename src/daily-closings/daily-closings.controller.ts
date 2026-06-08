@@ -16,6 +16,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { DAILY_CLOSING_MODULE_KEY } from '../modules/constants/module-definitions';
+import { RequireModule } from '../modules/decorators/require-module.decorator';
+import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import { DailyClosingsService } from './daily-closings.service';
 import {
   CompleteDailyClosingDto,
@@ -40,7 +43,8 @@ const DAILY_CLOSING_ROLES = [
 ];
 
 @Controller('daily-closings')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@RequireModule(DAILY_CLOSING_MODULE_KEY)
+@UseGuards(JwtAuthGuard, ModuleEnabledGuard, RolesGuard, PermissionsGuard)
 @Roles(...DAILY_CLOSING_ROLES)
 export class DailyClosingsController {
   constructor(private readonly dailyClosingsService: DailyClosingsService) {}

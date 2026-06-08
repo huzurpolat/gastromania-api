@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
+import { ModulesModule } from '../modules/modules.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Supplier, SupplierSchema } from './schemas/supplier.schema';
 import { SuppliersController } from './suppliers.controller';
@@ -10,6 +11,7 @@ import { SuppliersService } from './suppliers.service';
 @Module({
   imports: [
     AuthJwtModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: Supplier.name, schema: SupplierSchema },
       { name: User.name, schema: UserSchema },

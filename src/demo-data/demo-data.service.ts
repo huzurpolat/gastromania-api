@@ -126,6 +126,10 @@ import {
 } from '../payroll/schemas/payroll-period.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
+  UserLocationAssignment,
+  UserLocationAssignmentDocument,
+} from '../users/schemas/user-location-assignment.schema';
+import {
   WeeklyMenu,
   WeeklyMenuDocument,
 } from '../weekly-menus/schemas/weekly-menu.schema';
@@ -189,6 +193,16 @@ interface DevelopmentTenantConfig {
     zip: string;
     street: string;
   }>;
+}
+
+interface DevelopmentTenantUserConfig {
+  email: string;
+  firstName: string;
+  lastName: string;
+  roles: Role[];
+  locationIds: string[];
+  managedLocationIds: string[];
+  locationAssignmentRole?: Role;
 }
 
 @Injectable()
@@ -618,6 +632,8 @@ export class DemoDataService implements OnApplicationBootstrap {
     private readonly reservationModel: Model<ReservationDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(UserLocationAssignment.name)
+    private readonly userLocationAssignmentModel: Model<UserLocationAssignmentDocument>,
     @InjectModel(DutyShift.name)
     private readonly dutyShiftModel: Model<DutyShiftDocument>,
     @InjectModel(StaffShift.name)
@@ -1207,14 +1223,7 @@ export class DemoDataService implements OnApplicationBootstrap {
   ): Promise<UserDocument[]> {
     const locationIds = locations.map((location) => location._id.toString());
     const demoNames = this.getDevelopmentTenantUserNames(tenant.slug);
-    const configs: Array<{
-      email: string;
-      firstName: string;
-      lastName: string;
-      roles: Role[];
-      locationIds: string[];
-      managedLocationIds: string[];
-    }> = [
+    const configs: DevelopmentTenantUserConfig[] = [
       {
         email: `admin@${tenant.slug}.demo`,
         firstName: demoNames.admin.firstName,
@@ -1222,6 +1231,7 @@ export class DemoDataService implements OnApplicationBootstrap {
         roles: [Role.TenantAdminCode],
         locationIds,
         managedLocationIds: locationIds,
+        locationAssignmentRole: Role.LocationManager,
       },
       {
         email: `regionalleiter@${tenant.slug}.demo`,
@@ -1230,6 +1240,7 @@ export class DemoDataService implements OnApplicationBootstrap {
         roles: [Role.Regionalleiter],
         locationIds,
         managedLocationIds: locationIds,
+        locationAssignmentRole: Role.LocationManager,
       },
     ];
 
@@ -1249,6 +1260,7 @@ export class DemoDataService implements OnApplicationBootstrap {
           roles: [Role.Filialleiter],
           locationIds: [locationId],
           managedLocationIds: [locationId],
+          locationAssignmentRole: Role.LocationManager,
         },
         ...[0, 1].map((offset) => {
           const person =
@@ -1264,6 +1276,7 @@ export class DemoDataService implements OnApplicationBootstrap {
             roles: [Role.Service],
             locationIds: [locationId],
             managedLocationIds: [],
+            locationAssignmentRole: Role.Waiter,
           };
         }),
         ...[0, 1].map((offset) => {
@@ -1280,12 +1293,56 @@ export class DemoDataService implements OnApplicationBootstrap {
             roles: [Role.Kueche],
             locationIds: [locationId],
             managedLocationIds: [],
+            locationAssignmentRole: Role.Kitchen,
           };
         }),
       );
     }
 
-    return Promise.all(
+    const primaryLocation = locations[0];
+    if (primaryLocation) {
+      const primaryLocationId = primaryLocation._id.toString();
+      configs.push(
+        {
+          email: `counter.${this.slugify(primaryLocation.city)}@${tenant.slug}.demo`,
+          firstName: 'Thea',
+          lastName: 'Neumann',
+          roles: [Role.Staff],
+          locationIds: [primaryLocationId],
+          managedLocationIds: [],
+          locationAssignmentRole: Role.Counter,
+        },
+        {
+          email: `cashier.${this.slugify(primaryLocation.city)}@${tenant.slug}.demo`,
+          firstName: 'Karlo',
+          lastName: 'Mertens',
+          roles: [Role.Staff],
+          locationIds: [primaryLocationId],
+          managedLocationIds: [],
+          locationAssignmentRole: Role.Cashier,
+        },
+        {
+          email: `inventory.${this.slugify(primaryLocation.city)}@${tenant.slug}.demo`,
+          firstName: 'Mina',
+          lastName: 'Brandt',
+          roles: [Role.Staff],
+          locationIds: [primaryLocationId],
+          managedLocationIds: [],
+          locationAssignmentRole: Role.InventoryManager,
+        },
+        {
+          email: `staff.${this.slugify(primaryLocation.city)}@${tenant.slug}.demo`,
+          firstName: 'Noah',
+          lastName: 'Sommer',
+          roles: [Role.Staff],
+          locationIds: [primaryLocationId],
+          managedLocationIds: [],
+          locationAssignmentRole: Role.Staff,
+        },
+      );
+    }
+
+    const users = await Promise.all(
       configs.map((user, index) =>
         this.userModel
           .findOneAndUpdate(
@@ -1331,6 +1388,94 @@ export class DemoDataService implements OnApplicationBootstrap {
           .exec(),
       ),
     );
+
+    await this.upsertDevelopmentTenantUserLocationAssignments(
+      tenantId,
+      users,
+      configs,
+      locations,
+    );
+
+    return users;
+  }
+
+  private async upsertDevelopmentTenantUserLocationAssignments(
+    tenantId: string,
+    users: UserDocument[],
+    configs: DevelopmentTenantUserConfig[],
+    locations: LocationDocument[],
+  ): Promise<void> {
+    const configByEmail = new Map(configs.map((config) => [config.email, config]));
+    const locationById = new Map(
+      locations.map((location) => [location._id.toString(), location]),
+    );
+
+    await Promise.all(
+      users.flatMap((user) => {
+        const config = configByEmail.get(user.email);
+        if (!config?.locationIds.length) {
+          return [];
+        }
+
+        const primaryLocationId = config.locationIds[0];
+        const assignmentRole =
+          config.locationAssignmentRole ??
+          this.developmentLocationAssignmentRole(config.roles);
+
+        return config.locationIds.map((locationId) => {
+          const location = locationById.get(locationId);
+
+          return this.userLocationAssignmentModel
+            .findOneAndUpdate(
+              {
+                tenantId,
+                userId: user._id.toString(),
+                locationId,
+              },
+              {
+                $set: {
+                  tenantId,
+                  userId: user._id.toString(),
+                  areaId: location?.areaId ?? null,
+                  regionId: location?.regionId ?? null,
+                  locationId,
+                  role: assignmentRole,
+                  isPrimary: locationId === primaryLocationId,
+                },
+              },
+              {
+                returnDocument: 'after',
+                setDefaultsOnInsert: true,
+                upsert: true,
+              },
+            )
+            .exec();
+        });
+      }),
+    );
+  }
+
+  private developmentLocationAssignmentRole(roles: Role[]): Role {
+    if (roles.includes(Role.Filialleiter)) {
+      return Role.LocationManager;
+    }
+    if (roles.includes(Role.Service)) {
+      return Role.Waiter;
+    }
+    if (roles.includes(Role.Kueche)) {
+      return Role.Kitchen;
+    }
+    if (roles.includes(Role.Theke) || roles.includes(Role.Bar)) {
+      return Role.Counter;
+    }
+    if (roles.includes(Role.Kasse)) {
+      return Role.Cashier;
+    }
+    if (roles.includes(Role.Lager)) {
+      return Role.InventoryManager;
+    }
+
+    return Role.Staff;
   }
 
   private developmentEmployeeNumber(tenantSlug: string, index: number): string {

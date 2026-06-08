@@ -32,12 +32,28 @@ describe('RolesGuard', () => {
     ).toBe(true);
   });
 
-  it('blocks platform admins on operative endpoints', () => {
+  it.each([
+    '/api/orders',
+    '/api/kds/orders',
+    '/api/counter/orders',
+    '/api/employees',
+    '/api/staff/absences',
+    '/api/time-tracking',
+    '/api/time-tracking/reports/worktime',
+    '/api/payroll/summary',
+    '/api/tenant/areas',
+    '/api/tenant/locations',
+    '/api/inventory',
+    '/api/recipes',
+    '/api/dashboard/overview',
+    '/api/tables',
+    '/api/reservations',
+  ])('blocks platform admins on operative endpoint %s', (url) => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.PlatformAdmin]);
 
     expect(() =>
       guard.canActivate(
-        context({ roles: [Role.PlatformAdmin] }, '/api/orders'),
+        context({ roles: [Role.PlatformAdmin] }, url),
       ),
     ).toThrow(ForbiddenException);
   });

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
+import { ModulesModule } from '../modules/modules.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { StockItem, StockItemSchema } from './schemas/stock-item.schema';
 import {
@@ -39,6 +40,7 @@ import { StockService } from './stock.service';
 @Module({
   imports: [
     AuthJwtModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: StockItem.name, schema: StockItemSchema },
       { name: InventoryBatch.name, schema: InventoryBatchSchema },

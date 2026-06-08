@@ -358,6 +358,7 @@ export class LocationsService {
   ): Promise<LocationDocument> {
     this.validateObjectId(id);
     await this.accessPolicy.assertCanManageLocation(actor, id);
+    this.assertScopedLocationManagerUpdatePayload(actor, updateLocationDto);
 
     if (updateLocationDto.companyId) {
       await this.accessPolicy.assertCompanyExists(updateLocationDto.companyId);
@@ -920,5 +921,25 @@ export class LocationsService {
     return actor.roles?.some((role) =>
       [Role.PlatformAdmin, Role.SuperAdmin].includes(role as Role),
     );
+  }
+
+  private assertScopedLocationManagerUpdatePayload(
+    actor: AuthenticatedUser,
+    updateLocationDto: UpdateLocationDto,
+  ): void {
+    if (!this.accessPolicy.isScopedLocationManager(actor)) {
+      return;
+    }
+
+    const allowedFields = new Set(['phone', 'email', 'description', 'notes']);
+    const disallowedFields = Object.keys(updateLocationDto).filter(
+      (field) => !allowedFields.has(field),
+    );
+
+    if (disallowedFields.length) {
+      throw new ForbiddenException(
+        'Filialleiter duerfen nur Telefon, E-Mail, Beschreibung und Notizen bearbeiten',
+      );
+    }
   }
 }

@@ -177,6 +177,7 @@ describe('DemoDataService sales demo seed', () => {
     const orderModel = new FakeModel('order');
     const reservationModel = new FakeModel('reservation');
     const userModel = new FakeModel('user');
+    const userLocationAssignmentModel = new FakeModel('user-location-assignment');
     const dutyShiftModel = new FakeModel('duty-shift');
     const staffShiftModel = new FakeModel('staff-shift');
     const staffAbsenceModel = new FakeModel('staff-absence');
@@ -204,6 +205,7 @@ describe('DemoDataService sales demo seed', () => {
       orderModel as never,
       reservationModel as never,
       userModel as never,
+      userLocationAssignmentModel as never,
       dutyShiftModel as never,
       staffShiftModel as never,
       staffAbsenceModel as never,
@@ -234,6 +236,7 @@ describe('DemoDataService sales demo seed', () => {
       orderModel,
       reservationModel,
       userModel,
+      userLocationAssignmentModel,
       stockItemModel,
       stockMovementModel,
       staffShiftModel,
@@ -260,6 +263,7 @@ describe('DemoDataService sales demo seed', () => {
       orderModel,
       reservationModel,
       userModel,
+      userLocationAssignmentModel,
       stockItemModel,
       stockMovementModel,
       timeEntryModel,
@@ -293,7 +297,7 @@ describe('DemoDataService sales demo seed', () => {
       demoTenantAreas: 10,
       demoTenantRegions: 20,
       demoTenantLocations: 10,
-      demoTenantUsers: 60,
+      demoTenantUsers: 80,
       demoTenantModules: DEFAULT_MODULES.length * 5,
       frittenwerkDemoTables: 5,
       frittenwerkDemoMenuItems: 11,
@@ -547,7 +551,19 @@ describe('DemoDataService sales demo seed', () => {
         'kueche2.koeln@burgermania.demo',
       ]),
     );
-    expect(userModel.rows).toHaveLength(66);
+    expect(userModel.rows).toHaveLength(86);
+    expect(userLocationAssignmentModel.rows.length).toBeGreaterThan(0);
+    expect(userLocationAssignmentModel.rows.map((assignment) => assignment.role)).toEqual(
+      expect.arrayContaining([
+        Role.LocationManager,
+        Role.Waiter,
+        Role.Kitchen,
+        Role.Counter,
+        Role.Cashier,
+        Role.InventoryManager,
+        Role.Staff,
+      ]),
+    );
     const tenantAdmin = userModel.rows.find(
       (user) => user.email === 'admin@burgermania.demo',
     );
@@ -647,7 +663,7 @@ describe('DemoDataService sales demo seed', () => {
       ).length,
     ).toBeGreaterThan(0);
     expect(checklistModel.rows).toHaveLength(2);
-    expect(userModel.rows).toHaveLength(66);
+    expect(userModel.rows).toHaveLength(86);
     expect(areaModel.rows).toHaveLength(10);
     expect(tenantModel.rows).toHaveLength(5);
     expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 5);
@@ -674,7 +690,7 @@ describe('DemoDataService sales demo seed', () => {
     expect(areaModel.rows).toHaveLength(10);
     expect(regionModel.rows).toHaveLength(20);
     expect(locationModel.rows).toHaveLength(10);
-    expect(userModel.rows).toHaveLength(61);
+    expect(userModel.rows).toHaveLength(81);
     expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 5);
     expect(userModel.rows).toEqual(
       expect.arrayContaining([

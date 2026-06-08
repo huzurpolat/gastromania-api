@@ -124,6 +124,7 @@ export const LOCATION_ROLE_PERMISSIONS: Record<string, string[]> = {
     'users.own.update',
   ],
   WAITER: [
+    'locations.view',
     'orders.view',
     'orders.create',
     'orders.update',
@@ -138,6 +139,7 @@ export const LOCATION_ROLE_PERMISSIONS: Record<string, string[]> = {
     'users.own.update',
   ],
   KITCHEN: [
+    'locations.view',
     'kds.view',
     'kds.manage',
     'schedule.view',
@@ -149,6 +151,7 @@ export const LOCATION_ROLE_PERMISSIONS: Record<string, string[]> = {
     'users.own.update',
   ],
   COUNTER: [
+    'locations.view',
     'counter.orders.view',
     'counter.orders.create',
     'counter.orders.update',
@@ -164,6 +167,7 @@ export const LOCATION_ROLE_PERMISSIONS: Record<string, string[]> = {
     'users.own.update',
   ],
   CASHIER: [
+    'locations.view',
     'counter.orders.view',
     'counter.orders.create',
     'counter.orders.update',
@@ -180,6 +184,7 @@ export const LOCATION_ROLE_PERMISSIONS: Record<string, string[]> = {
     'users.own.update',
   ],
   INVENTORY_MANAGER: [
+    'locations.view',
     'inventory.view',
     'reports.view',
     'recipes.costing.view',
@@ -192,6 +197,7 @@ export const LOCATION_ROLE_PERMISSIONS: Record<string, string[]> = {
     'users.own.update',
   ],
   DISHWASHER: [
+    'locations.view',
     'schedule.view',
     'absence.view',
     'absence.request',
@@ -201,6 +207,7 @@ export const LOCATION_ROLE_PERMISSIONS: Record<string, string[]> = {
     'users.own.update',
   ],
   STAFF: [
+    'locations.view',
     'schedule.view',
     'absence.view',
     'absence.request',
@@ -423,6 +430,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   Bar: [
     'dashboard.view',
+    'locations.view',
     'tables.view',
     'tables.status.update',
     'counter.orders.view',
@@ -436,6 +444,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   Theke: [
     'dashboard.view',
+    'locations.view',
     'tables.view',
     'tables.status.update',
     'counter.orders.view',
@@ -454,6 +463,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   Kasse: [
     'dashboard.view',
+    'locations.view',
     'tables.view',
     'tables.status.update',
     'counter.orders.view',
@@ -502,6 +512,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   Einkauf: [
     'dashboard.view',
+    'locations.view',
     'inventory.view',
     'inventory.create',
     'inventory.update',
@@ -595,6 +606,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'marketing.view',
   ],
   Kunde: ['dashboard.view', 'users.own.view', 'users.own.update'],
+  STAFF: [
+    'dashboard.view',
+    'locations.view',
+    'schedule.view',
+    'timeTracking.view',
+    'timeTracking.clock',
+    'absence.view',
+    'absence.request',
+    'users.own.view',
+    'users.own.update',
+  ],
   Tellerwäscher: [
     'dashboard.view',
     'locations.view',

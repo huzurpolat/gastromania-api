@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
+import { ModulesModule } from '../modules/modules.module';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
 import {
   StockAlert,
@@ -23,6 +24,7 @@ import { Recipe, RecipeSchema } from './schemas/recipe.schema';
 @Module({
   imports: [
     AuthJwtModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: Recipe.name, schema: RecipeSchema },
       { name: StockItem.name, schema: StockItemSchema },

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
+import { ModulesModule } from '../modules/modules.module';
 import { WeeklyMenu, WeeklyMenuSchema } from './schemas/weekly-menu.schema';
 import { WeeklyMenusController } from './weekly-menus.controller';
 import { WeeklyMenusService } from './weekly-menus.service';
@@ -9,6 +10,7 @@ import { WeeklyMenusService } from './weekly-menus.service';
 @Module({
   imports: [
     AuthJwtModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: WeeklyMenu.name, schema: WeeklyMenuSchema },
       { name: Location.name, schema: LocationSchema },

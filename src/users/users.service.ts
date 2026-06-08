@@ -284,13 +284,17 @@ export class UsersService {
             submittedLocationAssignments,
           )
         : [];
+    const baseLocationIds = locationIdsProvided
+      ? (updateUserDto.locationIds ?? [])
+      : locationAssignmentsProvided
+        ? []
+        : (existingUser.locationIds ?? []);
+    const explicitLocationId =
+      updateUserDto.locationId ??
+      (locationAssignmentsProvided ? undefined : existingUser.locationId);
     const locationIds = this.getUniqueLocationIds([
-      ...(locationIdsProvided
-        ? (updateUserDto.locationIds ?? [])
-        : (existingUser.locationIds ?? [])),
-      ...(updateUserDto.locationId ?? existingUser.locationId
-        ? [updateUserDto.locationId ?? existingUser.locationId]
-        : []),
+      ...baseLocationIds,
+      ...(explicitLocationId ? [explicitLocationId] : []),
       ...nextLocationAssignments.map((assignment) => assignment.locationId),
     ]);
     const primaryLocationId = this.resolvePrimaryLocationId(

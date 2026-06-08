@@ -11,6 +11,7 @@ import {
   DashboardNotificationSchema,
 } from '../dashboard/schemas/notification.schema';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
+import { ModulesModule } from '../modules/modules.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
 import {
@@ -32,6 +33,7 @@ import {
   imports: [
     AccessModule,
     AuthJwtModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: DailyClosing.name, schema: DailyClosingSchema },
       { name: Location.name, schema: LocationSchema },

@@ -17,12 +17,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
+import { DIGITAL_MENU_MODULE_KEY } from '../modules/constants/module-definitions';
+import { RequireModule } from '../modules/decorators/require-module.decorator';
+import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import { CreateWeeklyMenuDto } from './dto/create-weekly-menu.dto';
 import { UpdateWeeklyMenuDto } from './dto/update-weekly-menu.dto';
 import { WeeklyMenusService } from './weekly-menus.service';
 
 @Controller('weekly-menus')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@RequireModule(DIGITAL_MENU_MODULE_KEY)
+@UseGuards(JwtAuthGuard, ModuleEnabledGuard, RolesGuard, PermissionsGuard)
 export class WeeklyMenusController {
   constructor(private readonly weeklyMenusService: WeeklyMenusService) {}
 

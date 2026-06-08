@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   MessageEvent,
   Param,
@@ -20,9 +21,15 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { KDS_MODULE_KEY } from '../modules/constants/module-definitions';
+import {
+  COUNTER_ORDERS_MODULE_KEY,
+  KDS_MODULE_KEY,
+  TABLE_MANAGEMENT_MODULE_KEY,
+  TABLE_ORDERS_MODULE_KEY,
+} from '../modules/constants/module-definitions';
 import { RequireModule } from '../modules/decorators/require-module.decorator';
 import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
+import { ModulesService } from '../modules/modules.service';
 import { ProductionArea } from '../orders/schemas/order.schema';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
@@ -61,6 +68,7 @@ export class KdsController {
     private readonly kdsService: KdsService,
     private readonly realtimeService: RealtimeService,
     private readonly accessPolicy: AccessPolicyService,
+    private readonly modulesService: ModulesService,
   ) {}
 
   @Get('orders')
@@ -190,10 +198,11 @@ export class KdsController {
   }
 
   @Sse('events')
-  @Permissions('kds.view')
+  @RequireModule([])
   async events(
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<Observable<MessageEvent>> {
+    await this.assertRealtimeAccess(user);
     const locationIds = await this.accessPolicy.getReadableLocationIds(user);
 
     return this.realtimeService.streamWhere((event) =>
@@ -215,5 +224,35 @@ export class KdsController {
       data.payload?.settings?.locationId;
 
     return Boolean(locationId && locationIds.includes(locationId));
+  }
+
+  private async assertRealtimeAccess(user: AuthenticatedUser): Promise<void> {
+    const accessRules = [
+      { permission: 'kds.view', moduleKey: KDS_MODULE_KEY },
+      { permission: 'orders.view', moduleKey: TABLE_ORDERS_MODULE_KEY },
+      { permission: 'counter.orders.view', moduleKey: COUNTER_ORDERS_MODULE_KEY },
+      { permission: 'tables.view', moduleKey: TABLE_MANAGEMENT_MODULE_KEY },
+    ];
+
+    for (const rule of accessRules) {
+      if (
+        this.hasPermission(user, rule.permission) &&
+        (await this.modulesService.isEnabled(rule.moduleKey, user))
+      ) {
+        return;
+      }
+    }
+
+    throw new ForbiddenException('Nicht ausreichende Berechtigung');
+  }
+
+  private hasPermission(user: AuthenticatedUser, permission: string): boolean {
+    const userPermissions = new Set(user.permissions ?? []);
+
+    return (
+      userPermissions.has(permission) ||
+      userPermissions.has('*') ||
+      userPermissions.has(`${permission.split('.')[0]}.*`)
+    );
   }
 }

@@ -70,6 +70,10 @@ import {
   TimeEntrySchema,
 } from '../time-tracking/schemas/time-entry.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import {
+  UserLocationAssignment,
+  UserLocationAssignmentSchema,
+} from '../users/schemas/user-location-assignment.schema';
 import { Tenant, TenantSchema } from '../tenants/schemas/tenant.schema';
 import {
   WeeklyMenu,
@@ -91,6 +95,10 @@ import { DemoDataService } from './demo-data.service';
       { name: Order.name, schema: OrderSchema },
       { name: Reservation.name, schema: ReservationSchema },
       { name: User.name, schema: UserSchema },
+      {
+        name: UserLocationAssignment.name,
+        schema: UserLocationAssignmentSchema,
+      },
       { name: DutyShift.name, schema: DutyShiftSchema },
       { name: StaffShift.name, schema: StaffShiftSchema },
       { name: StaffAbsence.name, schema: StaffAbsenceSchema },

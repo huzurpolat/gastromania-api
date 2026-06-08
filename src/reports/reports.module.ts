@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AccessModule } from '../access/access.module';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
+import { ModulesModule } from '../modules/modules.module';
 import {
   MenuItem,
   MenuItemSchema,
@@ -21,6 +22,7 @@ import {
   imports: [
     AccessModule,
     AuthJwtModule,
+    ModulesModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
       { name: MenuItem.name, schema: MenuItemSchema },

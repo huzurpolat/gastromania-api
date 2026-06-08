@@ -110,6 +110,18 @@ export class CreateLocationDto {
   @IsString()
   address?: string;
 
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  notes?: string;
+
   @Transform(({ value }) => trimString(value))
   @IsString()
   @IsNotEmpty()
