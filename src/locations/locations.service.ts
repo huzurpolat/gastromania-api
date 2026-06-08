@@ -103,9 +103,15 @@ export class LocationsService {
     const slug = this.toSlug(dto.name);
     await this.assertTenantLocationNameAvailable(tenantId, slug, dto.name);
 
-    return this.locationModel.create(
+    const location = await this.locationModel.create(
       this.toTenantLocationPayload(dto, tenantId, area, region, city, slug),
     );
+    await this.createStartTablesForNewFloors(
+      location,
+      this.normalizeFloors(location.tablePlanFloors),
+    );
+
+    return location;
   }
 
   async findTenantLocations(
@@ -134,7 +140,10 @@ export class LocationsService {
       if (filters.cityId) filter.cityId = filters.cityId;
     }
 
-    return this.locationModel.find(filter).sort({ name: 1 }).exec();
+    const locations = await this.locationModel.find(filter).sort({ name: 1 }).exec();
+    return Promise.all(
+      locations.map((location) => this.ensureTablePlanFloors(location)),
+    );
   }
 
   async findTenantLocation(
@@ -163,7 +172,7 @@ export class LocationsService {
       throw new NotFoundException('Standort nicht gefunden');
     }
 
-    return location;
+    return this.ensureTablePlanFloors(location);
   }
 
   async updateTenantLocation(
@@ -333,7 +342,10 @@ export class LocationsService {
   async findAll(actor: AuthenticatedUser): Promise<LocationDocument[]> {
     const filter = await this.accessPolicy.getReadableLocationFilter(actor);
 
-    return this.locationModel.find(filter).sort({ createdAt: -1 }).exec();
+    const locations = await this.locationModel.find(filter).sort({ createdAt: -1 }).exec();
+    return Promise.all(
+      locations.map((location) => this.ensureTablePlanFloors(location)),
+    );
   }
 
   async findOne(
@@ -348,7 +360,7 @@ export class LocationsService {
       throw new NotFoundException('Standort nicht gefunden');
     }
 
-    return location;
+    return this.ensureTablePlanFloors(location);
   }
 
   async update(
@@ -445,6 +457,30 @@ export class LocationsService {
     }
 
     return deletedLocation;
+  }
+
+  private async ensureTablePlanFloors(
+    location: LocationDocument,
+  ): Promise<LocationDocument> {
+    const normalizedFloors = this.normalizeFloors(location.tablePlanFloors);
+    const currentFloors = location.tablePlanFloors ?? [];
+    const isAlreadyNormalized =
+      currentFloors.length === normalizedFloors.length &&
+      currentFloors.every((floor, index) => floor === normalizedFloors[index]);
+
+    if (isAlreadyNormalized) {
+      return location;
+    }
+
+    const updatedLocation = await this.locationModel
+      .findByIdAndUpdate(
+        location._id,
+        { tablePlanFloors: normalizedFloors },
+        { returnDocument: 'after', runValidators: true },
+      )
+      .exec();
+
+    return updatedLocation ?? location;
   }
 
   private validateObjectId(id: string): void {

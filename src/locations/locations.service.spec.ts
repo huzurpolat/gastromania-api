@@ -36,6 +36,8 @@ describe('LocationsService', () => {
     city: 'Berlin',
     federalState: 'Berlin',
     isActive: true,
+    tenantId: 'tenant-nrw',
+    tablePlanFloors: ['EG'],
   } as unknown as LocationDocument;
 
   const locationModel = {
@@ -288,6 +290,31 @@ describe('LocationsService', () => {
     expect(sort).toHaveBeenCalledWith({ createdAt: -1 });
   });
 
+  it('persists a default floor for legacy locations without floors', async () => {
+    const legacyLocation = {
+      ...location,
+      tablePlanFloors: [],
+    } as unknown as LocationDocument;
+    const normalizedLocation = {
+      ...legacyLocation,
+      tablePlanFloors: ['EG'],
+    } as unknown as LocationDocument;
+    const exec = jest.fn().mockResolvedValue([legacyLocation]);
+    const sort = jest.fn().mockReturnValue({ exec });
+
+    locationModel.find.mockReturnValue({ sort });
+    locationModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(normalizedLocation),
+    });
+
+    await expect(service.findAll(actor)).resolves.toEqual([normalizedLocation]);
+    expect(locationModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      legacyLocation._id,
+      { tablePlanFloors: ['EG'] },
+      { returnDocument: 'after', runValidators: true },
+    );
+  });
+
   it('returns only own tenant locations for scoped location managers', async () => {
     const exec = jest.fn().mockResolvedValue([location]);
     const sort = jest.fn().mockReturnValue({ exec });
@@ -361,7 +388,10 @@ describe('LocationsService', () => {
     ).resolves.toBe(location);
     expect(locationModel.findByIdAndUpdate).toHaveBeenCalledWith(
       '6627d9a2c6f2d8f3e2b1a001',
-      dto,
+      expect.objectContaining({
+        ...dto,
+        tenantId: 'tenant-nrw',
+      }),
       {
         returnDocument: 'after',
         runValidators: true,

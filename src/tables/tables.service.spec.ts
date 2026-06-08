@@ -12,6 +12,7 @@ const floorId = `${locationId}:eg`;
 const actor = {
   sub: 'user-1',
   roles: ['Filialleiter'],
+  tenantId: 'tenant-1',
   companyId: 'company-1',
   regionIds: ['region-1'],
 } as AuthenticatedUser;
@@ -26,10 +27,14 @@ function locationQuery(floors = ['EG']) {
   return {
     select: jest.fn().mockReturnThis(),
     lean: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue({
-      _id: locationId,
-      tablePlanFloors: floors,
-    } satisfies Partial<LocationDocument>),
+      exec: jest.fn().mockResolvedValue({
+        _id: locationId,
+        tenantId: 'tenant-1',
+        companyId: 'company-from-location',
+        areaId: 'area-1',
+        regionId: 'region-from-location',
+        tablePlanFloors: floors,
+      } satisfies Partial<LocationDocument>),
   };
 }
 
@@ -101,6 +106,11 @@ describe('TablesService floor handling', () => {
         floorId,
         floorName: 'EG',
         planFloor: 'EG',
+        tenantId: 'tenant-1',
+        companyId: 'company-from-location',
+        areaId: 'area-1',
+        regionId: 'region-from-location',
+        locationId,
       }),
     );
   });
@@ -149,6 +159,10 @@ describe('TablesService floor handling', () => {
           name: 'Tisch 1 (2)',
           floorId,
           floorName: 'EG',
+          tenantId: 'tenant-1',
+          companyId: 'company-from-location',
+          areaId: 'area-1',
+          regionId: 'region-from-location',
           planX: 8,
           planY: 8,
           status: TableStatus.Free,

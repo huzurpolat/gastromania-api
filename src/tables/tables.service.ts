@@ -342,8 +342,10 @@ export class TablesService {
     const floor = await this.resolveFloor(locationId, floorId, undefined);
 
     return this.createMissingStartTables(locationId, floor.id, floor.name, {
-      companyId: actor.companyId,
-      regionId: actor.regionIds?.[0],
+      tenantId: floor.tenantId,
+      companyId: floor.companyId,
+      areaId: floor.areaId,
+      regionId: floor.regionId,
     });
   }
 
@@ -450,7 +452,18 @@ export class TablesService {
   private async normalizeTableFloor<T extends Partial<CreateTableDto>>(
     dto: T,
     fallbackLocationId?: string,
-  ): Promise<T & { floorId: string; floorName: string; planFloor: string }> {
+  ): Promise<
+    T & {
+      tenantId?: string;
+      companyId?: string;
+      areaId?: string;
+      regionId?: string;
+      locationId: string;
+      floorId: string;
+      floorName: string;
+      planFloor: string;
+    }
+  > {
     const locationId = dto.locationId ?? fallbackLocationId;
 
     if (!locationId) {
@@ -466,6 +479,11 @@ export class TablesService {
 
     return {
       ...dto,
+      tenantId: floor.tenantId,
+      companyId: floor.companyId,
+      areaId: floor.areaId,
+      regionId: floor.regionId,
+      locationId,
       floorId: floor.id,
       floorName: floor.name,
       planFloor: floor.name,
@@ -476,10 +494,17 @@ export class TablesService {
     locationId: string,
     floorId: string | undefined,
     floorName: string | undefined,
-  ): Promise<{ id: string; name: string }> {
+  ): Promise<{
+    id: string;
+    name: string;
+    tenantId?: string;
+    companyId?: string;
+    areaId?: string;
+    regionId?: string;
+  }> {
     const location = await this.locationModel
       .findById(locationId)
-      .select('tablePlanFloors')
+      .select('tenantId companyId areaId regionId tablePlanFloors')
       .lean()
       .exec();
 
@@ -510,6 +535,10 @@ export class TablesService {
     return {
       id: this.toFloorId(locationId, name),
       name,
+      tenantId: location.tenantId,
+      companyId: location.companyId,
+      areaId: location.areaId,
+      regionId: location.regionId,
     };
   }
 
@@ -517,7 +546,12 @@ export class TablesService {
     locationId: string,
     floorId: string,
     floorName: string,
-    scope: { companyId?: string; regionId?: string } = {},
+    scope: {
+      tenantId?: string;
+      companyId?: string;
+      areaId?: string;
+      regionId?: string;
+    } = {},
   ): Promise<RestaurantTableDocument[]> {
     const existingCount = await this.tableModel.countDocuments({
       locationId,
