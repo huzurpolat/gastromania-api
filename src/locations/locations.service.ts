@@ -42,7 +42,11 @@ import {
   UpdateTenantLocationDto,
 } from './dto/create-tenant-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
-import { Location, LocationDocument } from './schemas/location.schema';
+import {
+  Location,
+  LocationDocument,
+  LocationTablePlanObject,
+} from './schemas/location.schema';
 
 @Injectable()
 export class LocationsService {
@@ -441,6 +445,101 @@ export class LocationsService {
     return updatedLocation;
   }
 
+  async deleteTablePlanFloor(
+    id: string,
+    floorId: string | undefined,
+    actor: AuthenticatedUser,
+  ): Promise<{
+    deleted: true;
+    location: LocationDocument;
+    floor: { id: string; name: string };
+    deletedTableCount: number;
+    deletedTables: Array<{ id: string; name: string }>;
+  }> {
+    this.validateObjectId(id);
+    await this.accessPolicy.assertCanManageLocation(actor, id);
+
+    const location = await this.locationModel.findById(id).exec();
+
+    if (!location) {
+      throw new NotFoundException('Standort nicht gefunden');
+    }
+
+    const requestedFloorId = floorId?.trim();
+
+    if (!requestedFloorId) {
+      throw new BadRequestException('Etagen-ID ist erforderlich');
+    }
+
+    const locationId = location._id.toString();
+    const tableFilter: Record<string, string> = {
+      locationId,
+      floorId: requestedFloorId,
+    };
+
+    if (location.tenantId) {
+      tableFilter.tenantId = location.tenantId;
+    }
+
+    const tables = await this.tableModel
+      .find(tableFilter)
+      .select('_id name floorName planFloor')
+      .lean()
+      .exec();
+    const floors = this.normalizeFloors(location.tablePlanFloors);
+    const floorName =
+      floors.find((floor) => this.toFloorId(locationId, floor) === requestedFloorId) ??
+      tables.find((table) => table.floorName || table.planFloor)?.floorName ??
+      tables.find((table) => table.floorName || table.planFloor)?.planFloor;
+
+    if (!floorName) {
+      throw new NotFoundException('Etage nicht gefunden');
+    }
+
+    const normalizedFloorName = floorName.toLowerCase();
+    const nextFloors = floors.filter(
+      (floor) =>
+        floor.toLowerCase() !== normalizedFloorName &&
+        this.toFloorId(locationId, floor) !== requestedFloorId,
+    );
+    const nextAreas = (location.tablePlanAreas ?? []).filter(
+      (area) => (area.floor ?? 'EG').toLowerCase() !== normalizedFloorName,
+    );
+    const nextObjects = (location.tablePlanObjects ?? []).filter(
+      (object) =>
+        ((object as LocationTablePlanObject & { floor?: string }).floor ?? 'EG')
+          .toLowerCase() !== normalizedFloorName,
+    );
+
+    const deleteResult = await this.tableModel.deleteMany(tableFilter).exec();
+    const updatedLocation = await this.locationModel
+      .findByIdAndUpdate(
+        locationId,
+        {
+          tablePlanFloors: nextFloors,
+          tablePlanAreas: nextAreas,
+          tablePlanObjects: nextObjects,
+        },
+        { returnDocument: 'after', runValidators: true },
+      )
+      .exec();
+
+    if (!updatedLocation) {
+      throw new NotFoundException('Standort nicht gefunden');
+    }
+
+    return {
+      deleted: true,
+      location: updatedLocation,
+      floor: { id: requestedFloorId, name: floorName },
+      deletedTableCount: deleteResult.deletedCount ?? tables.length,
+      deletedTables: tables.map((table) => ({
+        id: table._id.toString(),
+        name: table.name,
+      })),
+    };
+  }
+
   async remove(
     id: string,
     actor: AuthenticatedUser,
@@ -462,13 +561,23 @@ export class LocationsService {
   private async ensureTablePlanFloors(
     location: LocationDocument,
   ): Promise<LocationDocument> {
-    const normalizedFloors = this.normalizeFloors(location.tablePlanFloors);
+    let normalizedFloors = this.normalizeFloors(location.tablePlanFloors);
+
+    if (normalizedFloors.length <= 1) {
+      const tableFloors = await this.getTablePlanFloorsFromTables(location);
+      normalizedFloors = this.normalizeFloors([
+        ...normalizedFloors,
+        ...tableFloors,
+      ]);
+    }
+
     const currentFloors = location.tablePlanFloors ?? [];
     const isAlreadyNormalized =
       currentFloors.length === normalizedFloors.length &&
       currentFloors.every((floor, index) => floor === normalizedFloors[index]);
 
     if (isAlreadyNormalized) {
+      await this.createStartTablesForNewFloors(location, normalizedFloors);
       return location;
     }
 
@@ -480,7 +589,31 @@ export class LocationsService {
       )
       .exec();
 
-    return updatedLocation ?? location;
+    const ensuredLocation = updatedLocation ?? location;
+    await this.createStartTablesForNewFloors(ensuredLocation, normalizedFloors);
+
+    return ensuredLocation;
+  }
+
+  private async getTablePlanFloorsFromTables(
+    location: LocationDocument,
+  ): Promise<string[]> {
+    const locationId = location._id.toString();
+    const filter: Record<string, string> = { locationId };
+
+    if (location.tenantId) {
+      filter.tenantId = location.tenantId;
+    }
+
+    const tables = await this.tableModel
+      .find(filter)
+      .select('floorName planFloor')
+      .lean()
+      .exec();
+
+    return tables
+      .map((table) => table.floorName ?? table.planFloor)
+      .filter((floor): floor is string => Boolean(floor?.trim()));
   }
 
   private validateObjectId(id: string): void {

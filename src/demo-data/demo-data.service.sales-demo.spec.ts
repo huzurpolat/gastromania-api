@@ -55,6 +55,17 @@ class FakeModel {
     };
   }
 
+  find(filter: Record<string, unknown>) {
+    const rows = this.rows.filter((row) => this.matches(row, filter));
+    const query = {
+      exec: () => Promise.resolve(rows),
+      lean: () => Promise.resolve(rows),
+      select: () => query,
+    };
+
+    return query;
+  }
+
   updateMany(filter: Record<string, unknown>, update: Record<string, unknown>) {
     const matched = this.rows.filter((row) => this.matches(row, filter));
     matched.forEach((row) => this.applyUpdate(row, update));
@@ -175,6 +186,7 @@ describe('DemoDataService sales demo seed', () => {
     const tableModel = new FakeModel('table');
     const menuItemModel = new FakeModel('menu-item');
     const orderModel = new FakeModel('order');
+    const recipeModel = new FakeModel('recipe');
     const reservationModel = new FakeModel('reservation');
     const userModel = new FakeModel('user');
     const userLocationAssignmentModel = new FakeModel('user-location-assignment');
@@ -203,6 +215,7 @@ describe('DemoDataService sales demo seed', () => {
       tableModel as never,
       menuItemModel as never,
       orderModel as never,
+      recipeModel as never,
       reservationModel as never,
       userModel as never,
       userLocationAssignmentModel as never,
@@ -233,6 +246,7 @@ describe('DemoDataService sales demo seed', () => {
       locationModel,
       tableModel,
       menuItemModel,
+      recipeModel,
       orderModel,
       reservationModel,
       userModel,
@@ -260,6 +274,7 @@ describe('DemoDataService sales demo seed', () => {
       locationModel,
       tableModel,
       menuItemModel,
+      recipeModel,
       orderModel,
       reservationModel,
       userModel,
@@ -303,7 +318,7 @@ describe('DemoDataService sales demo seed', () => {
       frittenwerkDemoMenuItems: 11,
       frittenwerkDemoOrders: 9,
     });
-    expect(companyModel.rows).toHaveLength(6);
+    expect(companyModel.rows).toHaveLength(7);
     expect(companyModel.rows[0]).toMatchObject({
       name: 'GastroWerk24 Demo Restaurant',
       type: 'sales-demo-restaurant',
@@ -482,7 +497,7 @@ describe('DemoDataService sales demo seed', () => {
       ]),
     );
     expect(reservationModel.rows).toHaveLength(3);
-    expect(stockItemModel.rows).toHaveLength(5);
+    expect(stockItemModel.rows).toHaveLength(16);
     expect(
       stockItemModel.rows.reduce(
         (sum, item) =>
@@ -490,7 +505,16 @@ describe('DemoDataService sales demo seed', () => {
         0,
       ),
     ).toBeGreaterThan(0);
-    expect(stockMovementModel.rows).toHaveLength(5);
+    expect(recipeModel.rows).toHaveLength(11);
+    expect(
+      recipeModel.rows.filter((recipe) => recipe.locationId === frittenwerkLocation?._id),
+    ).toHaveLength(11);
+    expect(stockMovementModel.rows).toHaveLength(23);
+    expect(
+      stockMovementModel.rows.filter((movement) =>
+        String(movement.note ?? '').startsWith('Frittenwerk-Demo-COGS-'),
+      ),
+    ).toHaveLength(18);
     expect(
       timeEntryModel.rows.filter((entry) =>
         String(entry.note ?? '').startsWith('Sales-Demo-'),
@@ -503,7 +527,7 @@ describe('DemoDataService sales demo seed', () => {
     ).toBeGreaterThan(0);
     expect(checklistModel.rows).toHaveLength(2);
     expect(areaModel.rows).toHaveLength(10);
-    expect(tenantModel.rows).toHaveLength(5);
+    expect(tenantModel.rows).toHaveLength(6);
     expect(tenantModel.rows.map((tenant) => tenant.slug)).toEqual(
       expect.arrayContaining([
         'burgermania',
@@ -513,7 +537,7 @@ describe('DemoDataService sales demo seed', () => {
         'frittenwerk-demo',
       ]),
     );
-    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 5);
+    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 7);
     expect(
       tenantModuleModel.rows.filter(
         (moduleRow) =>
@@ -624,6 +648,7 @@ describe('DemoDataService sales demo seed', () => {
       locationModel,
       tableModel,
       menuItemModel,
+      recipeModel,
       orderModel,
       reservationModel,
       userModel,
@@ -642,7 +667,7 @@ describe('DemoDataService sales demo seed', () => {
     await service.seedSalesDemo();
     await service.seedSalesDemo();
 
-    expect(companyModel.rows).toHaveLength(6);
+    expect(companyModel.rows).toHaveLength(7);
     expect(regionModel.rows).toHaveLength(21);
     expect(locationModel.rows).toHaveLength(11);
     expect(departmentModel.rows).toHaveLength(5);
@@ -650,8 +675,9 @@ describe('DemoDataService sales demo seed', () => {
     expect(menuItemModel.rows.length).toBeGreaterThanOrEqual(22);
     expect(orderModel.rows).toHaveLength(13);
     expect(reservationModel.rows).toHaveLength(3);
-    expect(stockItemModel.rows).toHaveLength(5);
-    expect(stockMovementModel.rows).toHaveLength(5);
+    expect(stockItemModel.rows).toHaveLength(16);
+    expect(recipeModel.rows).toHaveLength(11);
+    expect(stockMovementModel.rows).toHaveLength(23);
     expect(
       timeEntryModel.rows.filter((entry) =>
         String(entry.note ?? '').startsWith('Sales-Demo-'),
@@ -665,8 +691,8 @@ describe('DemoDataService sales demo seed', () => {
     expect(checklistModel.rows).toHaveLength(2);
     expect(userModel.rows).toHaveLength(86);
     expect(areaModel.rows).toHaveLength(10);
-    expect(tenantModel.rows).toHaveLength(5);
-    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 5);
+    expect(tenantModel.rows).toHaveLength(6);
+    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 7);
   });
 
   it('bootstraps the platform admin and five development demo tenants without the manual sales seed', async () => {
@@ -676,8 +702,8 @@ describe('DemoDataService sales demo seed', () => {
     await service.onApplicationBootstrap();
     await service.onApplicationBootstrap();
 
-    expect(companyModel.rows).toHaveLength(5);
-    expect(tenantModel.rows).toHaveLength(5);
+    expect(companyModel.rows).toHaveLength(6);
+    expect(tenantModel.rows).toHaveLength(6);
     expect(tenantModel.rows.map((tenant) => tenant.slug)).toEqual(
       expect.arrayContaining([
         'burgermania',
@@ -691,7 +717,7 @@ describe('DemoDataService sales demo seed', () => {
     expect(regionModel.rows).toHaveLength(20);
     expect(locationModel.rows).toHaveLength(10);
     expect(userModel.rows).toHaveLength(81);
-    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 5);
+    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 6);
     expect(userModel.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -765,7 +791,7 @@ describe('DemoDataService sales demo seed', () => {
       expect(userModel.rows).toHaveLength(6);
       expect(areaModel.rows).toHaveLength(0);
       expect(tenantModel.rows).toHaveLength(0);
-      expect(tenantModuleModel.rows).toHaveLength(0);
+      expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length);
     } finally {
       if (previousNodeEnv === undefined) {
         delete process.env.NODE_ENV;

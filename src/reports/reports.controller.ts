@@ -7,7 +7,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { COST_OF_GOODS_MODULE_KEY } from '../modules/constants/module-definitions';
+import {
+  COST_OF_GOODS_MODULE_KEY,
+  REPORTING_MODULE_KEY,
+} from '../modules/constants/module-definitions';
 import { RequireModule } from '../modules/decorators/require-module.decorator';
 import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import { MarginReportQueryDto } from './dto/margin-report-query.dto';
@@ -24,12 +27,14 @@ const MARGIN_REPORT_ROLES = [
   Role.Filialleiter,
   Role.Restaurantleiter,
   Role.Schichtleiter,
+  Role.InventoryManager,
+  Role.Lager,
   Role.Einkauf,
   Role.Buchhaltung,
 ];
 
 @Controller('reports/margins')
-@RequireModule(COST_OF_GOODS_MODULE_KEY)
+@RequireModule([REPORTING_MODULE_KEY, COST_OF_GOODS_MODULE_KEY])
 @UseGuards(JwtAuthGuard, ModuleEnabledGuard, RolesGuard, PermissionsGuard)
 @Roles(...MARGIN_REPORT_ROLES)
 @Permissions('reports.view')

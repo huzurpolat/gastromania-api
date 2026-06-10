@@ -34,6 +34,7 @@ import {
   MenuItemSchema,
 } from '../menu-items/schemas/menu-item.schema';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
+import { Recipe, RecipeSchema } from '../recipes/schemas/recipe.schema';
 import {
   Reservation,
   ReservationSchema,
@@ -93,6 +94,7 @@ import { DemoDataService } from './demo-data.service';
       { name: RestaurantTable.name, schema: RestaurantTableSchema },
       { name: MenuItem.name, schema: MenuItemSchema },
       { name: Order.name, schema: OrderSchema },
+      { name: Recipe.name, schema: RecipeSchema },
       { name: Reservation.name, schema: ReservationSchema },
       { name: User.name, schema: UserSchema },
       {

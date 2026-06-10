@@ -11,6 +11,10 @@ import {
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { Recipe, RecipeSchema } from '../recipes/schemas/recipe.schema';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
+import {
+  StockMovement,
+  StockMovementSchema,
+} from '../stock/schemas/stock-movement.schema';
 import { MarginReportsService } from './margin-reports.service';
 import { ReportsController } from './reports.controller';
 import {
@@ -28,6 +32,7 @@ import {
       { name: MenuItem.name, schema: MenuItemSchema },
       { name: Recipe.name, schema: RecipeSchema },
       { name: StockItem.name, schema: StockItemSchema },
+      { name: StockMovement.name, schema: StockMovementSchema },
       { name: Location.name, schema: LocationSchema },
       { name: MarginAnalysisRun.name, schema: MarginAnalysisRunSchema },
     ]),

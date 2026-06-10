@@ -34,6 +34,9 @@ export const ChecklistTaskSchema = SchemaFactory.createForClass(ChecklistTask);
 
 @Schema({ timestamps: true, versionKey: false })
 export class Checklist {
+  @Prop({ trim: true, index: true })
+  tenantId?: string;
+
   @Prop({ required: true, trim: true, index: true })
   locationId!: string;
 
@@ -70,3 +73,4 @@ export const ChecklistSchema = SchemaFactory.createForClass(Checklist);
 
 ChecklistSchema.index({ locationId: 1, date: 1, area: 1, title: 1 });
 ChecklistSchema.index({ locationId: 1, date: 1, templateKey: 1 });
+ChecklistSchema.index({ tenantId: 1, locationId: 1, date: 1 });

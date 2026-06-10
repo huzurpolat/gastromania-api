@@ -23,23 +23,30 @@ import { ModuleEnabledGuard } from '../modules/guards/module-enabled.guard';
 import { CreateRecipeDto, UpdateRecipeDto } from './dto/recipe.dto';
 import { RecipeService } from './recipe.service';
 
-@Controller('recipes')
-@RequireModule(RECIPES_MODULE_KEY)
-@UseGuards(JwtAuthGuard, ModuleEnabledGuard, RolesGuard, PermissionsGuard)
-@Roles(
-  Role.PlatformAdmin,
-  Role.SuperAdmin,
+const recipeManagementRoles = [
+  Role.TenantAdminCode,
+  Role.TenantAdmin,
+  Role.RestaurantAdmin,
   Role.CompanyAdmin,
   Role.RegionAdmin,
   Role.Admin,
+  Role.AreaManager,
+  Role.RegionalManager,
   Role.Regionalleiter,
   Role.Bereichsleiter,
+  Role.LocationManager,
   Role.Filialleiter,
-  Role.Kueche,
+  Role.Restaurantleiter,
+  Role.Schichtleiter,
+  Role.InventoryManager,
   Role.Lager,
   Role.Einkauf,
-  Role.Service,
-)
+];
+
+@Controller('recipes')
+@RequireModule(RECIPES_MODULE_KEY)
+@UseGuards(JwtAuthGuard, ModuleEnabledGuard, RolesGuard, PermissionsGuard)
+@Roles(...recipeManagementRoles)
 export class RecipesController {
   constructor(private readonly recipeService: RecipeService) {}
 
@@ -66,27 +73,24 @@ export class RecipesController {
     return this.recipeService.report(user);
   }
 
+  @Get('by-menu-item/:menuItemId')
+  @Permissions('recipes.view')
+  findByMenuItem(
+    @Param('menuItemId') menuItemId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.recipeService.findByMenuItem(menuItemId, user);
+  }
+
   @Get(':id')
   @Permissions('recipes.view')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.recipeService.findOne(id, user);
+    return this.recipeService.findOneResponse(id, user);
   }
 
   @Post()
   @Permissions('recipes.create')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Kueche,
-    Role.Lager,
-    Role.Einkauf,
-  )
+  @Roles(...recipeManagementRoles)
   create(
     @Body() payload: CreateRecipeDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -96,19 +100,7 @@ export class RecipesController {
 
   @Patch(':id')
   @Permissions('recipes.update')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Kueche,
-    Role.Lager,
-    Role.Einkauf,
-  )
+  @Roles(...recipeManagementRoles)
   update(
     @Param('id') id: string,
     @Body() payload: UpdateRecipeDto,
@@ -119,38 +111,14 @@ export class RecipesController {
 
   @Post(':id/copy')
   @Permissions('recipes.create')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Kueche,
-    Role.Lager,
-    Role.Einkauf,
-  )
+  @Roles(...recipeManagementRoles)
   copy(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.recipeService.copy(id, user);
   }
 
   @Patch(':id/archive')
   @Permissions('recipes.update')
-  @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
-    Role.CompanyAdmin,
-    Role.RegionAdmin,
-    Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
-    Role.Kueche,
-    Role.Lager,
-    Role.Einkauf,
-  )
+  @Roles(...recipeManagementRoles)
   archive(
     @Param('id') id: string,
     @Body('archived') archived: boolean,
@@ -162,14 +130,11 @@ export class RecipesController {
   @Delete(':id')
   @Permissions('recipes.delete')
   @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
+    Role.TenantAdminCode,
+    Role.TenantAdmin,
+    Role.RestaurantAdmin,
     Role.CompanyAdmin,
-    Role.RegionAdmin,
     Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
-    Role.Filialleiter,
   )
   remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.recipeService.remove(id, user);

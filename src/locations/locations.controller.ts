@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -126,6 +127,24 @@ export class LocationsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.locationsService.update(id, updateLocationDto, user);
+  }
+
+  @Delete(':id/floors')
+  @Permissions('locations.update')
+  @Roles(
+    Role.TenantAdmin,
+    Role.RestaurantAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+  )
+  removeTablePlanFloor(
+    @Param('id') id: string,
+    @Query('floorId') floorId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.locationsService.deleteTablePlanFloor(id, floorId, user);
   }
 
   @Delete(':id')

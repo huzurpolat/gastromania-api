@@ -307,6 +307,16 @@ async function verifySalesDemo() {
         ],
       })
       .exec();
+    const nonPlatformUsersWithoutTenantId = await userModel
+      .countDocuments({
+        $or: [
+          { tenantId: { $exists: false } },
+          { tenantId: null },
+          { tenantId: '' },
+        ],
+        roles: { $nin: ['PLATFORM_ADMIN', 'PlatformAdmin', 'Super Admin'] },
+      })
+      .exec();
     const enabledFrittenwerkModules = frittenwerkModules
       .filter((moduleConfig) => moduleConfig.enabled)
       .map((moduleConfig) => moduleConfig.moduleKey);
@@ -501,6 +511,7 @@ async function verifySalesDemo() {
           menuItems,
           unsafeVisibleOrders,
           legacyOrphanOrders,
+          nonPlatformUsersWithoutTenantId,
           frittenwerkTenantFound: Boolean(frittenwerkTenant),
           demoTenants: demoTenants.map((tenant) => ({
             name: tenant.name,
@@ -543,6 +554,7 @@ async function verifySalesDemo() {
         .filter((value) => typeof value === 'boolean')
         .every(Boolean) ||
       unsafeVisibleOrders !== 0 ||
+      nonPlatformUsersWithoutTenantId !== 0 ||
       !roleSmokeResults.every((result) => result.ok)
     ) {
       throw new Error('Sales-Demo Rollen-/Tenant-Smoke-Verify fehlgeschlagen');

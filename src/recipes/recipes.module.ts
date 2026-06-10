@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
+import { MenuItem, MenuItemSchema } from '../menu-items/schemas/menu-item.schema';
 import { ModulesModule } from '../modules/modules.module';
 import { StockItem, StockItemSchema } from '../stock/schemas/stock-item.schema';
 import {
@@ -27,6 +28,7 @@ import { Recipe, RecipeSchema } from './schemas/recipe.schema';
     ModulesModule,
     MongooseModule.forFeature([
       { name: Recipe.name, schema: RecipeSchema },
+      { name: MenuItem.name, schema: MenuItemSchema },
       { name: StockItem.name, schema: StockItemSchema },
       { name: StockAlert.name, schema: StockAlertSchema },
       { name: InventoryBatch.name, schema: InventoryBatchSchema },

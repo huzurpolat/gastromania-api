@@ -13,8 +13,15 @@ export const marginReportRanges = [
   'month',
   'custom',
 ] as const;
+export const marginReportGroupings = [
+  'total',
+  'location',
+  'category',
+  'menuItem',
+] as const;
 
 export type MarginReportRange = (typeof marginReportRanges)[number];
+export type MarginReportGrouping = (typeof marginReportGroupings)[number];
 
 export class MarginReportQueryDto {
   @IsOptional()
@@ -28,6 +35,18 @@ export class MarginReportQueryDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+
+  @IsOptional()
+  @IsIn(marginReportGroupings)
+  groupBy?: MarginReportGrouping;
 
   @IsOptional()
   @IsMongoId()

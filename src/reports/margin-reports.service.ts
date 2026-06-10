@@ -10,10 +10,15 @@ import { MenuItem } from '../menu-items/schemas/menu-item.schema';
 import { Order, OrderStatus } from '../orders/schemas/order.schema';
 import { Recipe } from '../recipes/schemas/recipe.schema';
 import { StockItem } from '../stock/schemas/stock-item.schema';
+import {
+  StockMovement,
+  StockMovementType,
+} from '../stock/schemas/stock-movement.schema';
 import { MarginReportQueryDto } from './dto/margin-report-query.dto';
 import { MarginAnalysisRun } from './schemas/margin-analysis-run.schema';
 
 type CostBasis =
+  | 'stockMovementValueNet'
   | 'averageCost'
   | 'unitCost'
   | 'lastPurchasePrice'
@@ -27,6 +32,14 @@ type MarginStatus =
   | 'high_food_cost'
   | 'missing_recipe';
 type Quadrant = 'stars' | 'plowhorses' | 'puzzles' | 'dogs';
+type MarginReportWarningType =
+  | 'missing_cost'
+  | 'missing_recipe'
+  | 'missing_stock_movement_cost'
+  | 'incomplete_data'
+  | 'negative_margin'
+  | 'below_target';
+type MarginReportGroupBy = 'total' | 'location' | 'category' | 'menuItem';
 
 interface Period {
   range: string;
@@ -65,6 +78,13 @@ interface IngredientCostLine {
   costPerUnit: number;
   totalCost: number;
   basis: CostBasis;
+}
+
+interface MovementCostSummary {
+  costOfGoods: number;
+  costBasis: CostBasis[];
+  warnings: string[];
+  ingredientCosts: IngredientCostLine[];
 }
 
 export interface MenuItemMarginReportRow {
@@ -106,6 +126,26 @@ export interface LocationMarginReportRow {
   worstItems: MenuItemMarginReportRow[];
 }
 
+export interface MarginReportItem {
+  key: string;
+  label: string;
+  groupBy: MarginReportGroupBy;
+  revenue: number;
+  costOfGoods: number;
+  grossMargin: number;
+  marginPercent: number;
+  warningCount: number;
+  warnings: string[];
+}
+
+export interface MarginReportWarning {
+  type: MarginReportWarningType;
+  message: string;
+  menuItemId?: string;
+  stockItemId?: string;
+  orderId?: string;
+}
+
 @Injectable()
 export class MarginReportsService {
   constructor(
@@ -114,6 +154,8 @@ export class MarginReportsService {
     @InjectModel(Recipe.name) private readonly recipeModel: Model<Recipe>,
     @InjectModel(StockItem.name)
     private readonly stockItemModel: Model<StockItem>,
+    @InjectModel(StockMovement.name)
+    private readonly stockMovementModel: Model<StockMovement>,
     @InjectModel(Location.name) private readonly locationModel: Model<Location>,
     @InjectModel(MarginAnalysisRun.name)
     private readonly analysisRunModel: Model<MarginAnalysisRun>,
@@ -129,6 +171,9 @@ export class MarginReportsService {
     const locations = this.createLocationRows(rows, scope.locations);
     const quadrant = this.createQuadrant(rows);
     const warnings = this.unique(rows.flatMap((row) => row.warnings));
+    const warningDetails = this.createWarningDetails(rows);
+    const groupBy = query.groupBy ?? 'menuItem';
+    const items = this.createReportItems(rows, locations, groupBy);
     const run = await this.analysisRunModel.create({
       actorId: user.sub,
       companyId: scope.companyId,
@@ -137,8 +182,7 @@ export class MarginReportsService {
       range: scope.period.range,
       from: scope.period.from,
       to: scope.period.to,
-      costBasis:
-        'averageCost > unitCost > lastPurchasePrice > purchasePriceNet > recipePurchasePriceNet',
+      costBasis: 'StockMovement.valueNet',
       warningsCount: warnings.length,
       warnings,
     });
@@ -151,20 +195,22 @@ export class MarginReportsService {
         from: scope.period.from.toISOString(),
         to: scope.period.to.toISOString(),
       },
-      costBasis:
-        'averageCost > unitCost > lastPurchasePrice > purchasePriceNet > recipePurchasePriceNet',
+      costBasis: 'StockMovement.valueNet',
       filters: {
         companyId: scope.companyId,
         regionId: scope.regionId,
         locationId: scope.locationId,
         category: scope.category,
         menuItemId: scope.menuItemId,
+        groupBy,
       },
       summary,
+      items,
       menuItems: rows,
       locations,
       quadrant,
       warnings,
+      warningDetails,
     };
   }
 
@@ -220,6 +266,33 @@ export class MarginReportsService {
         .find({ locationId: { $in: scope.locationIds } })
         .lean(),
     ]);
+    const orderIds = (orders as Array<Order & { _id: unknown }>)
+      .map((order) => this.stringifyId(order._id))
+      .filter(Boolean);
+    const movements = orderIds.length
+      ? await this.stockMovementModel
+          .find({
+            locationId: { $in: scope.locationIds },
+            type: { $in: this.cogsMovementTypes() },
+            $and: [
+              {
+                $or: [
+                  { tenantId: scope.tenantId },
+                  { tenantId: { $exists: false } },
+                  { tenantId: '' },
+                  { tenantId: null },
+                ],
+              },
+              {
+                $or: [
+                  { referenceType: 'order', referenceId: { $in: orderIds } },
+                  { orderId: { $in: orderIds } },
+                ],
+              },
+            ],
+          })
+          .lean()
+      : [];
     const menuById = new Map(
       menuItems.map((item) => [this.stringifyId(item._id), item]),
     );
@@ -233,6 +306,9 @@ export class MarginReportsService {
       stockItems.map((item) => [this.stringifyId(item._id), item]),
     );
     const sales = new Map<string, SalesStat>();
+    const orderItemSalesKeys = new Map<string, string>();
+    const orderSalesKeys = new Map<string, Set<string>>();
+    const recipeSalesKeys = new Map<string, string>();
 
     for (const recipe of recipes as Array<Recipe & { _id: unknown }>) {
       const recipeId = this.stringifyId(recipe._id);
@@ -244,6 +320,7 @@ export class MarginReportsService {
     }
 
     for (const order of orders as Array<Order & { _id: unknown }>) {
+      const orderId = this.stringifyId(order._id);
       for (const item of order.items ?? []) {
         const itemId = item.menuItemId || item.productId;
         if (scope.menuItemId && itemId !== scope.menuItemId) {
@@ -275,8 +352,35 @@ export class MarginReportsService {
         current.revenue += item.quantity * item.price;
         current.orderCount += 1;
         sales.set(key, current);
+        if (orderId) {
+          const keys = orderSalesKeys.get(orderId) ?? new Set<string>();
+          keys.add(key);
+          orderSalesKeys.set(orderId, keys);
+          const orderItemId = this.stringifyId(item._id);
+          if (orderItemId) {
+            orderItemSalesKeys.set(`${orderId}:${orderItemId}`, key);
+          }
+        }
       }
     }
+
+    for (const recipe of recipes as Array<Recipe & { _id: unknown }>) {
+      const recipeId = this.stringifyId(recipe._id);
+      const key =
+        (recipe.menuItemId && sales.has(recipe.menuItemId)
+          ? recipe.menuItemId
+          : undefined) ?? this.normalize(recipe.name);
+      if (recipeId) {
+        recipeSalesKeys.set(recipeId, key);
+      }
+    }
+
+    const movementCosts = this.summarizeMovementCosts(
+      movements as Array<StockMovement & { _id: unknown }>,
+      orderItemSalesKeys,
+      orderSalesKeys,
+      recipeSalesKeys,
+    );
 
     const keys = new Set([
       ...sales.keys(),
@@ -300,6 +404,7 @@ export class MarginReportsService {
         (rowKey ? recipesByMenuId.get(rowKey) : undefined) ??
         recipesByName.get(this.normalize(menuItem?.name ?? stat?.name ?? key));
       const cost = this.calculateRecipeCost(recipe, stockById);
+      const actualCost = movementCosts.get(rowKey) ?? movementCosts.get(key);
       const sellingPrice = Number(
         menuItem?.sellingPrice ??
           menuItem?.price ??
@@ -308,17 +413,23 @@ export class MarginReportsService {
       );
       const soldQuantity = Number(stat?.quantity ?? 0);
       const revenue = Number(stat?.revenue ?? 0);
-      const recipeCost = cost.costPerPortion;
-      const costOfGoods = recipeCost * soldQuantity;
+      const costOfGoods = actualCost?.costOfGoods ?? 0;
+      const recipeCost =
+        soldQuantity > 0 ? costOfGoods / soldQuantity : cost.costPerPortion;
       const contributionMargin = sellingPrice - recipeCost;
       const contributionMarginTotal = revenue - costOfGoods;
       const marginPercent =
-        sellingPrice > 0 ? (contributionMargin / sellingPrice) * 100 : 0;
-      const foodCostPercent =
-        sellingPrice > 0 ? (recipeCost / sellingPrice) * 100 : 0;
+        revenue > 0 ? (contributionMarginTotal / revenue) * 100 : 0;
+      const foodCostPercent = revenue > 0 ? (costOfGoods / revenue) * 100 : 0;
       const targetMargin = Number(menuItem?.targetMargin ?? 65);
       const warnings = [
+        ...(actualCost?.warnings ?? []),
         ...cost.warnings,
+        ...(soldQuantity > 0 && !actualCost
+          ? [
+              `${menuItem?.name ?? stat?.name ?? key}: keine StockMovements für COGS gefunden`,
+            ]
+          : []),
         ...(!recipe
           ? [`${menuItem?.name ?? stat?.name ?? key}: kein Rezept hinterlegt`]
           : []),
@@ -365,9 +476,9 @@ export class MarginReportsService {
           targetMargin,
         ),
         quadrant: 'dogs' as Quadrant,
-        costBasis: cost.costBasis,
+        costBasis: actualCost?.costBasis ?? ['missing'],
         warnings: this.unique(warnings),
-        ingredientCosts: cost.ingredients,
+        ingredientCosts: actualCost?.ingredientCosts ?? [],
       };
     });
 
@@ -419,7 +530,7 @@ export class MarginReportsService {
       costBasis.add(cost.basis);
       if (cost.value <= 0) {
         warnings.push(
-          `${recipe.name}: Einkaufspreis fuer ${ingredient.stockItemName} fehlt`,
+          `${recipe.name}: Einkaufspreis für ${ingredient.stockItemName} fehlt`,
         );
       }
       const quantity = ingredient.quantity * (ingredient.wasteFactor ?? 1);
@@ -444,6 +555,87 @@ export class MarginReportsService {
       warnings,
       ingredients,
     };
+  }
+
+  private summarizeMovementCosts(
+    movements: Array<StockMovement & { _id: unknown }>,
+    orderItemSalesKeys: Map<string, string>,
+    orderSalesKeys: Map<string, Set<string>>,
+    recipeSalesKeys: Map<string, string>,
+  ): Map<string, MovementCostSummary> {
+    const summaries = new Map<string, MovementCostSummary>();
+
+    for (const movement of movements) {
+      const orderId = this.stringifyId(movement.referenceId ?? movement.orderId);
+      const key =
+        movement.menuItemId ??
+        (movement.orderItemId
+          ? orderItemSalesKeys.get(`${orderId}:${movement.orderItemId}`)
+          : undefined) ??
+        (movement.recipeId ? recipeSalesKeys.get(movement.recipeId) : undefined) ??
+        this.singleOrderSalesKey(orderSalesKeys.get(orderId));
+
+      if (!key) {
+        continue;
+      }
+
+      const valueNet = Number(movement.valueNet ?? 0);
+      const signedValue = this.signedMovementValue(movement);
+      const summary =
+        summaries.get(key) ??
+        ({
+          costOfGoods: 0,
+          costBasis: ['stockMovementValueNet'],
+          warnings: [],
+          ingredientCosts: [],
+        } satisfies MovementCostSummary);
+
+      summary.costOfGoods += signedValue;
+      if (valueNet <= 0) {
+        summary.warnings.push(
+          `${movement.stockItemName}: Missing stock cost`,
+        );
+      }
+      summary.ingredientCosts.push({
+        stockItemId: movement.stockItemId,
+        stockItemName: movement.stockItemName,
+        quantity: Number(movement.quantity ?? Math.abs(movement.quantityChange)),
+        unit: movement.unit ?? '',
+        costPerUnit:
+          Number(movement.quantity ?? 0) > 0
+            ? valueNet / Number(movement.quantity)
+            : 0,
+        totalCost: signedValue,
+        basis: 'stockMovementValueNet',
+      });
+      summaries.set(key, summary);
+    }
+
+    return summaries;
+  }
+
+  private signedMovementValue(movement: StockMovement): number {
+    const value = Math.abs(Number(movement.valueNet ?? 0));
+
+    if (movement.type === StockMovementType.OrderCancelReversal) {
+      return -value;
+    }
+    if (
+      movement.type === StockMovementType.OrderQuantityAdjustment &&
+      Number(movement.quantityChange ?? 0) > 0
+    ) {
+      return -value;
+    }
+
+    return value;
+  }
+
+  private singleOrderSalesKey(keys: Set<string> | undefined): string | undefined {
+    if (!keys || keys.size !== 1) {
+      return undefined;
+    }
+
+    return [...keys][0];
   }
 
   private resolveIngredientUnitCost(
@@ -475,7 +667,10 @@ export class MarginReportsService {
       revenue,
       costOfGoods,
       contributionMargin,
+      grossMargin: contributionMargin,
       averageMarginPercent:
+        revenue > 0 ? (contributionMargin / revenue) * 100 : 0,
+      marginPercent:
         revenue > 0 ? (contributionMargin / revenue) * 100 : 0,
       soldQuantity: rows.reduce((sum, row) => sum + row.soldQuantity, 0),
       orderCount: rows.reduce((sum, row) => sum + row.orderCount, 0),
@@ -490,6 +685,7 @@ export class MarginReportsService {
         .length,
       itemsWithoutSales: rows.filter((row) => row.soldQuantity === 0).length,
       warningsCount: this.unique(rows.flatMap((row) => row.warnings)).length,
+      warningCount: this.unique(rows.flatMap((row) => row.warnings)).length,
       topSeller: [...rows]
         .sort((first, second) => second.soldQuantity - first.soldQuantity)
         .slice(0, 10),
@@ -505,6 +701,128 @@ export class MarginReportsService {
         )
         .slice(0, 10),
     };
+  }
+
+  private createReportItems(
+    rows: MenuItemMarginReportRow[],
+    locations: LocationMarginReportRow[],
+    groupBy: MarginReportGroupBy,
+  ): MarginReportItem[] {
+    if (groupBy === 'total') {
+      return [this.aggregateReportItem('total', 'Gesamt', groupBy, rows)];
+    }
+
+    if (groupBy === 'location') {
+      return locations
+        .map((location) => {
+          const locationRows = rows.filter(
+            (row) =>
+              !row.locationIds.length ||
+              row.locationIds.includes(location.locationId),
+          );
+
+          return this.aggregateReportItem(
+            location.locationId,
+            location.locationName,
+            groupBy,
+            locationRows,
+          );
+        })
+        .sort((first, second) => second.revenue - first.revenue);
+    }
+
+    if (groupBy === 'category') {
+      const groupedRows = new Map<string, MenuItemMarginReportRow[]>();
+
+      for (const row of rows) {
+        groupedRows.set(row.category, [
+          ...(groupedRows.get(row.category) ?? []),
+          row,
+        ]);
+      }
+
+      return [...groupedRows.entries()]
+        .map(([category, categoryRows]) =>
+          this.aggregateReportItem(category, category, groupBy, categoryRows),
+        )
+        .sort((first, second) => second.revenue - first.revenue);
+    }
+
+    return rows.map((row) => ({
+      key: row.menuItemId ?? row.name,
+      label: row.name,
+      groupBy,
+      revenue: row.revenue,
+      costOfGoods: row.costOfGoods,
+      grossMargin: row.contributionMarginTotal,
+      marginPercent: row.marginPercent,
+      warningCount: row.warnings.length,
+      warnings: row.warnings,
+    }));
+  }
+
+  private aggregateReportItem(
+    key: string,
+    label: string,
+    groupBy: MarginReportGroupBy,
+    rows: MenuItemMarginReportRow[],
+  ): MarginReportItem {
+    const revenue = rows.reduce((sum, row) => sum + row.revenue, 0);
+    const costOfGoods = rows.reduce((sum, row) => sum + row.costOfGoods, 0);
+    const grossMargin = revenue - costOfGoods;
+    const warnings = this.unique(rows.flatMap((row) => row.warnings));
+
+    return {
+      key,
+      label,
+      groupBy,
+      revenue,
+      costOfGoods,
+      grossMargin,
+      marginPercent: revenue > 0 ? (grossMargin / revenue) * 100 : 0,
+      warningCount: warnings.length,
+      warnings,
+    };
+  }
+
+  private createWarningDetails(
+    rows: MenuItemMarginReportRow[],
+  ): MarginReportWarning[] {
+    return rows.flatMap((row) =>
+      row.warnings.map((warning) => ({
+        type: this.classifyWarning(warning),
+        message: warning,
+        menuItemId: row.menuItemId,
+      })),
+    );
+  }
+
+  private classifyWarning(warning: string): MarginReportWarningType {
+    const normalizedWarning = warning.toLocaleLowerCase('de-DE');
+
+    if (normalizedWarning.includes('kein rezept')) {
+      return 'missing_recipe';
+    }
+    if (
+      normalizedWarning.includes('missing stock cost') ||
+      normalizedWarning.includes('stockmovement')
+    ) {
+      return 'missing_stock_movement_cost';
+    }
+    if (
+      normalizedWarning.includes('einkaufspreis') ||
+      normalizedWarning.includes('verkaufspreis')
+    ) {
+      return 'missing_cost';
+    }
+    if (normalizedWarning.includes('negative marge')) {
+      return 'negative_margin';
+    }
+    if (normalizedWarning.includes('zielmarge')) {
+      return 'below_target';
+    }
+
+    return 'incomplete_data';
   }
 
   private createLocationRows(
@@ -565,8 +883,8 @@ export class MarginReportsService {
 
     return {
       axes: {
-        x: 'Verkaufsmenge / Popularitaet',
-        y: 'Marge / Profitabilitaet',
+        x: 'Verkaufsmenge / Popularität',
+        y: 'Marge / Profitabilität',
       },
       thresholds: {
         quantity: this.average(rows.map((row) => row.soldQuantity)),
@@ -595,21 +913,21 @@ export class MarginReportsService {
       );
     }
     if (!user.tenantId) {
-      throw new ForbiddenException('Kein Tenant-Kontext fuer Margenreports');
+      throw new ForbiddenException('Kein Tenant-Kontext für Margenreports');
     }
     if (
       query.companyId &&
       !this.accessPolicy.canAccessCompany(user, query.companyId)
     ) {
       throw new ForbiddenException(
-        'Keine Berechtigung fuer dieses Unternehmen',
+        'Keine Berechtigung für dieses Unternehmen',
       );
     }
     if (
       query.regionId &&
       !(await this.accessPolicy.canAccessRegion(user, query.regionId))
     ) {
-      throw new ForbiddenException('Keine Berechtigung fuer diese Region');
+      throw new ForbiddenException('Keine Berechtigung für diese Region');
     }
     if (query.locationId) {
       await this.accessPolicy.assertCanAccessLocation(user, query.locationId);
@@ -645,6 +963,14 @@ export class MarginReportsService {
         range: query.range ?? 'custom',
         from: new Date(query.from),
         to: this.endOfDay(new Date(query.to)),
+      };
+    }
+
+    if (query.dateFrom && query.dateTo) {
+      return {
+        range: query.range ?? 'custom',
+        from: new Date(query.dateFrom),
+        to: this.endOfDay(new Date(query.dateTo)),
       };
     }
 
@@ -732,6 +1058,14 @@ export class MarginReportsService {
     ];
   }
 
+  private cogsMovementTypes(): StockMovementType[] {
+    return [
+      StockMovementType.OrderConsumption,
+      StockMovementType.OrderQuantityAdjustment,
+      StockMovementType.OrderCancelReversal,
+    ];
+  }
+
   private assertCanViewMargins(user: AuthenticatedUser): void {
     if (
       !hasAnyRole(user.roles, [
@@ -745,11 +1079,13 @@ export class MarginReportsService {
         Role.Filialleiter,
         Role.Restaurantleiter,
         Role.Schichtleiter,
+        Role.InventoryManager,
+        Role.Lager,
         Role.Einkauf,
         Role.Buchhaltung,
       ])
     ) {
-      throw new ForbiddenException('Keine Berechtigung fuer Margenreports');
+      throw new ForbiddenException('Keine Berechtigung für Margenreports');
     }
   }
 

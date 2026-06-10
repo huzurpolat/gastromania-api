@@ -6,6 +6,9 @@ export type StockItemDocument = HydratedDocument<StockItem>;
 @Schema({ timestamps: true, versionKey: false })
 export class StockItem {
   @Prop({ trim: true, index: true })
+  tenantId?: string;
+
+  @Prop({ trim: true, index: true })
   articleNumber?: string;
 
   @Prop({ required: true, trim: true, index: true })

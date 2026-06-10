@@ -21,6 +21,9 @@ export enum StockMovementType {
 
 @Schema({ timestamps: true, versionKey: false })
 export class StockMovement {
+  @Prop({ trim: true, index: true })
+  tenantId?: string;
+
   @Prop({ required: true, trim: true, index: true })
   locationId!: string;
 
@@ -39,6 +42,15 @@ export class StockMovement {
   @Prop({ trim: true, index: true })
   recipeId?: string;
 
+  @Prop({ trim: true, index: true })
+  menuItemId?: string;
+
+  @Prop({ trim: true, index: true })
+  referenceType?: string;
+
+  @Prop({ trim: true, index: true })
+  referenceId?: string;
+
   @Prop({ required: true, trim: true })
   stockItemName!: string;
 
@@ -47,6 +59,12 @@ export class StockMovement {
 
   @Prop({ required: true })
   quantityChange!: number;
+
+  @Prop({ required: true, min: 0, default: 0 })
+  quantity!: number;
+
+  @Prop({ trim: true })
+  unit?: string;
 
   @Prop({ required: true, default: 0 })
   quantityBefore!: number;

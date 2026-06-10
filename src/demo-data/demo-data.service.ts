@@ -58,6 +58,11 @@ import {
   ProductionArea,
 } from '../orders/schemas/order.schema';
 import {
+  Recipe,
+  RecipeDocument,
+  RecipeType,
+} from '../recipes/schemas/recipe.schema';
+import {
   Reservation,
   ReservationDocument,
   ReservationStatus,
@@ -78,6 +83,7 @@ import {
 } from '../tables/schemas/table.schema';
 import {
   COUNTER_ORDERS_MODULE_KEY,
+  COST_OF_GOODS_MODULE_KEY,
   DAILY_CLOSING_MODULE_KEY,
   DEFAULT_MODULES,
   DIGITAL_MENU_MODULE_KEY,
@@ -214,6 +220,8 @@ export class DemoDataService implements OnApplicationBootstrap {
   private readonly salesDemoCompanyName = 'GastroWerk24 Demo Restaurant';
   private readonly salesDemoLocationName = 'GastroWerk24 Demo Restaurant Köln';
   private readonly salesDemoRegionCode = 'NRW';
+  private readonly legacyDemoTenantName = 'Gastromania Legacy Demo';
+  private readonly legacyDemoTenantSlug = 'gastromania-legacy-demo';
   private readonly developmentPlatformAdminEmail = 'platform@gastromania.local';
   private readonly developmentPlatformAdminPassword = 'Gastromania2026!';
   private readonly tenantDemoPassword = 'Demo2026!';
@@ -222,6 +230,7 @@ export class DemoDataService implements OnApplicationBootstrap {
     TABLE_MANAGEMENT_MODULE_KEY,
     KDS_MODULE_KEY,
     DIGITAL_MENU_MODULE_KEY,
+    COST_OF_GOODS_MODULE_KEY,
     REPORTING_MODULE_KEY,
     'inventory',
     'recipes',
@@ -628,6 +637,8 @@ export class DemoDataService implements OnApplicationBootstrap {
     private readonly menuItemModel: Model<MenuItemDocument>,
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(Recipe.name)
+    private readonly recipeModel: Model<RecipeDocument>,
     @InjectModel(Reservation.name)
     private readonly reservationModel: Model<ReservationDocument>,
     @InjectModel(User.name)
@@ -679,6 +690,9 @@ export class DemoDataService implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     await this.ensureDevelopmentPlatformAdmin();
     await this.ensureDevelopmentDemoTenants();
+    const legacyTenant = await this.ensureDevelopmentLegacyTenant();
+    await this.backfillLegacyLocationTenantIds(legacyTenant);
+    await this.backfillLegacyUserTenantIds(legacyTenant?.tenantId);
   }
 
   async seed(actor: AuthenticatedUser): Promise<DemoDataResult> {
@@ -804,6 +818,10 @@ export class DemoDataService implements OnApplicationBootstrap {
     const regionId = region._id.toString();
     const location = await this.upsertSalesDemoLocation(companyId, regionId);
     const locationId = location._id.toString();
+    await this.upsertDevelopmentTenantModules(
+      companyId,
+      this.frittenwerkDemoActiveModuleKeys,
+    );
     const departments = await this.upsertSalesDemoDepartments(
       companyId,
       locationId,
@@ -829,11 +847,13 @@ export class DemoDataService implements OnApplicationBootstrap {
       users,
     );
     const reservations = await this.recreateSalesDemoReservations(
+      companyId,
       locationId,
       tables,
     );
-    const stockItems = await this.upsertSalesDemoStockItems(locationId);
+    const stockItems = await this.upsertSalesDemoStockItems(companyId, locationId);
     const stockMovements = await this.recreateSalesDemoStockMovements(
+      companyId,
       locationId,
       stockItems,
       users[0]._id.toString(),
@@ -843,8 +863,11 @@ export class DemoDataService implements OnApplicationBootstrap {
       locationId,
       users,
     );
-    const checklists = await this.upsertSalesDemoChecklists(locationId);
+    const checklists = await this.upsertSalesDemoChecklists(companyId, locationId);
     const demoTenants = await this.ensureDevelopmentDemoTenants();
+    const legacyTenant = await this.ensureDevelopmentLegacyTenant();
+    await this.backfillLegacyLocationTenantIds(legacyTenant);
+    await this.backfillLegacyUserTenantIds(legacyTenant?.tenantId);
 
     return {
       locationId,
@@ -1071,6 +1094,198 @@ export class DemoDataService implements OnApplicationBootstrap {
         },
       )
       .exec();
+  }
+
+  private async ensureDevelopmentLegacyTenant(): Promise<{
+    tenantId: string;
+    companyId: string;
+  } | null> {
+    if (process.env.NODE_ENV === 'production') {
+      return null;
+    }
+
+    const company = await this.companyModel
+      .findOneAndUpdate(
+        { slug: this.legacyDemoTenantSlug },
+        {
+          $set: {
+            name: this.legacyDemoTenantName,
+            slug: this.legacyDemoTenantSlug,
+            type: 'development-legacy-demo-tenant',
+            isActive: true,
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+    const tenant = await this.tenantModel
+      .findOneAndUpdate(
+        { slug: this.legacyDemoTenantSlug },
+        {
+          $set: {
+            name: this.legacyDemoTenantName,
+            slug: this.legacyDemoTenantSlug,
+            status: TenantStatus.Active,
+            planKey: 'demo',
+            licenseStatus: LicenseStatus.Active,
+            billingStatus: BillingStatus.Paid,
+            contactEmail: 'legacy@gastromania.local',
+            billingName: this.legacyDemoTenantName,
+            billingAddress: 'Legacy Demo, 50667 Köln',
+            companyId: company._id.toString(),
+            deletedAt: null,
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+
+    await this.upsertDevelopmentTenantModules(
+      tenant._id.toString(),
+      this.frittenwerkDemoActiveModuleKeys,
+    );
+
+    return {
+      tenantId: tenant._id.toString(),
+      companyId: company._id.toString(),
+    };
+  }
+
+  private async backfillLegacyLocationTenantIds(
+    fallbackTenant: { tenantId: string; companyId: string } | null,
+  ): Promise<number> {
+    if (process.env.NODE_ENV === 'production' || !fallbackTenant) {
+      return 0;
+    }
+
+    const legacyLocations = await this.locationModel
+      .find({
+        $or: [
+          { tenantId: { $exists: false } },
+          { tenantId: null },
+          { tenantId: '' },
+        ],
+      })
+      .select('_id companyId')
+      .exec();
+    const updates = legacyLocations.map((location) => ({
+      updateOne: {
+        filter: { _id: location._id.toString() },
+        update: {
+          $set: {
+            tenantId: fallbackTenant.tenantId,
+            companyId: location.companyId ?? fallbackTenant.companyId,
+          },
+        },
+      },
+    }));
+
+    if (!updates.length) {
+      return 0;
+    }
+
+    const result = await this.locationModel.bulkWrite(updates);
+    return result.modifiedCount ?? 0;
+  }
+
+  private async backfillLegacyUserTenantIds(
+    fallbackTenantId?: string,
+  ): Promise<number> {
+    if (process.env.NODE_ENV === 'production') {
+      return 0;
+    }
+
+    const platformRoles = [
+      Role.PlatformAdminCode,
+      Role.PlatformAdmin,
+      Role.SuperAdmin,
+    ];
+    const legacyUsers = await this.userModel
+      .find({
+        $or: [
+          { tenantId: { $exists: false } },
+          { tenantId: null },
+          { tenantId: '' },
+        ],
+        roles: { $nin: platformRoles },
+      })
+      .select('_id companyId locationId locationIds managedLocationIds status')
+      .exec();
+
+    const updates: Array<{
+      updateOne: {
+        filter: { _id: string };
+        update: { $set: { tenantId: string; status: string } };
+      };
+    }> = [];
+
+    for (const user of legacyUsers) {
+      const tenantId =
+        user.companyId ??
+        (await this.resolveLegacyUserTenantIdFromLocations(user)) ??
+        fallbackTenantId;
+
+      if (!tenantId) {
+        continue;
+      }
+
+      updates.push({
+        updateOne: {
+          filter: { _id: user._id.toString() },
+          update: {
+            $set: {
+              tenantId,
+              status: user.status ?? 'active',
+            },
+          },
+        },
+      });
+    }
+
+    if (!updates.length) {
+      return 0;
+    }
+
+    const result = await this.userModel.bulkWrite(updates);
+    return result.modifiedCount ?? 0;
+  }
+
+  private async resolveLegacyUserTenantIdFromLocations(
+    user: Pick<
+      UserDocument,
+      'locationId' | 'locationIds' | 'managedLocationIds'
+    >,
+  ): Promise<string | undefined> {
+    const locationIds = Array.from(
+      new Set(
+        [user.locationId, ...(user.locationIds ?? []), ...(user.managedLocationIds ?? [])]
+          .filter((locationId): locationId is string => Boolean(locationId)),
+      ),
+    );
+
+    if (!locationIds.length) {
+      return undefined;
+    }
+
+    const locations = await this.locationModel
+      .find({ _id: { $in: locationIds } })
+      .select('_id tenantId companyId')
+      .lean()
+      .exec();
+
+    if (locations.length !== locationIds.length) {
+      return undefined;
+    }
+
+    const tenantIds = Array.from(
+      new Set(
+        locations
+          .map((location) => location.tenantId ?? location.companyId)
+          .filter((tenantId): tenantId is string => Boolean(tenantId)),
+      ),
+    );
+
+    return tenantIds.length === 1 ? tenantIds[0] : undefined;
   }
 
   private async upsertDevelopmentTenantAreas(
@@ -2118,6 +2333,23 @@ export class DemoDataService implements OnApplicationBootstrap {
       menuItems,
       users,
     );
+    const stockItems = await this.upsertFrittenwerkDemoStockItems(
+      tenantId,
+      location,
+    );
+    const recipes = await this.upsertFrittenwerkDemoRecipes(
+      companyId,
+      location,
+      menuItems,
+      stockItems,
+    );
+    await this.recreateFrittenwerkDemoOrderMovements(
+      tenantId,
+      location,
+      orders,
+      recipes,
+      users[0]?._id.toString() ?? 'frittenwerk-demo-seed',
+    );
     await this.syncFrittenwerkDemoTableStatuses(location._id.toString(), orders);
 
     return {
@@ -2478,6 +2710,417 @@ export class DemoDataService implements OnApplicationBootstrap {
           .exec(),
       ),
     );
+  }
+
+  private async upsertFrittenwerkDemoStockItems(
+    tenantId: string,
+    location: LocationDocument,
+  ): Promise<StockItemDocument[]> {
+    const locationId = location._id.toString();
+    const items = [
+      {
+        name: 'Burger Bun',
+        category: 'Backwaren',
+        unit: 'Stueck',
+        quantity: 120,
+        minQuantity: 30,
+        purchasePriceNet: 0.35,
+      },
+      {
+        name: 'Burger Patty',
+        category: 'Fleisch',
+        unit: 'Stueck',
+        quantity: 80,
+        minQuantity: 20,
+        purchasePriceNet: 1.2,
+      },
+      {
+        name: 'Veggie Patty',
+        category: 'Vegetarisch',
+        unit: 'Stueck',
+        quantity: 45,
+        minQuantity: 15,
+        purchasePriceNet: 1.05,
+      },
+      {
+        name: 'Cheddar',
+        category: 'Molkerei',
+        unit: 'Scheibe',
+        quantity: 100,
+        minQuantity: 25,
+        purchasePriceNet: 0.25,
+      },
+      {
+        name: 'Kartoffeln',
+        category: 'Gemuese',
+        unit: 'kg',
+        quantity: 85,
+        minQuantity: 30,
+        purchasePriceNet: 1.1,
+      },
+      {
+        name: 'Currywurst',
+        category: 'Fleisch',
+        unit: 'Stueck',
+        quantity: 60,
+        minQuantity: 20,
+        purchasePriceNet: 1.4,
+      },
+      {
+        name: 'Chicken Nuggets',
+        category: 'Fleisch',
+        unit: 'Portion',
+        quantity: 70,
+        minQuantity: 20,
+        purchasePriceNet: 1.1,
+      },
+      {
+        name: 'Cola Sirup',
+        category: 'Getraenke',
+        unit: 'Portion',
+        quantity: 180,
+        minQuantity: 40,
+        purchasePriceNet: 0.45,
+      },
+      {
+        name: 'Wasser Flasche',
+        category: 'Getraenke',
+        unit: 'Flasche',
+        quantity: 140,
+        minQuantity: 40,
+        purchasePriceNet: 0.35,
+      },
+      {
+        name: 'Apfelschorle Flasche',
+        category: 'Getraenke',
+        unit: 'Flasche',
+        quantity: 90,
+        minQuantity: 30,
+        purchasePriceNet: 0.5,
+      },
+      {
+        name: 'Kaffeebohnen',
+        category: 'Kaffee',
+        unit: 'Portion',
+        quantity: 120,
+        minQuantity: 25,
+        purchasePriceNet: 0.28,
+      },
+    ];
+
+    return Promise.all(
+      items.map((item) =>
+        this.stockItemModel
+          .findOneAndUpdate(
+            { locationId, name: item.name },
+            {
+              $set: {
+                tenantId,
+                locationId,
+                name: item.name,
+                category: item.category,
+                unit: item.unit,
+                quantity: item.quantity,
+                minQuantity: item.minQuantity,
+                criticalQuantity: Math.max(1, item.minQuantity / 2),
+                targetQuantity: item.minQuantity * 2,
+                purchasePriceNet: item.purchasePriceNet,
+                lastPurchasePrice: item.purchasePriceNet,
+                averageCost: item.purchasePriceNet,
+                unitCost: item.purchasePriceNet,
+                purchasePriceGross: this.roundPrice(
+                  item.purchasePriceNet * 1.19,
+                ),
+                storageLocation: 'Frittenwerk Demo Lager',
+                requiresExpiryDate: ['Fleisch', 'Molkerei'].includes(
+                  item.category,
+                ),
+                isActive: true,
+                isArchived: false,
+              },
+            },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec(),
+      ),
+    );
+  }
+
+  private async upsertFrittenwerkDemoRecipes(
+    companyId: string,
+    location: LocationDocument,
+    menuItems: MenuItemDocument[],
+    stockItems: StockItemDocument[],
+  ): Promise<RecipeDocument[]> {
+    const locationId = location._id.toString();
+    const stockByName = new Map(stockItems.map((item) => [item.name, item]));
+    const recipeConfigs: Record<
+      string,
+      Array<{ stockItemName: string; quantity: number }>
+    > = {
+      'Classic Burger': [
+        { stockItemName: 'Burger Bun', quantity: 1 },
+        { stockItemName: 'Burger Patty', quantity: 1 },
+      ],
+      'Cheese Burger': [
+        { stockItemName: 'Burger Bun', quantity: 1 },
+        { stockItemName: 'Burger Patty', quantity: 1 },
+        { stockItemName: 'Cheddar', quantity: 1 },
+      ],
+      'Veggie Burger': [
+        { stockItemName: 'Burger Bun', quantity: 1 },
+        { stockItemName: 'Veggie Patty', quantity: 1 },
+      ],
+      'Pommes Klein': [{ stockItemName: 'Kartoffeln', quantity: 0.25 }],
+      'Pommes Gross': [{ stockItemName: 'Kartoffeln', quantity: 0.4 }],
+      Currywurst: [{ stockItemName: 'Currywurst', quantity: 1 }],
+      'Chicken Nuggets': [{ stockItemName: 'Chicken Nuggets', quantity: 1 }],
+      Cola: [{ stockItemName: 'Cola Sirup', quantity: 1 }],
+      Wasser: [{ stockItemName: 'Wasser Flasche', quantity: 1 }],
+      Apfelschorle: [{ stockItemName: 'Apfelschorle Flasche', quantity: 1 }],
+      Kaffee: [{ stockItemName: 'Kaffeebohnen', quantity: 1 }],
+    };
+
+    return Promise.all(
+      menuItems.map((menuItem) => {
+        const typedMenuItem = menuItem as MenuItemDocument & {
+          courseType?: CourseType;
+          productionArea?: ProductionArea;
+        };
+        const courseType =
+          typedMenuItem.courseType ??
+          (menuItem.category === 'Getraenke' || menuItem.category === 'Kaffee'
+            ? CourseType.Drink
+            : CourseType.Main);
+        const productionArea =
+          typedMenuItem.productionArea ??
+          (courseType === CourseType.Drink
+            ? ProductionArea.Counter
+            : menuItem.name.includes('Burger')
+              ? ProductionArea.Grill
+              : ProductionArea.Kitchen);
+        const ingredients = (recipeConfigs[menuItem.name] ?? [])
+          .map((ingredient) => {
+            const stockItem = stockByName.get(ingredient.stockItemName);
+
+            if (!stockItem) {
+              return undefined;
+            }
+
+            return {
+              stockItemId: stockItem._id.toString(),
+              stockItemName: stockItem.name,
+              quantity: ingredient.quantity,
+              unit: stockItem.unit,
+              wasteFactor: 1,
+              isOptional: false,
+              purchasePriceNet: stockItem.purchasePriceNet,
+              allergens: [],
+              additives: [],
+              nutrition: {},
+            };
+          })
+          .filter(
+            (ingredient): ingredient is NonNullable<typeof ingredient> =>
+              Boolean(ingredient),
+          );
+        const recipeNumber = `FW-DEMO-${menuItem.name
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, '-')}`;
+
+        return this.recipeModel
+          .findOneAndUpdate(
+            { recipeNumber },
+            {
+              $set: {
+                companyId,
+                locationId,
+                recipeNumber,
+                menuItemId: menuItem._id.toString(),
+                name: menuItem.name,
+                description: `Frittenwerk Demo Rezept fuer ${menuItem.name}`,
+                category: menuItem.category,
+                type: courseType === CourseType.Drink ? RecipeType.Drink : RecipeType.Food,
+                salePrice: menuItem.sellingPrice ?? menuItem.price,
+                vatRate: 19,
+                isActive: true,
+                visibleInSales: true,
+                productionArea,
+                preparationTimeMinutes: courseType === CourseType.Drink ? 1 : 8,
+                portionSize: '1 Portion',
+                basePortions: 1,
+                isArchived: false,
+                ingredients,
+              },
+            },
+            {
+              returnDocument: 'after',
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec();
+      }),
+    );
+  }
+
+  private async recreateFrittenwerkDemoOrderMovements(
+    tenantId: string,
+    location: LocationDocument,
+    orders: OrderDocument[],
+    recipes: RecipeDocument[],
+    actorId: string,
+  ): Promise<number> {
+    const locationId = location._id.toString();
+    const recipeByMenuItemId = new Map(
+      recipes.map((recipe) => [recipe.menuItemId, recipe]),
+    );
+    const stockItems = await this.stockItemModel
+      .find({ tenantId, locationId })
+      .exec();
+    const stockById = new Map(
+      stockItems.map((stockItem) => [stockItem._id.toString(), stockItem]),
+    );
+    const quantities = new Map(
+      stockItems.map((stockItem) => [
+        stockItem._id.toString(),
+        Number(stockItem.quantity ?? 0),
+      ]),
+    );
+
+    await this.stockMovementModel
+      .deleteMany({ tenantId, locationId, note: /^Frittenwerk-Demo-COGS-/ })
+      .exec();
+
+    const movementPayloads: Array<Record<string, unknown>> = [];
+    const movementOrderIds = new Map<string, string[]>();
+
+    for (const order of orders) {
+      const timestampedOrder = order as OrderDocument & {
+        createdAt?: Date;
+        updatedAt?: Date;
+      };
+      if (
+        ![
+          OrderStatus.Accepted,
+          OrderStatus.Preparing,
+          OrderStatus.Ready,
+          OrderStatus.Served,
+          OrderStatus.Closed,
+        ].includes(order.status)
+      ) {
+        continue;
+      }
+
+      for (const orderItem of order.items ?? []) {
+        const recipe = recipeByMenuItemId.get(
+          orderItem.menuItemId ?? orderItem.productId,
+        );
+
+        if (!recipe) {
+          continue;
+        }
+
+        for (const ingredient of recipe.ingredients ?? []) {
+          const stockItem = stockById.get(ingredient.stockItemId);
+
+          if (!stockItem) {
+            continue;
+          }
+
+          const requiredQuantity = this.roundQuantity(
+            ingredient.quantity * orderItem.quantity * (ingredient.wasteFactor ?? 1),
+          );
+          const before = quantities.get(stockItem._id.toString()) ?? 0;
+          const after = this.roundQuantity(before - requiredQuantity);
+          const valueNet = this.roundPrice(
+            requiredQuantity *
+              Number(stockItem.averageCost ?? stockItem.purchasePriceNet ?? 0),
+          );
+
+          quantities.set(stockItem._id.toString(), after);
+          movementPayloads.push({
+            tenantId,
+            locationId,
+            stockItemId: stockItem._id.toString(),
+            orderId: order._id.toString(),
+            orderItemId: orderItem._id?.toString(),
+            recipeId: recipe._id.toString(),
+            menuItemId: orderItem.menuItemId ?? orderItem.productId,
+            referenceType: 'order',
+            referenceId: order._id.toString(),
+            stockItemName: stockItem.name,
+            type: StockMovementType.OrderConsumption,
+            quantityChange: -requiredQuantity,
+            quantity: requiredQuantity,
+            unit: stockItem.unit,
+            quantityBefore: before,
+            quantityAfter: after,
+            unitPriceNet: Number(
+              stockItem.averageCost ?? stockItem.purchasePriceNet ?? 0,
+            ),
+            valueNet,
+            note: `Frittenwerk-Demo-COGS-${order.orderNumber}`,
+            reason: StockMovementType.OrderConsumption,
+            actorId,
+            createdAt: timestampedOrder.createdAt,
+            updatedAt: timestampedOrder.updatedAt,
+          });
+        }
+      }
+    }
+
+    const movements = movementPayloads.length
+      ? ((await this.stockMovementModel.insertMany(movementPayloads)) as unknown as Array<
+          StockMovementDocument & { _id: unknown }
+        >)
+      : [];
+
+    movements.forEach((movement, index) => {
+      const orderId = String(movementPayloads[index]?.orderId ?? '');
+      const ids = movementOrderIds.get(orderId) ?? [];
+      ids.push(String(movement._id));
+      movementOrderIds.set(orderId, ids);
+    });
+
+    const orderTimestamps = new Map<string, Date>();
+    for (const order of orders) {
+      const timestampedOrder = order as OrderDocument & { updatedAt?: Date };
+      orderTimestamps.set(order._id.toString(), timestampedOrder.updatedAt ?? new Date());
+    }
+
+    await Promise.all([
+      ...Array.from(quantities.entries()).map(([stockItemId, quantity]) =>
+        this.stockItemModel
+          .updateOne({ _id: stockItemId }, { $set: { quantity } })
+          .exec(),
+      ),
+      ...orders.map((order) => {
+        const movementIds = movementOrderIds.get(order._id.toString()) ?? [];
+        const updatedAt = orderTimestamps.get(order._id.toString()) ?? new Date();
+
+        return this.orderModel
+          .updateOne(
+            { _id: order._id },
+            {
+              $set: {
+                inventoryDeducted: movementIds.length > 0,
+                inventoryDeductedAt: movementIds.length ? updatedAt : undefined,
+                inventoryConsumedAt: movementIds.length ? updatedAt : undefined,
+                inventoryMovementIds: movementIds,
+                inventoryWarnings: [],
+              },
+            },
+          )
+          .exec();
+      }),
+    ]);
+
+    return movements.length;
   }
 
   private async upsertFrittenwerkDemoTables(
@@ -2974,6 +3617,7 @@ export class DemoDataService implements OnApplicationBootstrap {
             email: 'demo@gastrowerk24.de',
             icon: 'restaurant',
             isActive: true,
+            tenantId: companyId,
             companyId,
             regionId,
             tablePlanFloors: ['EG'],
@@ -3115,6 +3759,7 @@ export class DemoDataService implements OnApplicationBootstrap {
             { locationId, name: `Tisch ${tableNumber}` },
             {
               $set: {
+                tenantId: companyId,
                 companyId,
                 regionId,
                 tableNumber: String(tableNumber),
@@ -3362,6 +4007,7 @@ export class DemoDataService implements OnApplicationBootstrap {
   }
 
   private async recreateSalesDemoReservations(
+    tenantId: string,
     locationId: string,
     tables: RestaurantTableDocument[],
   ): Promise<ReservationDocument[]> {
@@ -3375,6 +4021,7 @@ export class DemoDataService implements OnApplicationBootstrap {
     const baseDate = new Date();
     const reservations: Array<Record<string, unknown>> = [
       this.salesDemoReservation({
+        tenantId,
         locationId,
         table: tableByName.get('Tisch 4'),
         guestName: 'Laura Schmitz',
@@ -3385,6 +4032,7 @@ export class DemoDataService implements OnApplicationBootstrap {
         baseDate,
       }),
       this.salesDemoReservation({
+        tenantId,
         locationId,
         table: tableByName.get('Tisch 12'),
         guestName: 'David Becker',
@@ -3395,6 +4043,7 @@ export class DemoDataService implements OnApplicationBootstrap {
         baseDate,
       }),
       this.salesDemoReservation({
+        tenantId,
         locationId,
         table: tableByName.get('Tisch 16'),
         guestName: 'Mira Hoffmann',
@@ -3412,6 +4061,7 @@ export class DemoDataService implements OnApplicationBootstrap {
   }
 
   private salesDemoReservation(config: {
+    tenantId: string;
     locationId: string;
     table?: RestaurantTableDocument;
     guestName: string;
@@ -3427,6 +4077,7 @@ export class DemoDataService implements OnApplicationBootstrap {
     endTime.setHours(startTime.getHours() + 2);
 
     return {
+      tenantId: config.tenantId,
       locationId: config.locationId,
       tableId: config.table?._id.toString() ?? '',
       guestName: config.guestName,
@@ -3441,6 +4092,7 @@ export class DemoDataService implements OnApplicationBootstrap {
   }
 
   private upsertSalesDemoStockItems(
+    tenantId: string,
     locationId: string,
   ): Promise<StockItemDocument[]> {
     const items = [
@@ -3498,6 +4150,7 @@ export class DemoDataService implements OnApplicationBootstrap {
             { locationId, name: item.name },
             {
               $set: {
+                tenantId,
                 locationId,
                 name: item.name,
                 category: item.category,
@@ -3533,6 +4186,7 @@ export class DemoDataService implements OnApplicationBootstrap {
   }
 
   private async recreateSalesDemoStockMovements(
+    tenantId: string,
     locationId: string,
     stockItems: StockItemDocument[],
     actorId: string,
@@ -3543,6 +4197,7 @@ export class DemoDataService implements OnApplicationBootstrap {
 
     return this.stockMovementModel.insertMany(
       stockItems.map((item, index) => ({
+        tenantId,
         locationId,
         stockItemId: item._id.toString(),
         stockItemName: item.name,
@@ -3595,6 +4250,7 @@ export class DemoDataService implements OnApplicationBootstrap {
   }
 
   private upsertSalesDemoChecklists(
+    tenantId: string,
     locationId: string,
   ): Promise<ChecklistDocument[]> {
     const today = new Date();
@@ -3625,9 +4281,10 @@ export class DemoDataService implements OnApplicationBootstrap {
       checklists.map((checklist) =>
         this.checklistModel
           .findOneAndUpdate(
-            { locationId, date: today, title: checklist.title },
+            { tenantId, locationId, date: today, title: checklist.title },
             {
               $set: {
+                tenantId,
                 locationId,
                 date: today,
                 title: checklist.title,
@@ -3784,6 +4441,8 @@ export class DemoDataService implements OnApplicationBootstrap {
                 lastName: user.lastName,
                 roles: [user.role],
                 isActive: true,
+                status: 'active',
+                tenantId: companyId,
                 companyId,
                 regionIds: [regionId],
                 locationId,
@@ -5400,6 +6059,10 @@ export class DemoDataService implements OnApplicationBootstrap {
 
   private roundPrice(value: number): number {
     return Number(value.toFixed(2));
+  }
+
+  private roundQuantity(value: number): number {
+    return Number(value.toFixed(3));
   }
 
   private minutesAgo(minutes: number): Date {

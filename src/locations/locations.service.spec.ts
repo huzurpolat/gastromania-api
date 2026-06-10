@@ -54,6 +54,7 @@ describe('LocationsService', () => {
   const cityModel = { findOne: jest.fn() };
   const regionModel = { findOne: jest.fn() };
   const tableModel = {
+    find: jest.fn(),
     countDocuments: jest.fn(),
     exists: jest.fn(),
     create: jest.fn(),
@@ -154,6 +155,11 @@ describe('LocationsService', () => {
     accessPolicy.getManageableLocationIds.mockResolvedValue([]);
     tableModel.countDocuments.mockResolvedValue(1);
     tableModel.exists.mockResolvedValue(null);
+    tableModel.find.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([]),
+    });
     tableModel.deleteMany.mockReturnValue({
       exec: jest.fn().mockResolvedValue({ deletedCount: 0 }),
     });
@@ -242,6 +248,123 @@ describe('LocationsService', () => {
     expect(tableModel.create).not.toHaveBeenCalled();
   });
 
+  it('deletes a table plan floor and all scoped tables on that floor', async () => {
+    const floorId = `${location._id.toString()}:og`;
+    const scopedLocation = {
+      ...location,
+      tablePlanFloors: ['EG', 'OG'],
+      tablePlanAreas: [
+        {
+          id: 'area-eg',
+          label: 'EG Bereich',
+          floor: 'EG',
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: 'area-og',
+          label: 'OG Bereich',
+          floor: 'OG',
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+        },
+      ],
+      tablePlanObjects: [
+        {
+          id: 'object-og',
+          label: 'OG Objekt',
+          kind: 'service',
+          icon: 'room_preferences',
+          floor: 'OG',
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+          rotation: 0,
+        },
+      ],
+    } as unknown as LocationDocument;
+    const deletedTables = [
+      {
+        _id: { toString: () => 'table-1' },
+        name: 'Tisch 1',
+        floorName: 'OG',
+        planFloor: 'OG',
+      },
+      {
+        _id: { toString: () => 'table-2' },
+        name: 'Tisch 2',
+        floorName: 'OG',
+        planFloor: 'OG',
+      },
+    ];
+    const updatedLocation = {
+      ...scopedLocation,
+      tablePlanFloors: ['EG'],
+      tablePlanAreas: [scopedLocation.tablePlanAreas[0]],
+      tablePlanObjects: [],
+    } as unknown as LocationDocument;
+
+    locationModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(scopedLocation),
+    });
+    tableModel.find.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(deletedTables),
+    });
+    tableModel.deleteMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ deletedCount: 2 }),
+    });
+    locationModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(updatedLocation),
+    });
+
+    const result = await service.deleteTablePlanFloor(
+      location._id.toString(),
+      floorId,
+      actor,
+    );
+
+    expect(accessPolicy.assertCanManageLocation).toHaveBeenCalledWith(
+      actor,
+      location._id.toString(),
+    );
+    expect(tableModel.find).toHaveBeenCalledWith({
+      locationId: location._id.toString(),
+      floorId,
+      tenantId: 'tenant-nrw',
+    });
+    expect(tableModel.deleteMany).toHaveBeenCalledWith({
+      locationId: location._id.toString(),
+      floorId,
+      tenantId: 'tenant-nrw',
+    });
+    expect(locationModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      location._id.toString(),
+      {
+        tablePlanFloors: ['EG'],
+        tablePlanAreas: [scopedLocation.tablePlanAreas[0]],
+        tablePlanObjects: [],
+      },
+      { returnDocument: 'after', runValidators: true },
+    );
+    expect(result).toEqual({
+      deleted: true,
+      location: updatedLocation,
+      floor: { id: floorId, name: 'OG' },
+      deletedTableCount: 2,
+      deletedTables: [
+        { id: 'table-1', name: 'Tisch 1' },
+        { id: 'table-2', name: 'Tisch 2' },
+      ],
+    });
+  });
+
   it('rejects tenant locations with mismatched hierarchy', async () => {
     areaModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue({
@@ -290,7 +413,7 @@ describe('LocationsService', () => {
     expect(sort).toHaveBeenCalledWith({ createdAt: -1 });
   });
 
-  it('persists a default floor for legacy locations without floors', async () => {
+  it('persists a default floor and creates start tables for legacy locations without floors', async () => {
     const legacyLocation = {
       ...location,
       tablePlanFloors: [],
@@ -306,11 +429,54 @@ describe('LocationsService', () => {
     locationModel.findByIdAndUpdate.mockReturnValue({
       exec: jest.fn().mockResolvedValue(normalizedLocation),
     });
+    tableModel.countDocuments.mockResolvedValue(0);
 
     await expect(service.findAll(actor)).resolves.toEqual([normalizedLocation]);
     expect(locationModel.findByIdAndUpdate).toHaveBeenCalledWith(
       legacyLocation._id,
       { tablePlanFloors: ['EG'] },
+      { returnDocument: 'after', runValidators: true },
+    );
+    expect(tableModel.create).toHaveBeenCalledTimes(3);
+    expect(tableModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-nrw',
+        locationId: legacyLocation._id.toString(),
+        floorId: `${legacyLocation._id.toString()}:eg`,
+        floorName: 'EG',
+        planFloor: 'EG',
+      }),
+    );
+  });
+
+  it('recovers missing location floors from persisted table floor names', async () => {
+    const legacyLocation = {
+      ...location,
+      tablePlanFloors: ['EG'],
+    } as unknown as LocationDocument;
+    const normalizedLocation = {
+      ...legacyLocation,
+      tablePlanFloors: ['EG', 'Obergeschoss'],
+    } as unknown as LocationDocument;
+    const exec = jest.fn().mockResolvedValue([legacyLocation]);
+    const sort = jest.fn().mockReturnValue({ exec });
+
+    locationModel.find.mockReturnValue({ sort });
+    locationModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(normalizedLocation),
+    });
+    tableModel.find.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([
+        { floorName: 'Obergeschoss', planFloor: 'Obergeschoss' },
+      ]),
+    });
+
+    await expect(service.findAll(actor)).resolves.toEqual([normalizedLocation]);
+    expect(locationModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      legacyLocation._id,
+      { tablePlanFloors: ['EG', 'Obergeschoss'] },
       { returnDocument: 'after', runValidators: true },
     );
   });

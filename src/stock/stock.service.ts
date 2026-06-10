@@ -95,13 +95,21 @@ export interface StockItemResponse {
 
 export interface StockMovementResponse {
   _id: string;
+  tenantId?: string;
   locationId: string;
   stockItemId: string;
   batchId?: string;
   orderId?: string;
+  orderItemId?: string;
+  recipeId?: string;
+  menuItemId?: string;
+  referenceType?: string;
+  referenceId?: string;
   stockItemName: string;
   type: string;
   quantityChange: number;
+  quantity: number;
+  unit?: string;
   quantityBefore: number;
   quantityAfter: number;
   note?: string;
@@ -1162,13 +1170,21 @@ export class StockService {
 
     return {
       _id: movement._id.toString(),
+      tenantId: movement.tenantId,
       locationId: movement.locationId,
       stockItemId: movement.stockItemId,
       batchId: movement.batchId,
       orderId: movement.orderId,
+      orderItemId: movement.orderItemId,
+      recipeId: movement.recipeId,
+      menuItemId: movement.menuItemId,
+      referenceType: movement.referenceType,
+      referenceId: movement.referenceId,
       stockItemName: movement.stockItemName,
       type: movement.type,
       quantityChange: movement.quantityChange,
+      quantity: movement.quantity ?? Math.abs(movement.quantityChange),
+      unit: movement.unit,
       quantityBefore:
         movement.quantityBefore ??
         Math.max(0, movement.quantityAfter - movement.quantityChange),

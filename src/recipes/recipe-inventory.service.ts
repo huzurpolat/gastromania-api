@@ -36,6 +36,7 @@ interface ConsumptionPlanLine {
   stockItem: StockItemDocument;
   orderItemId?: string;
   orderItemName: string;
+  menuItemId?: string;
   requiredQuantity: number;
 }
 
@@ -61,6 +62,17 @@ export class RecipeInventoryService {
     if (order.inventoryDeducted || order.inventoryConsumedAt) {
       return { movementIds: [], warnings: [] };
     }
+    if (
+      await this.hasExistingOrderMovement(
+        order,
+        StockMovementType.OrderConsumption,
+      )
+    ) {
+      return {
+        movementIds: [],
+        warnings: ['Bestellung wurde bereits vom Lager abgezogen.'],
+      };
+    }
 
     const plan = await this.buildConsumptionPlan(order);
     const movementIds = await this.applyPlan(
@@ -81,6 +93,17 @@ export class RecipeInventoryService {
   ): Promise<InventoryConsumptionResult> {
     if (order.inventoryReversedAt) {
       return { movementIds: [], warnings: [] };
+    }
+    if (
+      await this.hasExistingOrderMovement(
+        order,
+        StockMovementType.OrderCancelReversal,
+      )
+    ) {
+      return {
+        movementIds: [],
+        warnings: ['Bestellung wurde bereits ins Lager zurueckgebucht.'],
+      };
     }
 
     const plan = await this.buildConsumptionPlan(order);
@@ -192,6 +215,12 @@ export class RecipeInventoryService {
         continue;
       }
 
+      if (recipe.locationId && recipe.locationId !== order.locationId) {
+        throw new BadRequestException(
+          `Rezept ${recipe.name} gehoert nicht zum Standort der Bestellung`,
+        );
+      }
+
       if (!recipe.ingredients.length) {
         warnings.push(`Rezept ${recipe.name} enthaelt keine Zutaten.`);
         continue;
@@ -216,6 +245,15 @@ export class RecipeInventoryService {
             `Zutat ${stockItem.name} gehoert nicht zum Standort der Bestellung`,
           );
         }
+        if (
+          order.tenantId &&
+          stockItem.tenantId &&
+          stockItem.tenantId !== order.tenantId
+        ) {
+          throw new BadRequestException(
+            `Zutat ${stockItem.name} gehoert nicht zum Tenant der Bestellung`,
+          );
+        }
 
         if (stockItem.unit !== ingredient.unit) {
           warnings.push(
@@ -229,6 +267,7 @@ export class RecipeInventoryService {
           stockItem,
           orderItemId: this.stringifyId(orderItem._id),
           orderItemName: orderItem.name,
+          menuItemId: orderItem.menuItemId ?? orderItem.productId,
           requiredQuantity: this.requiredQuantity(
             ingredient,
             orderItem.quantity,
@@ -263,7 +302,7 @@ export class RecipeInventoryService {
     const aggregate = new Map<string, ConsumptionPlanLine>();
 
     for (const line of lines) {
-      const key = `${line.recipe._id.toString()}:${line.stockItem._id.toString()}`;
+      const key = `${line.recipe._id.toString()}:${line.stockItem._id.toString()}:${line.menuItemId ?? ''}:${line.orderItemId ?? ''}`;
       const current = aggregate.get(key);
 
       aggregate.set(key, {
@@ -289,6 +328,7 @@ export class RecipeInventoryService {
     for (const line of lines) {
       const item = line.stockItem;
       const quantityChange = quantityChangeFor(line);
+      const quantity = Math.abs(quantityChange);
       const before = item.quantity;
       item.quantity = before + quantityChange;
       await item.save();
@@ -301,15 +341,21 @@ export class RecipeInventoryService {
             )
           : [];
       const movement = await this.movementModel.create({
+        tenantId: order.tenantId,
         locationId: order.locationId,
         stockItemId: item._id.toString(),
         batchId: batchIds.join(',') || undefined,
         orderId: this.stringifyId(order._id),
         orderItemId: line.orderItemId,
         recipeId: this.stringifyId(line.recipe._id) || undefined,
+        menuItemId: line.menuItemId,
+        referenceType: 'order',
+        referenceId: this.stringifyId(order._id),
         stockItemName: item.name,
         type: movementType,
         quantityChange,
+        quantity,
+        unit: item.unit ?? line.ingredient.unit,
         quantityBefore: before,
         quantityAfter: item.quantity,
         unitPriceNet:
@@ -333,6 +379,28 @@ export class RecipeInventoryService {
     portions: number,
   ): number {
     return ingredient.quantity * portions * (ingredient.wasteFactor ?? 1);
+  }
+
+  private async hasExistingOrderMovement(
+    order: InventoryOrder,
+    type: StockMovementType,
+  ): Promise<boolean> {
+    const orderId = this.stringifyId(order._id);
+
+    if (!orderId) {
+      return false;
+    }
+
+    const existing = await this.movementModel
+      .findOne({
+        type,
+        $or: [{ orderId }, { referenceType: 'order', referenceId: orderId }],
+      })
+      .select('_id')
+      .lean()
+      .exec();
+
+    return Boolean(existing);
   }
 
   private async consumeBatches(

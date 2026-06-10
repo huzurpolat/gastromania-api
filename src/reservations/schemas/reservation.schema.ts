@@ -13,6 +13,9 @@ export enum ReservationStatus {
 
 @Schema({ timestamps: true, versionKey: false })
 export class Reservation {
+  @Prop({ trim: true, index: true })
+  tenantId?: string;
+
   @Prop({ required: true, trim: true, index: true })
   guestName!: string;
 
@@ -53,3 +56,4 @@ export const ReservationSchema = SchemaFactory.createForClass(Reservation);
 
 ReservationSchema.index({ locationId: 1, startTime: 1 });
 ReservationSchema.index({ tableId: 1, startTime: 1, endTime: 1 });
+ReservationSchema.index({ tenantId: 1, locationId: 1, startTime: 1 });

@@ -2,6 +2,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -52,16 +53,19 @@ export class RecipeNutritionDto {
 
 export class RecipeIngredientDto {
   @IsString()
+  @IsNotEmpty()
   stockItemId!: string;
 
+  @IsOptional()
   @IsString()
-  stockItemName!: string;
+  stockItemName?: string;
 
   @IsNumber()
-  @Min(0)
+  @Min(0.001)
   quantity!: number;
 
   @IsString()
+  @IsNotEmpty()
   unit!: string;
 
   @IsOptional()
