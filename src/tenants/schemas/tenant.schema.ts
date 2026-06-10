@@ -16,10 +16,11 @@ export enum LicenseStatus {
 }
 
 export enum BillingStatus {
-  Paid = 'paid',
-  Open = 'open',
+  Active = 'active',
+  Trial = 'trial',
   Overdue = 'overdue',
-  Blocked = 'blocked',
+  Suspended = 'suspended',
+  Cancelled = 'cancelled',
 }
 
 export type TenantDocument = HydratedDocument<Tenant>;
@@ -49,6 +50,15 @@ export class Tenant {
   @Prop({ trim: true })
   planKey?: string;
 
+  @Prop({ trim: true })
+  planName?: string;
+
+  @Prop({ min: 0, default: 0 })
+  monthlyPriceCents?: number;
+
+  @Prop({ trim: true, uppercase: true, default: 'EUR' })
+  currency?: string;
+
   @Prop({
     required: true,
     enum: Object.values(LicenseStatus),
@@ -60,7 +70,7 @@ export class Tenant {
   @Prop({
     required: true,
     enum: Object.values(BillingStatus),
-    default: BillingStatus.Open,
+    default: BillingStatus.Trial,
     index: true,
   })
   billingStatus!: BillingStatus;
@@ -79,6 +89,24 @@ export class Tenant {
 
   @Prop({ trim: true })
   billingAddress?: string;
+
+  @Prop({ trim: true, lowercase: true })
+  billingEmail?: string;
+
+  @Prop({ trim: true })
+  billingNotes?: string;
+
+  @Prop()
+  contractStartDate?: Date;
+
+  @Prop()
+  contractEndDate?: Date;
+
+  @Prop({ type: Number, default: null })
+  maxLocations?: number | null;
+
+  @Prop({ type: Number, default: null })
+  maxUsers?: number | null;
 
   @Prop({ trim: true })
   companyId?: string;

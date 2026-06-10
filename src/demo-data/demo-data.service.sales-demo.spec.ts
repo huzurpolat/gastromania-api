@@ -318,7 +318,7 @@ describe('DemoDataService sales demo seed', () => {
       frittenwerkDemoMenuItems: 11,
       frittenwerkDemoOrders: 9,
     });
-    expect(companyModel.rows).toHaveLength(7);
+    expect(companyModel.rows).toHaveLength(8);
     expect(companyModel.rows[0]).toMatchObject({
       name: 'GastroWerk24 Demo Restaurant',
       type: 'sales-demo-restaurant',
@@ -527,7 +527,7 @@ describe('DemoDataService sales demo seed', () => {
     ).toBeGreaterThan(0);
     expect(checklistModel.rows).toHaveLength(2);
     expect(areaModel.rows).toHaveLength(10);
-    expect(tenantModel.rows).toHaveLength(6);
+    expect(tenantModel.rows).toHaveLength(7);
     expect(tenantModel.rows.map((tenant) => tenant.slug)).toEqual(
       expect.arrayContaining([
         'burgermania',
@@ -535,9 +535,10 @@ describe('DemoDataService sales demo seed', () => {
         'pasta-house',
         'grill-factory',
         'frittenwerk-demo',
+        'demo-test-tenant',
       ]),
     );
-    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 7);
+    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 8);
     expect(
       tenantModuleModel.rows.filter(
         (moduleRow) =>
@@ -567,6 +568,7 @@ describe('DemoDataService sales demo seed', () => {
         'admin@pasta-house.demo',
         'admin@grill-factory.demo',
         'admin@frittenwerk-demo.demo',
+        'admin@demo-test-tenant.demo',
         'regionalleiter@burgermania.demo',
         'filialleiter.koeln@burgermania.demo',
         'service1.koeln@burgermania.demo',
@@ -575,7 +577,7 @@ describe('DemoDataService sales demo seed', () => {
         'kueche2.koeln@burgermania.demo',
       ]),
     );
-    expect(userModel.rows).toHaveLength(86);
+    expect(userModel.rows).toHaveLength(87);
     expect(userLocationAssignmentModel.rows.length).toBeGreaterThan(0);
     expect(userLocationAssignmentModel.rows.map((assignment) => assignment.role)).toEqual(
       expect.arrayContaining([
@@ -667,7 +669,7 @@ describe('DemoDataService sales demo seed', () => {
     await service.seedSalesDemo();
     await service.seedSalesDemo();
 
-    expect(companyModel.rows).toHaveLength(7);
+    expect(companyModel.rows).toHaveLength(8);
     expect(regionModel.rows).toHaveLength(21);
     expect(locationModel.rows).toHaveLength(11);
     expect(departmentModel.rows).toHaveLength(5);
@@ -689,10 +691,10 @@ describe('DemoDataService sales demo seed', () => {
       ).length,
     ).toBeGreaterThan(0);
     expect(checklistModel.rows).toHaveLength(2);
-    expect(userModel.rows).toHaveLength(86);
+    expect(userModel.rows).toHaveLength(87);
     expect(areaModel.rows).toHaveLength(10);
-    expect(tenantModel.rows).toHaveLength(6);
-    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 7);
+    expect(tenantModel.rows).toHaveLength(7);
+    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 8);
   });
 
   it('bootstraps the platform admin and five development demo tenants without the manual sales seed', async () => {
@@ -702,8 +704,8 @@ describe('DemoDataService sales demo seed', () => {
     await service.onApplicationBootstrap();
     await service.onApplicationBootstrap();
 
-    expect(companyModel.rows).toHaveLength(6);
-    expect(tenantModel.rows).toHaveLength(6);
+    expect(companyModel.rows).toHaveLength(7);
+    expect(tenantModel.rows).toHaveLength(7);
     expect(tenantModel.rows.map((tenant) => tenant.slug)).toEqual(
       expect.arrayContaining([
         'burgermania',
@@ -711,13 +713,14 @@ describe('DemoDataService sales demo seed', () => {
         'pasta-house',
         'grill-factory',
         'frittenwerk-demo',
+        'demo-test-tenant',
       ]),
     );
     expect(areaModel.rows).toHaveLength(10);
     expect(regionModel.rows).toHaveLength(20);
     expect(locationModel.rows).toHaveLength(10);
-    expect(userModel.rows).toHaveLength(81);
-    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 6);
+    expect(userModel.rows).toHaveLength(82);
+    expect(tenantModuleModel.rows).toHaveLength(DEFAULT_MODULES.length * 7);
     expect(userModel.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -751,6 +754,11 @@ describe('DemoDataService sales demo seed', () => {
         expect.objectContaining({
           email: 'admin@frittenwerk-demo.demo',
           roles: [Role.TenantAdminCode],
+          status: 'active',
+        }),
+        expect.objectContaining({
+          email: 'admin@demo-test-tenant.demo',
+          roles: [Role.TenantAdmin],
           status: 'active',
         }),
       ]),

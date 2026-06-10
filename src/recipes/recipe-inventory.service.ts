@@ -12,6 +12,7 @@ import {
   StockMovement,
   StockMovementType,
 } from '../stock/schemas/stock-movement.schema';
+import { resolveValuationUnitCost, roundMoney } from '../stock/stock-valuation';
 import {
   Recipe,
   RecipeDocument,
@@ -340,6 +341,10 @@ export class RecipeInventoryService {
               Math.abs(quantityChange),
             )
           : [];
+      const unitPriceNet =
+        resolveValuationUnitCost(item) ||
+        line.ingredient.purchasePriceNet ||
+        0;
       const movement = await this.movementModel.create({
         tenantId: order.tenantId,
         locationId: order.locationId,
@@ -358,11 +363,8 @@ export class RecipeInventoryService {
         unit: item.unit ?? line.ingredient.unit,
         quantityBefore: before,
         quantityAfter: item.quantity,
-        unitPriceNet:
-          item.purchasePriceNet ?? line.ingredient.purchasePriceNet ?? 0,
-        valueNet:
-          Math.abs(quantityChange) *
-          (item.purchasePriceNet ?? line.ingredient.purchasePriceNet ?? 0),
+        unitPriceNet,
+        valueNet: roundMoney(Math.abs(quantityChange) * unitPriceNet),
         note: `${notePrefix}: ${line.orderItemName} / ${line.recipe.name}`,
         reason: movementType,
         actorId,

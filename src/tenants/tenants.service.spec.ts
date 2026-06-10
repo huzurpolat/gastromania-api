@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Role } from '../auth/enums/role.enum';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { POS_MODULE_KEY } from '../modules/constants/module-definitions';
-import { TenantStatus } from './schemas/tenant.schema';
+import { BillingStatus, TenantStatus } from './schemas/tenant.schema';
 import { TenantsService } from './tenants.service';
 
 describe('TenantsService', () => {
@@ -22,9 +22,13 @@ describe('TenantsService', () => {
         name: 'Demo Test Tenant',
         slug: 'demo-test-tenant',
         status: TenantStatus.Active,
-        planKey: 'demo',
+        planKey: 'basic',
+        planName: 'Basic',
+        monthlyPriceCents: 9000,
+        currency: 'EUR',
         save: jest.fn(),
       }),
+      findById: jest.fn(),
     };
     const companyModel = {
       create: jest.fn().mockResolvedValue({
@@ -95,7 +99,7 @@ describe('TenantsService', () => {
           name: 'Demo Test Tenant',
           slug: 'demo-test-tenant',
           status: TenantStatus.Active,
-          planKey: 'demo',
+          planKey: 'basic',
           adminFirstName: 'Demo',
           adminLastName: 'Admin',
           adminEmail: 'admin@demo-test-tenant.demo',
@@ -127,7 +131,7 @@ describe('TenantsService', () => {
         name: 'Demo Test Tenant',
         slug: 'demo-test-tenant',
         status: TenantStatus.Active,
-        planKey: 'demo',
+        planKey: 'basic',
         adminFirstName: 'Demo',
         adminLastName: 'Admin',
         adminEmail: 'admin@demo-test-tenant.demo',
@@ -142,7 +146,10 @@ describe('TenantsService', () => {
         name: 'Demo Test Tenant',
         slug: 'demo-test-tenant',
         status: TenantStatus.Active,
-        planKey: 'demo',
+        planKey: 'basic',
+        planName: 'Basic',
+        monthlyPriceCents: 9000,
+        currency: 'EUR',
       }),
     );
     expect(companyModel.create).toHaveBeenCalledWith(
@@ -165,5 +172,118 @@ describe('TenantsService', () => {
     );
     expect(auditLogModel.create).toHaveBeenCalledTimes(2);
     expect(result.admin.email).toBe('admin@demo-test-tenant.demo');
+  });
+
+  it('updates tenant billing from central plan definitions and writes audit logs', async () => {
+    const { service, tenantModel, auditLogModel } = createService();
+    const tenant = {
+      _id: { toString: () => 'tenant-1' },
+      planKey: 'basic',
+      planName: 'Basic',
+      monthlyPriceCents: 9000,
+      currency: 'EUR',
+      billingStatus: BillingStatus.Trial,
+      billingEmail: 'old@example.test',
+      billingNotes: '',
+      maxLocations: 1,
+      maxUsers: 15,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    tenantModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(tenant),
+    });
+
+    const result = await service.updateBilling(
+      '507f1f77bcf86cd799439011',
+      {
+        planKey: 'pro',
+        billingStatus: BillingStatus.Active,
+        billingEmail: 'rechnung@example.test',
+        billingNotes: 'Jahresgespraech geplant',
+      },
+      actor,
+    );
+
+    expect(result.planKey).toBe('pro');
+    expect(result.planName).toBe('Pro');
+    expect(result.monthlyPriceCents).toBe(90000);
+    expect(result.currency).toBe('EUR');
+    expect(result.billingStatus).toBe(BillingStatus.Active);
+    expect(result.billingEmail).toBe('rechnung@example.test');
+    expect(tenant.save).toHaveBeenCalledTimes(1);
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'tenant.plan_changed',
+        metadata: expect.objectContaining({
+          oldValues: expect.objectContaining({ planKey: 'basic' }),
+          newValues: expect.objectContaining({
+            planKey: 'pro',
+            monthlyPriceCents: 90000,
+          }),
+        }),
+      }),
+    );
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'tenant.billing_status_changed',
+      }),
+    );
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'tenant.billing_updated',
+      }),
+    );
+  });
+
+  it('rejects invalid billing plans before saving', async () => {
+    const { service, tenantModel } = createService();
+    const tenant = {
+      _id: { toString: () => 'tenant-1' },
+      planKey: 'basic',
+      billingStatus: BillingStatus.Trial,
+      save: jest.fn(),
+    };
+    tenantModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(tenant),
+    });
+
+    await expect(
+      service.updateBilling(
+        '507f1f77bcf86cd799439011',
+        { planKey: 'enterprise' as never },
+        actor,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(tenant.save).not.toHaveBeenCalled();
+  });
+
+  it('hides billing fields from tenant self responses', async () => {
+    const { service, tenantModel } = createService();
+    tenantModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: 'tenant-1',
+        name: 'Demo Test Tenant',
+        slug: 'demo-test-tenant',
+        status: TenantStatus.Active,
+        planKey: 'pro',
+        monthlyPriceCents: 90000,
+        billingEmail: 'billing@example.test',
+      }),
+    });
+
+    const result = await service.getCurrentTenant({
+      ...actor,
+      tenantId: '507f1f77bcf86cd799439011',
+    });
+
+    expect(result).toMatchObject({
+      name: 'Demo Test Tenant',
+      slug: 'demo-test-tenant',
+      status: TenantStatus.Active,
+    });
+    expect(result).not.toHaveProperty('planKey');
+    expect(result).not.toHaveProperty('monthlyPriceCents');
+    expect(result).not.toHaveProperty('billingEmail');
   });
 });

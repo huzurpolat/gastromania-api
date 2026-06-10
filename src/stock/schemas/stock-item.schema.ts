@@ -59,6 +59,9 @@ export class StockItem {
   @Prop({ min: 0, default: 0 })
   unitCost!: number;
 
+  @Prop({ trim: true, default: 'EUR' })
+  currency!: string;
+
   @Prop({ trim: true })
   costUnit?: string;
 

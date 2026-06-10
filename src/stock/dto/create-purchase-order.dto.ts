@@ -17,6 +17,11 @@ export class CreatePurchaseOrderLineDto {
   @IsNumber()
   @Min(0.001)
   quantity!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  expectedUnitCost?: number;
 }
 
 export class CreatePurchaseOrderDto {

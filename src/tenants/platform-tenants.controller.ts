@@ -11,6 +11,7 @@ import { UpdateModuleDefinitionDto } from '../modules/dto/update-module-definiti
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantModuleDto } from './dto/update-tenant-module.dto';
 import { UpdateTenantStatusDto } from './dto/update-tenant-status.dto';
+import { UpdateTenantBillingDto } from './dto/update-tenant-billing.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
 
@@ -26,6 +27,11 @@ export class PlatformTenantsController {
   @Get('tenants')
   findAllTenants() {
     return this.tenantsService.findAll();
+  }
+
+  @Get('billing/plans')
+  findBillingPlans() {
+    return this.tenantsService.findPlans();
   }
 
   @Post('tenants')
@@ -65,6 +71,20 @@ export class PlatformTenantsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.tenantsService.updateStatus(tenantId, dto, actor);
+  }
+
+  @Get('tenants/:tenantId/billing')
+  findTenantBilling(@Param('tenantId') tenantId: string) {
+    return this.tenantsService.findBilling(tenantId);
+  }
+
+  @Patch('tenants/:tenantId/billing')
+  updateTenantBilling(
+    @Param('tenantId') tenantId: string,
+    @Body() dto: UpdateTenantBillingDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tenantsService.updateBilling(tenantId, dto, actor);
   }
 
   @Get('tenants/:tenantId/modules')

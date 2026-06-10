@@ -31,7 +31,13 @@ export class PurchaseOrderLine {
   unitPriceNet!: number;
 
   @Prop({ min: 0, default: 0 })
+  expectedUnitCost!: number;
+
+  @Prop({ min: 0, default: 0 })
   totalNet!: number;
+
+  @Prop({ min: 0, default: 0 })
+  receivedQuantity!: number;
 }
 
 export const PurchaseOrderLineSchema =
@@ -39,6 +45,9 @@ export const PurchaseOrderLineSchema =
 
 @Schema({ timestamps: true, versionKey: false })
 export class PurchaseOrder {
+  @Prop({ trim: true, index: true })
+  tenantId?: string;
+
   @Prop({ trim: true, index: true })
   companyId?: string;
 
@@ -78,3 +87,4 @@ export class PurchaseOrder {
 export const PurchaseOrderSchema = SchemaFactory.createForClass(PurchaseOrder);
 
 PurchaseOrderSchema.index({ locationId: 1, supplierId: 1, createdAt: -1 });
+PurchaseOrderSchema.index({ tenantId: 1, locationId: 1, status: 1 });

@@ -76,6 +76,10 @@ import {
   TenantStatus,
 } from '../tenants/schemas/tenant.schema';
 import {
+  getTenantBillingPlan,
+  TenantPlanKey,
+} from '../tenants/tenant-plans';
+import {
   RestaurantTable,
   RestaurantTableDocument,
   TableShape,
@@ -245,6 +249,14 @@ export class DemoDataService implements OnApplicationBootstrap {
     COUNTER_ORDERS_MODULE_KEY,
     DAILY_CLOSING_MODULE_KEY,
   ]);
+  private readonly developmentTenantPlans: Record<string, TenantPlanKey> = {
+    burgermania: 'basic',
+    'crispy-chicken': 'basic',
+    'pasta-house': 'advance',
+    'grill-factory': 'advance',
+    'frittenwerk-demo': 'pro',
+    'demo-test-tenant': 'basic',
+  };
   private readonly developmentTenantConfigs: DevelopmentTenantConfig[] = [
     {
       name: 'BurgerMania',
@@ -932,6 +944,7 @@ export class DemoDataService implements OnApplicationBootstrap {
 
     for (const config of this.developmentTenantConfigs) {
       const companySlug = `${config.slug}-demo-tenant`;
+      const plan = this.resolveDevelopmentTenantPlan(config.slug);
       const company = await this.companyModel
         .findOneAndUpdate(
           {
@@ -959,13 +972,19 @@ export class DemoDataService implements OnApplicationBootstrap {
               name: config.name,
               slug: config.slug,
               status: TenantStatus.Active,
-              planKey: 'demo',
+              planKey: plan.key,
+              planName: plan.name,
+              monthlyPriceCents: plan.monthlyPriceCents,
+              currency: plan.currency,
+              maxLocations: plan.maxLocations,
+              maxUsers: plan.maxUsers,
               licenseStatus: LicenseStatus.Active,
-              billingStatus: BillingStatus.Paid,
+              billingStatus: BillingStatus.Active,
               contactEmail: `admin@${config.slug}.demo`,
               contactPhone: '0221 123456',
               billingName: config.name,
               billingAddress: 'Demo Strasse 1, 50667 Koeln',
+              billingEmail: `billing@${config.slug}.demo`,
               companyId: company._id.toString(),
               deletedAt: null,
             },
@@ -1040,6 +1059,8 @@ export class DemoDataService implements OnApplicationBootstrap {
       modules += DEFAULT_MODULES.length;
     }
 
+    await this.ensureExistingDemoTestTenantBilling();
+
     return {
       tenants: this.developmentTenantConfigs.length,
       areas,
@@ -1104,6 +1125,7 @@ export class DemoDataService implements OnApplicationBootstrap {
       return null;
     }
 
+    const plan = this.resolveDevelopmentTenantPlan('demo-test-tenant');
     const company = await this.companyModel
       .findOneAndUpdate(
         { slug: this.legacyDemoTenantSlug },
@@ -1126,12 +1148,18 @@ export class DemoDataService implements OnApplicationBootstrap {
             name: this.legacyDemoTenantName,
             slug: this.legacyDemoTenantSlug,
             status: TenantStatus.Active,
-            planKey: 'demo',
+            planKey: plan.key,
+            planName: plan.name,
+            monthlyPriceCents: plan.monthlyPriceCents,
+            currency: plan.currency,
+            maxLocations: plan.maxLocations,
+            maxUsers: plan.maxUsers,
             licenseStatus: LicenseStatus.Active,
-            billingStatus: BillingStatus.Paid,
+            billingStatus: BillingStatus.Active,
             contactEmail: 'legacy@gastromania.local',
             billingName: this.legacyDemoTenantName,
             billingAddress: 'Legacy Demo, 50667 Köln',
+            billingEmail: 'billing@gastromania.local',
             companyId: company._id.toString(),
             deletedAt: null,
           },
@@ -3551,6 +3579,85 @@ export class DemoDataService implements OnApplicationBootstrap {
     );
   }
 
+  private async ensureExistingDemoTestTenantBilling(): Promise<void> {
+    const plan = this.resolveDevelopmentTenantPlan('demo-test-tenant');
+    const company = await this.companyModel
+      .findOneAndUpdate(
+        { slug: 'demo-test-tenant-demo-tenant' },
+        {
+          $set: {
+            name: 'Demo Test Tenant',
+            slug: 'demo-test-tenant-demo-tenant',
+            type: 'development-demo-tenant',
+            isActive: true,
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+    const tenant = await this.tenantModel
+      .findOneAndUpdate(
+        { slug: 'demo-test-tenant' },
+        {
+          $set: {
+            name: 'Demo Test Tenant',
+            slug: 'demo-test-tenant',
+            status: TenantStatus.Active,
+            planKey: plan.key,
+            planName: plan.name,
+            monthlyPriceCents: plan.monthlyPriceCents,
+            currency: plan.currency,
+            maxLocations: plan.maxLocations,
+            maxUsers: plan.maxUsers,
+            billingStatus: BillingStatus.Active,
+            billingEmail: 'billing@demo-test-tenant.demo',
+            contactEmail: 'admin@demo-test-tenant.demo',
+            contactPhone: '0221 5550100',
+            billingName: 'Demo Test Tenant',
+            billingAddress: 'Demo Test Tenant, 50667 Koeln',
+            companyId: company._id.toString(),
+            deletedAt: null,
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+    const tenantId = tenant._id.toString();
+    const passwordHash = await bcrypt.hash(
+      this.tenantDemoPassword,
+      12,
+    );
+
+    await this.userModel
+      .findOneAndUpdate(
+        { email: 'admin@demo-test-tenant.demo' },
+        {
+          $set: {
+            email: 'admin@demo-test-tenant.demo',
+            passwordHash,
+            firstName: 'Demo',
+            lastName: 'Admin',
+            name: 'Demo Admin',
+            roles: [Role.TenantAdmin],
+            tenantId,
+            companyId: company._id.toString(),
+            isActive: true,
+            status: 'active',
+            locationIds: [],
+            managedLocationIds: [],
+            departmentIds: [],
+            responsibilities: [],
+          },
+        },
+        { returnDocument: 'after', setDefaultsOnInsert: true, upsert: true },
+      )
+      .exec();
+    await this.upsertDevelopmentTenantModules(
+      tenantId,
+      this.tenantDemoActiveModuleKeys,
+    );
+  }
+
   private async hideLegacyDevelopmentDemoTenants(): Promise<void> {
     await this.tenantModel
       .updateMany(
@@ -3580,12 +3687,23 @@ export class DemoDataService implements OnApplicationBootstrap {
           $set: {
             status: TenantStatus.Cancelled,
             licenseStatus: LicenseStatus.Suspended,
-            billingStatus: BillingStatus.Blocked,
+            billingStatus: BillingStatus.Cancelled,
             deletedAt: new Date(),
           },
         },
       )
       .exec();
+  }
+
+  private resolveDevelopmentTenantPlan(slug: string) {
+    const planKey = this.developmentTenantPlans[slug] ?? 'basic';
+    const plan = getTenantBillingPlan(planKey);
+
+    if (!plan) {
+      throw new Error(`Demo-Tarif ${planKey} ist nicht definiert`);
+    }
+
+    return plan;
   }
 
   private slugify(value: string): string {
@@ -5973,7 +6091,9 @@ export class DemoDataService implements OnApplicationBootstrap {
           quantity,
           unit: item.unit,
           unitPriceNet,
+          expectedUnitCost: unitPriceNet,
           totalNet: quantity * unitPriceNet,
+          receivedQuantity: 0,
         };
       });
 

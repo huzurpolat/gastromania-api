@@ -92,6 +92,11 @@ export class CreateStockItemDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(3)
+  currency?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(24)
   costUnit?: string;
 

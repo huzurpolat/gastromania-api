@@ -25,6 +25,7 @@ import {
 } from './dto/inventory-session.dto';
 import { ReceiveStockDto } from './dto/receive-stock.dto';
 import { ReportWasteDto } from './dto/report-waste.dto';
+import { UpdatePurchaseOrderStatusDto } from './dto/update-purchase-order-status.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
 import {
   InventoryBatch,
@@ -57,11 +58,24 @@ import {
 import {
   PurchaseOrder,
   PurchaseOrderDocument,
+  PurchaseOrderLine,
   PurchaseOrderStatus,
 } from './schemas/purchase-order.schema';
+import {
+  Supplier,
+  SupplierDocument,
+} from '../suppliers/schemas/supplier.schema';
+import {
+  calculateStockValueNet,
+  calculateWeightedAveragePurchasePrice,
+  createValuationWarnings,
+  resolveValuationUnitCost,
+  roundMoney,
+} from './stock-valuation';
 
 export interface StockItemResponse {
   _id: string;
+  tenantId?: string;
   articleNumber?: string;
   locationId: string;
   name: string;
@@ -76,6 +90,11 @@ export interface StockItemResponse {
   supplierName?: string;
   ean?: string;
   purchasePriceNet: number;
+  lastPurchasePrice: number;
+  averageCost: number;
+  averagePurchasePrice: number;
+  unitCost: number;
+  currency: string;
   purchasePriceGross: number;
   salePrice: number;
   vatRate: number;
@@ -87,6 +106,7 @@ export interface StockItemResponse {
   isArchived: boolean;
   lowStock: boolean;
   stockValueNet: number;
+  valuationWarnings: string[];
   criticalStock: boolean;
   negativeStock: boolean;
   createdAt?: string;
@@ -132,6 +152,8 @@ export interface InventoryBatchResponse {
   initialQuantity: number;
   remainingQuantity: number;
   unitPriceNet: number;
+  unitCost: number;
+  totalValueNet: number;
   supplierId?: string;
   supplierName?: string;
   storageLocation?: string;
@@ -146,6 +168,8 @@ export interface InventoryBatchResponse {
 export interface InventoryDashboardResponse {
   itemCount: number;
   totalStockValueNet: number;
+  missingPriceCount: number;
+  valuationWarnings: string[];
   lowStockCount: number;
   openInventorySessions: number;
   receiptsToday: number;
@@ -154,6 +178,36 @@ export interface InventoryDashboardResponse {
   expiringSoonCount: number;
   negativeStockCount: number;
   topUsageItems: Array<{ stockItemId: string; name: string; quantity: number }>;
+}
+
+export interface PurchaseOrderLineResponse {
+  _id: string;
+  stockItemId: string;
+  stockItemName: string;
+  quantity: number;
+  unit: string;
+  expectedUnitCost: number;
+  unitPriceNet: number;
+  totalNet: number;
+  receivedQuantity: number;
+  openQuantity: number;
+}
+
+export interface PurchaseOrderResponse {
+  _id: string;
+  tenantId?: string;
+  companyId?: string;
+  locationId: string;
+  supplierId: string;
+  supplierName: string;
+  orderNumber: string;
+  status: PurchaseOrderStatus;
+  lines: PurchaseOrderLineResponse[];
+  totalNet: number;
+  note?: string;
+  createdBy: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface StockEvent {
@@ -173,6 +227,8 @@ export class StockService {
     private readonly batchModel: Model<InventoryBatchDocument>,
     @InjectModel(PurchaseOrder.name)
     private readonly purchaseOrderModel: Model<PurchaseOrderDocument>,
+    @InjectModel(Supplier.name)
+    private readonly supplierModel: Model<SupplierDocument>,
     @InjectModel(StockMovement.name)
     private readonly movementModel: Model<StockMovementDocument>,
     @InjectModel(InventoryLocation.name)
@@ -197,10 +253,23 @@ export class StockService {
     actor: AuthenticatedUser,
   ): Promise<StockItemResponse> {
     await this.assertCanUseLocation(actor, payload.locationId);
+    const initialUnitCost =
+      payload.averageCost ??
+      payload.unitCost ??
+      payload.lastPurchasePrice ??
+      payload.purchasePriceNet ??
+      0;
+    const initialPurchasePrice =
+      payload.purchasePriceNet ?? payload.lastPurchasePrice ?? initialUnitCost;
 
     const item = await this.stockItemModel.create({
       ...payload,
-      purchasePriceNet: payload.purchasePriceNet ?? 0,
+      tenantId: actor.tenantId,
+      purchasePriceNet: initialPurchasePrice,
+      lastPurchasePrice: payload.lastPurchasePrice ?? initialPurchasePrice,
+      averageCost: payload.averageCost ?? initialUnitCost,
+      unitCost: payload.unitCost ?? initialUnitCost,
+      currency: payload.currency ?? 'EUR',
       purchasePriceGross: payload.purchasePriceGross ?? 0,
       salePrice: payload.salePrice ?? 0,
       vatRate: payload.vatRate ?? 19,
@@ -292,24 +361,40 @@ export class StockService {
     }
 
     await this.assertCanUseLocation(actor, item.locationId);
+    this.assertTenantMatch(actor, item.tenantId, 'Lagerartikel');
 
     if (item.requiresExpiryDate && !payload.expiresAt) {
       throw new BadRequestException('MHD ist fuer diese Zutat erforderlich');
     }
 
+    const purchaseOrder = payload.purchaseOrderId
+      ? await this.applyPurchaseOrderReceipt(payload, actor, item)
+      : undefined;
     const receivedAt = payload.receivedAt
       ? new Date(payload.receivedAt)
       : new Date();
-    const unitPriceNet = payload.unitPriceNet ?? item.purchasePriceNet ?? 0;
+    const unitPriceNet =
+      payload.unitPriceNet ?? resolveValuationUnitCost(item) ?? 0;
     const quantityBefore = item.quantity;
+    const averageCost = calculateWeightedAveragePurchasePrice({
+      quantityBefore,
+      previousAverageCost: resolveValuationUnitCost(item),
+      receivedQuantity: payload.quantity,
+      receivedUnitCost: unitPriceNet,
+    });
     item.quantity = quantityBefore + payload.quantity;
     item.purchasePriceNet = unitPriceNet || item.purchasePriceNet;
+    item.lastPurchasePrice = unitPriceNet || item.lastPurchasePrice;
+    item.averageCost = averageCost;
+    item.unitCost = averageCost;
+    item.currency = item.currency ?? 'EUR';
     item.supplierId = payload.supplierId ?? item.supplierId;
     item.supplierName = payload.supplierName ?? item.supplierName;
     item.storageLocation = payload.storageLocation ?? item.storageLocation;
     const saved = await item.save();
 
     const batch = await this.batchModel.create({
+      tenantId: actor.tenantId ?? item.tenantId,
       locationId: saved.locationId,
       stockItemId: saved._id.toString(),
       stockItemName: saved.name,
@@ -328,19 +413,25 @@ export class StockService {
     });
 
     const movement = await this.movementModel.create({
+      tenantId: actor.tenantId ?? saved.tenantId,
       locationId: saved.locationId,
       stockItemId: saved._id.toString(),
       batchId: batch._id.toString(),
+      referenceType: payload.purchaseOrderId ? 'purchase_order' : undefined,
+      referenceId: payload.purchaseOrderId,
       stockItemName: saved.name,
       type: StockMovementType.Receipt,
       quantityChange: payload.quantity,
       quantityBefore,
       quantityAfter: saved.quantity,
       note: payload.note,
+      reason: payload.purchaseOrderId
+        ? `Wareneingang zu Bestellung ${purchaseOrder?.orderNumber ?? payload.purchaseOrderId}`
+        : undefined,
       supplierId: payload.supplierId ?? saved.supplierId,
       supplierName: payload.supplierName ?? saved.supplierName,
       unitPriceNet,
-      valueNet: payload.quantity * unitPriceNet,
+      valueNet: roundMoney(payload.quantity * unitPriceNet),
       actorId: actor.sub,
     });
 
@@ -429,13 +520,14 @@ export class StockService {
         lines: [],
         totalNet: 0,
       };
-      const totalNet = quantity * item.purchasePriceNet;
+      const unitPriceNet = resolveValuationUnitCost(item);
+      const totalNet = roundMoney(quantity * unitPriceNet);
       group.lines.push({
         stockItemId: item._id,
         stockItemName: item.name,
         quantity,
         unit: item.unit,
-        unitPriceNet: item.purchasePriceNet,
+        unitPriceNet,
         totalNet,
         currentQuantity: item.quantity,
         minQuantity: item.minQuantity,
@@ -450,7 +542,10 @@ export class StockService {
     );
   }
 
-  async listPurchaseOrders(actor: AuthenticatedUser, locationId?: string) {
+  async listPurchaseOrders(
+    actor: AuthenticatedUser,
+    locationId?: string,
+  ): Promise<PurchaseOrderResponse[]> {
     const locationIds = locationId
       ? [locationId]
       : await this.getReadableLocationIds(actor);
@@ -458,17 +553,26 @@ export class StockService {
       locationIds.map((id) => this.assertCanUseLocation(actor, id)),
     );
 
-    return this.purchaseOrderModel
-      .find({ locationId: { $in: locationIds } })
+    const orders = await this.purchaseOrderModel
+      .find({
+        locationId: { $in: locationIds },
+        ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
+      })
       .sort({ createdAt: -1 })
       .exec();
+
+    return orders.map((order) => this.toPurchaseOrderResponse(order));
   }
 
   async createPurchaseOrder(
     payload: CreatePurchaseOrderDto,
     actor: AuthenticatedUser,
-  ) {
+  ): Promise<PurchaseOrderResponse> {
     await this.assertCanUseLocation(actor, payload.locationId);
+    const supplier = await this.assertSupplierForLocation(
+      payload.supplierId,
+      payload.locationId,
+    );
 
     if (!payload.lines.length) {
       throw new BadRequestException(
@@ -482,23 +586,28 @@ export class StockService {
       if (!item || item.locationId !== payload.locationId) {
         throw new NotFoundException('Nachbestellartikel nicht gefunden');
       }
-      const unitPriceNet = item.purchasePriceNet ?? 0;
+      this.assertTenantMatch(actor, item.tenantId, 'Nachbestellartikel');
+      const unitPriceNet =
+        line.expectedUnitCost ?? resolveValuationUnitCost(item);
       lines.push({
         stockItemId: item._id.toString(),
         stockItemName: item.name,
         quantity: line.quantity,
         unit: item.unit,
         unitPriceNet,
-        totalNet: line.quantity * unitPriceNet,
+        expectedUnitCost: unitPriceNet,
+        totalNet: roundMoney(line.quantity * unitPriceNet),
+        receivedQuantity: 0,
       });
     }
 
     const totalNet = lines.reduce((sum, line) => sum + line.totalNet, 0);
     const order = await this.purchaseOrderModel.create({
+      tenantId: actor.tenantId,
       companyId: actor.companyId,
       locationId: payload.locationId,
       supplierId: payload.supplierId,
-      supplierName: payload.supplierName ?? 'Lieferant',
+      supplierName: payload.supplierName ?? supplier.name,
       orderNumber: await this.nextPurchaseOrderNumber(payload.locationId),
       status: PurchaseOrderStatus.Draft,
       lines,
@@ -507,7 +616,56 @@ export class StockService {
       createdBy: actor.sub,
     });
 
-    return order;
+    return this.toPurchaseOrderResponse(order);
+  }
+
+  async updatePurchaseOrderStatus(
+    id: string,
+    payload: UpdatePurchaseOrderStatusDto,
+    actor: AuthenticatedUser,
+  ): Promise<PurchaseOrderResponse> {
+    const order = await this.purchaseOrderModel.findById(id).exec();
+    if (!order) {
+      throw new NotFoundException('Bestellung nicht gefunden');
+    }
+    await this.assertCanUseLocation(actor, order.locationId);
+    this.assertTenantMatch(actor, order.tenantId, 'Bestellung');
+
+    const nextStatus = payload.status;
+    if (nextStatus === PurchaseOrderStatus.PartiallyReceived) {
+      throw new BadRequestException(
+        'Teilweise geliefert wird automatisch durch Wareneingang gesetzt',
+      );
+    }
+    if (nextStatus === PurchaseOrderStatus.Received) {
+      throw new BadRequestException(
+        'Geliefert wird automatisch durch Wareneingang gesetzt',
+      );
+    }
+    if (nextStatus === PurchaseOrderStatus.Draft) {
+      throw new BadRequestException(
+        'Bestellungen koennen nicht in Entwurf zurueckgesetzt werden',
+      );
+    }
+    if (
+      order.status === PurchaseOrderStatus.Received &&
+      nextStatus === PurchaseOrderStatus.Cancelled
+    ) {
+      throw new BadRequestException(
+        'Gelieferte Bestellungen koennen nicht storniert werden',
+      );
+    }
+    if (
+      nextStatus === PurchaseOrderStatus.Ordered &&
+      order.status !== PurchaseOrderStatus.Draft
+    ) {
+      throw new BadRequestException(
+        'Nur Entwuerfe koennen als bestellt markiert werden',
+      );
+    }
+
+    order.status = nextStatus;
+    return this.toPurchaseOrderResponse(await order.save());
   }
 
   async findLocations(actor: AuthenticatedUser, locationId?: string) {
@@ -678,10 +836,15 @@ export class StockService {
 
     return {
       itemCount: items.length,
-      totalStockValueNet: items.reduce(
-        (sum, item) => sum + item.quantity * (item.purchasePriceNet ?? 0),
-        0,
+      totalStockValueNet: roundMoney(
+        items.reduce((sum, item) => sum + calculateStockValueNet(item), 0),
       ),
+      missingPriceCount: items.filter(
+        (item) => createValuationWarnings(item).length > 0,
+      ).length,
+      valuationWarnings: items
+        .filter((item) => createValuationWarnings(item).length > 0)
+        .map((item) => `${item.name}: Einkaufspreis fehlt`),
       lowStockCount: items.filter(
         (item) => item.isActive && item.quantity <= item.minQuantity,
       ).length,
@@ -763,7 +926,7 @@ export class StockService {
       }
       item.quantity = line.countedQuantity;
       await item.save();
-      const unitPriceNet = item.purchasePriceNet ?? 0;
+      const unitPriceNet = resolveValuationUnitCost(item);
       const count = await this.inventoryCountModel.findOneAndUpdate(
         { sessionId: id, stockItemId: item._id.toString() },
         {
@@ -789,7 +952,7 @@ export class StockService {
         note: payload.note,
         reason: difference !== 0 ? 'Inventurdifferenz' : undefined,
         unitPriceNet,
-        valueNet: Math.abs(difference) * unitPriceNet,
+        valueNet: roundMoney(Math.abs(difference) * unitPriceNet),
         actorId: actor.sub,
       });
       await this.syncLowStockAlert(item);
@@ -874,7 +1037,8 @@ export class StockService {
 
     item.quantity = nextQuantity;
     const saved = await item.save();
-    const unitPriceNet = payload.unitPriceNet ?? saved.purchasePriceNet ?? 0;
+    const unitPriceNet =
+      payload.unitPriceNet ?? resolveValuationUnitCost(saved);
     const batchIds =
       payload.quantityChange < 0
         ? await this.consumeBatches(
@@ -897,7 +1061,7 @@ export class StockService {
       supplierId: payload.supplierId ?? saved.supplierId,
       supplierName: payload.supplierName ?? saved.supplierName,
       unitPriceNet,
-      valueNet: Math.abs(payload.quantityChange) * unitPriceNet,
+      valueNet: roundMoney(Math.abs(payload.quantityChange) * unitPriceNet),
       actorId: actor.sub,
     });
     await this.syncLowStockAlert(saved);
@@ -938,6 +1102,143 @@ export class StockService {
         ),
       ),
     );
+  }
+
+  private async applyPurchaseOrderReceipt(
+    payload: ReceiveStockDto,
+    actor: AuthenticatedUser,
+    item: StockItemDocument,
+  ): Promise<PurchaseOrderDocument> {
+    const order = await this.purchaseOrderModel
+      .findById(payload.purchaseOrderId)
+      .exec();
+    if (!order) {
+      throw new NotFoundException('Bestellung nicht gefunden');
+    }
+
+    await this.assertCanUseLocation(actor, order.locationId);
+    this.assertTenantMatch(actor, order.tenantId, 'Bestellung');
+
+    if (order.locationId !== item.locationId) {
+      throw new BadRequestException(
+        'Bestellung und Lagerartikel gehoeren nicht zum selben Standort',
+      );
+    }
+    if (order.status === PurchaseOrderStatus.Cancelled) {
+      throw new BadRequestException(
+        'Stornierte Bestellungen koennen keinen Wareneingang erhalten',
+      );
+    }
+    if (order.status === PurchaseOrderStatus.Received) {
+      throw new BadRequestException('Bestellung ist bereits vollstaendig geliefert');
+    }
+    if (order.status === PurchaseOrderStatus.Draft) {
+      throw new BadRequestException(
+        'Bestellung muss vor Wareneingang als bestellt markiert werden',
+      );
+    }
+
+    const line = this.findPurchaseOrderLine(order, payload, item);
+    if (line.stockItemId !== item._id.toString()) {
+      throw new BadRequestException(
+        'Wareneingang passt nicht zur ausgewaehlten Bestellposition',
+      );
+    }
+
+    const receivedQuantity = Number(line.receivedQuantity ?? 0);
+    const openQuantity = Math.max(0, Number(line.quantity ?? 0) - receivedQuantity);
+    if (payload.quantity > openQuantity) {
+      throw new BadRequestException(
+        `Wareneingang ueberschreitet offene Bestellmenge von ${openQuantity} ${line.unit}`,
+      );
+    }
+
+    line.receivedQuantity = this.roundQuantity(receivedQuantity + payload.quantity);
+    order.status = this.resolvePurchaseOrderStatus(order.lines);
+    await order.save();
+    return order;
+  }
+
+  private findPurchaseOrderLine(
+    order: PurchaseOrderDocument,
+    payload: ReceiveStockDto,
+    item: StockItemDocument,
+  ): PurchaseOrderLine {
+    const lines = order.lines ?? [];
+    if (payload.purchaseOrderLineId) {
+      const line = lines.find(
+        (entry) => entry._id?.toString() === payload.purchaseOrderLineId,
+      );
+      if (!line) {
+        throw new NotFoundException('Bestellposition nicht gefunden');
+      }
+      return line;
+    }
+
+    const matchingLines = lines.filter(
+      (entry) => entry.stockItemId === item._id.toString(),
+    );
+    if (matchingLines.length !== 1) {
+      throw new BadRequestException(
+        'Bestellposition ist fuer diesen Artikel nicht eindeutig',
+      );
+    }
+
+    return matchingLines[0];
+  }
+
+  private resolvePurchaseOrderStatus(
+    lines: PurchaseOrderLine[],
+  ): PurchaseOrderStatus {
+    const hasReceived = lines.some(
+      (line) => Number(line.receivedQuantity ?? 0) > 0,
+    );
+    const allReceived =
+      lines.length > 0 &&
+      lines.every(
+        (line) => Number(line.receivedQuantity ?? 0) >= Number(line.quantity),
+      );
+
+    if (allReceived) {
+      return PurchaseOrderStatus.Received;
+    }
+    if (hasReceived) {
+      return PurchaseOrderStatus.PartiallyReceived;
+    }
+
+    return PurchaseOrderStatus.Ordered;
+  }
+
+  private async assertSupplierForLocation(
+    supplierId: string,
+    locationId: string,
+  ): Promise<SupplierDocument> {
+    const supplier = await this.supplierModel.findById(supplierId).exec();
+    if (!supplier) {
+      throw new NotFoundException('Lieferant nicht gefunden');
+    }
+    if (supplier.locationId !== locationId) {
+      throw new BadRequestException(
+        'Lieferant gehoert nicht zum Standort der Bestellung',
+      );
+    }
+    return supplier;
+  }
+
+  private assertTenantMatch(
+    actor: AuthenticatedUser,
+    tenantId: string | undefined,
+    entityName: string,
+  ): void {
+    if (actor.tenantId && tenantId && tenantId !== actor.tenantId) {
+      throw new BadRequestException(
+        `${entityName} gehoert nicht zum Tenant des Benutzers`,
+      );
+    }
+  }
+
+  private roundQuantity(value: number): number {
+    return Math.round(value * 1000) / 1000;
   }
 
   private async assertCanUseLocation(
@@ -1122,9 +1423,11 @@ export class StockService {
       createdAt?: Date;
       updatedAt?: Date;
     };
+    const averagePurchasePrice = resolveValuationUnitCost(item);
 
     return {
       _id: item._id.toString(),
+      tenantId: item.tenantId,
       articleNumber: item.articleNumber,
       locationId: item.locationId,
       name: item.name,
@@ -1139,6 +1442,11 @@ export class StockService {
       supplierName: item.supplierName,
       ean: item.ean,
       purchasePriceNet: item.purchasePriceNet ?? 0,
+      lastPurchasePrice: item.lastPurchasePrice ?? item.purchasePriceNet ?? 0,
+      averageCost: item.averageCost ?? averagePurchasePrice,
+      averagePurchasePrice,
+      unitCost: item.unitCost ?? averagePurchasePrice,
+      currency: item.currency ?? 'EUR',
       purchasePriceGross: item.purchasePriceGross ?? 0,
       salePrice: item.salePrice ?? 0,
       vatRate: item.vatRate ?? 19,
@@ -1150,7 +1458,8 @@ export class StockService {
       isArchived: item.isArchived ?? false,
       lowStock:
         item.isActive && !item.isArchived && item.quantity <= item.minQuantity,
-      stockValueNet: item.quantity * (item.purchasePriceNet ?? 0),
+      stockValueNet: calculateStockValueNet(item),
+      valuationWarnings: createValuationWarnings(item),
       criticalStock:
         item.isActive &&
         !item.isArchived &&
@@ -1302,6 +1611,10 @@ export class StockService {
       initialQuantity: batch.initialQuantity,
       remainingQuantity: batch.remainingQuantity,
       unitPriceNet: batch.unitPriceNet ?? 0,
+      unitCost: batch.unitPriceNet ?? 0,
+      totalValueNet: roundMoney(
+        (batch.initialQuantity ?? 0) * (batch.unitPriceNet ?? 0),
+      ),
       supplierId: batch.supplierId,
       supplierName: batch.supplierName,
       storageLocation: batch.storageLocation,
@@ -1312,6 +1625,50 @@ export class StockService {
       isActive: batch.isActive,
       daysUntilExpiry,
       expiringSoon: daysUntilExpiry !== undefined && daysUntilExpiry <= 7,
+    };
+  }
+
+  private toPurchaseOrderResponse(
+    order: PurchaseOrderDocument,
+  ): PurchaseOrderResponse {
+    const timestamped = order as PurchaseOrderDocument & {
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
+    const lines = (order.lines ?? []).map((line) => {
+      const expectedUnitCost =
+        line.expectedUnitCost ?? line.unitPriceNet ?? 0;
+      const receivedQuantity = Number(line.receivedQuantity ?? 0);
+      const quantity = Number(line.quantity ?? 0);
+      return {
+        _id: line._id?.toString() ?? '',
+        stockItemId: line.stockItemId,
+        stockItemName: line.stockItemName,
+        quantity,
+        unit: line.unit,
+        expectedUnitCost,
+        unitPriceNet: line.unitPriceNet ?? expectedUnitCost,
+        totalNet: line.totalNet ?? quantity * expectedUnitCost,
+        receivedQuantity,
+        openQuantity: Math.max(0, quantity - receivedQuantity),
+      };
+    });
+
+    return {
+      _id: order._id.toString(),
+      tenantId: order.tenantId,
+      companyId: order.companyId,
+      locationId: order.locationId,
+      supplierId: order.supplierId,
+      supplierName: order.supplierName,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      lines,
+      totalNet: order.totalNet,
+      note: order.note,
+      createdBy: order.createdBy,
+      createdAt: timestamped.createdAt?.toISOString(),
+      updatedAt: timestamped.updatedAt?.toISOString(),
     };
   }
 

@@ -52,4 +52,12 @@ export class ReceiveStockDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  purchaseOrderId?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  purchaseOrderLineId?: string;
 }

@@ -18,6 +18,7 @@ import { User, UserDocument, toUserResponse } from '../users/schemas/user.schema
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantModuleDto } from './dto/update-tenant-module.dto';
 import { UpdateTenantStatusDto } from './dto/update-tenant-status.dto';
+import { UpdateTenantBillingDto } from './dto/update-tenant-billing.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import {
   BillingStatus,
@@ -26,6 +27,12 @@ import {
   TenantDocument,
   TenantStatus,
 } from './schemas/tenant.schema';
+import {
+  getTenantBillingPlan,
+  TENANT_BILLING_PLANS,
+  TenantBillingPlan,
+  TenantPlanKey,
+} from './tenant-plans';
 
 @Injectable()
 export class TenantsService {
@@ -51,10 +58,15 @@ export class TenantsService {
       .exec();
   }
 
+  findPlans() {
+    return Object.values(TENANT_BILLING_PLANS);
+  }
+
   async create(dto: CreateTenantDto, actor: AuthenticatedUser) {
     const slug = this.normalizeSlug(dto.slug);
     const adminEmail = dto.adminEmail.toLowerCase();
     await this.validateStartModules(dto.enabledModules);
+    const plan = this.resolvePlan(dto.planKey ?? 'basic');
 
     if (await this.tenantModel.exists({ slug })) {
       throw new ConflictException('Tenant-Slug existiert bereits');
@@ -67,21 +79,30 @@ export class TenantsService {
     const company = await this.companyModel.create({
       name: dto.name,
       slug,
-      type: dto.planKey ?? 'restaurant-tenant',
+      type: plan.key,
       isActive: dto.status !== TenantStatus.Suspended,
     });
     const tenant = await this.tenantModel.create({
       name: dto.name,
       slug,
       status: dto.status ?? TenantStatus.Trial,
-      planKey: dto.planKey,
+      planKey: plan.key,
+      planName: plan.name,
+      monthlyPriceCents: plan.monthlyPriceCents,
+      currency: plan.currency,
+      maxLocations: plan.maxLocations,
+      maxUsers: plan.maxUsers,
       licenseStatus: dto.licenseStatus ?? LicenseStatus.Trial,
-      billingStatus: dto.billingStatus ?? BillingStatus.Open,
+      billingStatus: dto.billingStatus ?? BillingStatus.Trial,
       licenseValidUntil: this.parseOptionalDate(dto.licenseValidUntil),
       contactEmail: dto.contactEmail?.toLowerCase(),
       contactPhone: dto.contactPhone,
       billingName: dto.billingName,
       billingAddress: dto.billingAddress,
+      billingEmail: dto.billingEmail?.toLowerCase(),
+      billingNotes: dto.billingNotes,
+      contractStartDate: this.parseOptionalDate(dto.contractStartDate, 'Vertragsstart'),
+      contractEndDate: this.parseOptionalDate(dto.contractEndDate, 'Vertragsende'),
       companyId: company._id.toString(),
     });
 
@@ -167,7 +188,7 @@ export class TenantsService {
 
     if (dto.name !== undefined) tenant.name = dto.name;
     if (dto.status !== undefined) tenant.status = dto.status;
-    if (dto.planKey !== undefined) tenant.planKey = dto.planKey;
+    if (dto.planKey !== undefined) this.applyPlan(tenant, dto.planKey);
     if (dto.licenseStatus !== undefined) {
       tenant.licenseStatus = dto.licenseStatus;
     }
@@ -185,6 +206,24 @@ export class TenantsService {
     if (dto.billingAddress !== undefined) {
       tenant.billingAddress = dto.billingAddress;
     }
+    if (dto.billingEmail !== undefined) {
+      tenant.billingEmail = dto.billingEmail?.toLowerCase();
+    }
+    if (dto.billingNotes !== undefined) {
+      tenant.billingNotes = dto.billingNotes;
+    }
+    if (dto.contractStartDate !== undefined) {
+      tenant.contractStartDate = this.parseOptionalDate(
+        dto.contractStartDate,
+        'Vertragsstart',
+      );
+    }
+    if (dto.contractEndDate !== undefined) {
+      tenant.contractEndDate = this.parseOptionalDate(
+        dto.contractEndDate,
+        'Vertragsende',
+      );
+    }
 
     await tenant.save();
     await this.syncCompanyStatus(tenant);
@@ -199,11 +238,96 @@ export class TenantsService {
     return tenant;
   }
 
+  async findBilling(id: string) {
+    const tenant = await this.getTenant(id);
+    return {
+      tenant,
+      plans: this.findPlans(),
+    };
+  }
+
+  async updateBilling(
+    id: string,
+    dto: UpdateTenantBillingDto,
+    actor: AuthenticatedUser,
+  ) {
+    const tenant = await this.getTenant(id);
+    const oldValues = this.pickBillingValues(tenant);
+
+    if (dto.planKey !== undefined) this.applyPlan(tenant, dto.planKey);
+    if (dto.billingStatus !== undefined) tenant.billingStatus = dto.billingStatus;
+    if (dto.billingEmail !== undefined) {
+      tenant.billingEmail = dto.billingEmail?.toLowerCase();
+    }
+    if (dto.billingNotes !== undefined) tenant.billingNotes = dto.billingNotes;
+    if (dto.contractStartDate !== undefined) {
+      tenant.contractStartDate = this.parseOptionalDate(
+        dto.contractStartDate,
+        'Vertragsstart',
+      );
+    }
+    if (dto.contractEndDate !== undefined) {
+      tenant.contractEndDate = this.parseOptionalDate(
+        dto.contractEndDate,
+        'Vertragsende',
+      );
+    }
+
+    await tenant.save();
+    const newValues = this.pickBillingValues(tenant);
+
+    if (oldValues.planKey !== newValues.planKey) {
+      await this.audit(actor, {
+        tenantId: tenant._id.toString(),
+        action: 'tenant.plan_changed',
+        entityType: 'tenant',
+        entityId: tenant._id.toString(),
+        metadata: {
+          oldValues: {
+            planKey: oldValues.planKey,
+            planName: oldValues.planName,
+            monthlyPriceCents: oldValues.monthlyPriceCents,
+            currency: oldValues.currency,
+          },
+          newValues: {
+            planKey: newValues.planKey,
+            planName: newValues.planName,
+            monthlyPriceCents: newValues.monthlyPriceCents,
+            currency: newValues.currency,
+          },
+        },
+      });
+    }
+
+    if (oldValues.billingStatus !== newValues.billingStatus) {
+      await this.audit(actor, {
+        tenantId: tenant._id.toString(),
+        action: 'tenant.billing_status_changed',
+        entityType: 'tenant',
+        entityId: tenant._id.toString(),
+        metadata: {
+          oldValues: { billingStatus: oldValues.billingStatus },
+          newValues: { billingStatus: newValues.billingStatus },
+        },
+      });
+    }
+
+    await this.audit(actor, {
+      tenantId: tenant._id.toString(),
+      action: 'tenant.billing_updated',
+      entityType: 'tenant',
+      entityId: tenant._id.toString(),
+      metadata: { oldValues, newValues },
+    });
+
+    return tenant;
+  }
+
   async softDelete(id: string, actor: AuthenticatedUser) {
     const tenant = await this.getTenant(id);
     tenant.status = TenantStatus.Cancelled;
     tenant.licenseStatus = LicenseStatus.Suspended;
-    tenant.billingStatus = BillingStatus.Blocked;
+    tenant.billingStatus = BillingStatus.Cancelled;
     tenant.deletedAt = new Date();
     await tenant.save();
     await this.syncCompanyStatus(tenant);
@@ -284,11 +408,22 @@ export class TenantsService {
       throw new ForbiddenException('Tenant ist gesperrt oder gekuendigt');
     }
 
-    return tenant;
+    return this.toTenantSelfResponse(tenant);
   }
 
   async getCurrentTenantModules(user: AuthenticatedUser) {
-    const tenant = await this.getCurrentTenant(user);
+    const tenantId = user.tenantId;
+
+    if (!tenantId) {
+      throw new ForbiddenException('Kein Tenant-Kontext vorhanden');
+    }
+
+    const tenant = await this.getTenant(tenantId);
+
+    if (![TenantStatus.Active, TenantStatus.Trial].includes(tenant.status)) {
+      throw new ForbiddenException('Tenant ist gesperrt oder gekuendigt');
+    }
+
     return this.modulesService.findTenantModules(tenant._id.toString());
   }
 
@@ -387,14 +522,64 @@ export class TenantsService {
     return slug.trim().toLowerCase();
   }
 
-  private parseOptionalDate(value?: string): Date | undefined {
+  private applyPlan(tenant: TenantDocument, planKey: TenantPlanKey): void {
+    const plan = this.resolvePlan(planKey);
+    tenant.planKey = plan.key;
+    tenant.planName = plan.name;
+    tenant.monthlyPriceCents = plan.monthlyPriceCents;
+    tenant.currency = plan.currency;
+    tenant.maxLocations = plan.maxLocations;
+    tenant.maxUsers = plan.maxUsers;
+  }
+
+  private resolvePlan(planKey: string): TenantBillingPlan {
+    const plan = getTenantBillingPlan(planKey);
+
+    if (!plan) {
+      throw new BadRequestException('Ungueltiger Tarif');
+    }
+
+    return plan;
+  }
+
+  private pickBillingValues(tenant: TenantDocument): Record<string, unknown> {
+    return {
+      planKey: tenant.planKey,
+      planName: tenant.planName,
+      monthlyPriceCents: tenant.monthlyPriceCents,
+      currency: tenant.currency,
+      billingStatus: tenant.billingStatus,
+      billingEmail: tenant.billingEmail,
+      billingNotes: tenant.billingNotes,
+      contractStartDate: tenant.contractStartDate?.toISOString(),
+      contractEndDate: tenant.contractEndDate?.toISOString(),
+      maxLocations: tenant.maxLocations,
+      maxUsers: tenant.maxUsers,
+    };
+  }
+
+  private toTenantSelfResponse(tenant: TenantDocument) {
+    return {
+      _id: tenant._id,
+      name: tenant.name,
+      slug: tenant.slug,
+      status: tenant.status,
+      contactEmail: tenant.contactEmail,
+      contactPhone: tenant.contactPhone,
+      companyId: tenant.companyId,
+      createdAt: tenant.createdAt,
+      updatedAt: tenant.updatedAt,
+    };
+  }
+
+  private parseOptionalDate(value?: string, label = 'Lizenzdatum'): Date | undefined {
     if (!value?.trim()) {
       return undefined;
     }
 
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) {
-      throw new BadRequestException('Ungueltiges Lizenzdatum');
+      throw new BadRequestException(`Ungueltiges ${label}`);
     }
 
     return date;

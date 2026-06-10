@@ -7,6 +7,8 @@ import {
   MinLength,
 } from 'class-validator';
 import { BillingStatus, LicenseStatus, TenantStatus } from '../schemas/tenant.schema';
+import { TENANT_PLAN_KEYS } from '../tenant-plans';
+import type { TenantPlanKey } from '../tenant-plans';
 
 export class UpdateTenantDto {
   @IsOptional()
@@ -24,8 +26,8 @@ export class UpdateTenantDto {
   status?: TenantStatus;
 
   @IsOptional()
-  @IsString()
-  planKey?: string;
+  @IsIn(TENANT_PLAN_KEYS)
+  planKey?: TenantPlanKey;
 
   @IsOptional()
   @IsIn(Object.values(LicenseStatus))
@@ -54,4 +56,20 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsString()
   billingAddress?: string;
+
+  @IsOptional()
+  @IsEmail()
+  billingEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  billingNotes?: string;
+
+  @IsOptional()
+  @IsString()
+  contractStartDate?: string;
+
+  @IsOptional()
+  @IsString()
+  contractEndDate?: string;
 }

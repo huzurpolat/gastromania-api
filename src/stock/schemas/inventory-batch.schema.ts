@@ -5,6 +5,9 @@ export type InventoryBatchDocument = HydratedDocument<InventoryBatch>;
 
 @Schema({ timestamps: true, versionKey: false })
 export class InventoryBatch {
+  @Prop({ trim: true, index: true })
+  tenantId?: string;
+
   @Prop({ required: true, trim: true, index: true })
   locationId!: string;
 
@@ -61,3 +64,4 @@ InventoryBatchSchema.index({
   receivedAt: 1,
 });
 InventoryBatchSchema.index({ locationId: 1, expiresAt: 1 });
+InventoryBatchSchema.index({ tenantId: 1, locationId: 1, stockItemId: 1 });

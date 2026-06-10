@@ -34,6 +34,7 @@ import {
 } from './dto/inventory-session.dto';
 import { ReceiveStockDto } from './dto/receive-stock.dto';
 import { ReportWasteDto } from './dto/report-waste.dto';
+import { UpdatePurchaseOrderStatusDto } from './dto/update-purchase-order-status.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
 import { StockService } from './stock.service';
 import { StockMovementType } from './schemas/stock-movement.schema';
@@ -396,6 +397,28 @@ export class StockController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.stockService.createPurchaseOrder(payload, user);
+  }
+
+  @Patch('purchase-orders/:id/status')
+  @Permissions('inventory.update')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Lager,
+    Role.Einkauf,
+  )
+  updatePurchaseOrderStatus(
+    @Param('id') id: string,
+    @Body() payload: UpdatePurchaseOrderStatusDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.updatePurchaseOrderStatus(id, payload, user);
   }
 
   @Patch(':id')

@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
 import { ModulesModule } from '../modules/modules.module';
+import { Supplier, SupplierSchema } from '../suppliers/schemas/supplier.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { StockItem, StockItemSchema } from './schemas/stock-item.schema';
 import {
@@ -53,6 +54,7 @@ import { StockService } from './stock.service';
       { name: InventoryCount.name, schema: InventoryCountSchema },
       { name: User.name, schema: UserSchema },
       { name: Location.name, schema: LocationSchema },
+      { name: Supplier.name, schema: SupplierSchema },
     ]),
   ],
   controllers: [StockController],
