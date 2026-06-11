@@ -162,6 +162,9 @@ export class Location {
   @Prop({ type: [String], default: ['EG'] })
   tablePlanFloors!: string[];
 
+  @Prop({ type: Object, default: {} })
+  tablePlanFloorDescriptions!: Record<string, string>;
+
   @Prop({ type: [LocationTablePlanAreaSchema], default: [] })
   tablePlanAreas!: LocationTablePlanArea[];
 

@@ -41,6 +41,10 @@ import {
   CreateTenantLocationDto,
   UpdateTenantLocationDto,
 } from './dto/create-tenant-location.dto';
+import {
+  CreateTablePlanFloorDto,
+  UpdateTablePlanFloorDto,
+} from './dto/table-plan-floor.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import {
   Location,
@@ -456,14 +460,7 @@ export class LocationsService {
     deletedTableCount: number;
     deletedTables: Array<{ id: string; name: string }>;
   }> {
-    this.validateObjectId(id);
-    await this.accessPolicy.assertCanManageLocation(actor, id);
-
-    const location = await this.locationModel.findById(id).exec();
-
-    if (!location) {
-      throw new NotFoundException('Standort nicht gefunden');
-    }
+    const location = await this.getLocationForFloorMutation(id, actor);
 
     const requestedFloorId = floorId?.trim();
 
@@ -510,6 +507,10 @@ export class LocationsService {
         ((object as LocationTablePlanObject & { floor?: string }).floor ?? 'EG')
           .toLowerCase() !== normalizedFloorName,
     );
+    const nextFloorDescriptions = {
+      ...(location.tablePlanFloorDescriptions ?? {}),
+    };
+    delete nextFloorDescriptions[requestedFloorId];
 
     const deleteResult = await this.tableModel.deleteMany(tableFilter).exec();
     const updatedLocation = await this.locationModel
@@ -517,6 +518,7 @@ export class LocationsService {
         locationId,
         {
           tablePlanFloors: nextFloors,
+          tablePlanFloorDescriptions: nextFloorDescriptions,
           tablePlanAreas: nextAreas,
           tablePlanObjects: nextObjects,
         },
@@ -540,6 +542,168 @@ export class LocationsService {
     };
   }
 
+  async createTablePlanFloor(
+    id: string,
+    payload: CreateTablePlanFloorDto,
+    actor: AuthenticatedUser,
+  ): Promise<{
+    location: LocationDocument;
+    floor: { id: string; name: string };
+  }> {
+    const location = await this.getLocationForFloorMutation(id, actor);
+    const locationId = location._id.toString();
+    const name = this.normalizeFloorName(payload.name);
+    const floors = this.normalizeFloors(location.tablePlanFloors);
+
+    this.assertFloorNameAvailable(floors, name);
+
+    const nextFloors = this.insertFloorAtSortOrder(
+      [...floors, name],
+      name,
+      payload.sortOrder,
+    );
+    const description = this.normalizeOptionalFloorDescription(
+      payload.description,
+    );
+    const floorId = this.toFloorId(locationId, name);
+    const updatedLocation = await this.updateLocationFloors(
+      locationId,
+      nextFloors,
+      description ? { [floorId]: description } : undefined,
+    );
+    await this.createStartTablesForNewFloors(updatedLocation, [name]);
+
+    return {
+      location: updatedLocation,
+      floor: { id: floorId, name },
+    };
+  }
+
+  async updateTablePlanFloor(
+    id: string,
+    floorId: string,
+    payload: UpdateTablePlanFloorDto,
+    actor: AuthenticatedUser,
+  ): Promise<{
+    location: LocationDocument;
+    floor: { id: string; name: string };
+    previousFloor: { id: string; name: string };
+  }> {
+    const location = await this.getLocationForFloorMutation(id, actor);
+    const locationId = location._id.toString();
+    const requestedFloorId = floorId?.trim();
+
+    if (!requestedFloorId) {
+      throw new BadRequestException('Etagen-ID ist erforderlich');
+    }
+
+    const floors = this.normalizeFloors(location.tablePlanFloors);
+    const currentName = floors.find(
+      (floor) => this.toFloorId(locationId, floor) === requestedFloorId,
+    );
+
+    if (!currentName) {
+      throw new NotFoundException('Etage nicht gefunden');
+    }
+
+    const nextName =
+      payload.name !== undefined
+        ? this.normalizeFloorName(payload.name)
+        : currentName;
+
+    this.assertFloorNameAvailable(floors, nextName, currentName);
+
+    let nextFloors = floors.map((floor) =>
+      floor.toLowerCase() === currentName.toLowerCase() ? nextName : floor,
+    );
+    nextFloors = this.insertFloorAtSortOrder(
+      nextFloors,
+      nextName,
+      payload.sortOrder,
+    );
+
+    const renamed = nextName.toLowerCase() !== currentName.toLowerCase();
+    const nextFloorId = this.toFloorId(locationId, nextName);
+    const nextFloorDescriptions = {
+      ...(location.tablePlanFloorDescriptions ?? {}),
+    };
+    const currentDescription = nextFloorDescriptions[requestedFloorId];
+    if (renamed) {
+      delete nextFloorDescriptions[requestedFloorId];
+      if (currentDescription) {
+        nextFloorDescriptions[nextFloorId] = currentDescription;
+      }
+    }
+    if (payload.description !== undefined) {
+      const description = this.normalizeOptionalFloorDescription(
+        payload.description,
+      );
+      if (description) {
+        nextFloorDescriptions[nextFloorId] = description;
+      } else {
+        delete nextFloorDescriptions[nextFloorId];
+      }
+    }
+    const nextAreas = renamed
+      ? (location.tablePlanAreas ?? []).map((area) =>
+          (area.floor ?? 'EG').toLowerCase() === currentName.toLowerCase()
+            ? { ...area, floor: nextName }
+            : area,
+        )
+      : location.tablePlanAreas;
+    const nextObjects = renamed
+      ? (location.tablePlanObjects ?? []).map((object) =>
+          (
+            (object as LocationTablePlanObject & { floor?: string }).floor ??
+            'EG'
+          ).toLowerCase() === currentName.toLowerCase()
+            ? { ...object, floor: nextName }
+            : object,
+        )
+      : location.tablePlanObjects;
+
+    if (renamed) {
+      await this.tableModel
+        .updateMany(
+          {
+            locationId,
+            floorId: requestedFloorId,
+            ...(location.tenantId ? { tenantId: location.tenantId } : {}),
+          },
+          {
+            floorId: nextFloorId,
+            floorName: nextName,
+            planFloor: nextName,
+            area: nextName,
+          },
+        )
+        .exec();
+    }
+
+    const updatedLocation = await this.locationModel
+      .findByIdAndUpdate(
+        locationId,
+        {
+          tablePlanFloors: nextFloors,
+          tablePlanFloorDescriptions: nextFloorDescriptions,
+          tablePlanAreas: nextAreas,
+          tablePlanObjects: nextObjects,
+        },
+        { returnDocument: 'after', runValidators: true },
+      )
+      .exec();
+
+    if (!updatedLocation) {
+      throw new NotFoundException('Standort nicht gefunden');
+    }
+
+    return {
+      location: updatedLocation,
+      floor: { id: nextFloorId, name: nextName },
+      previousFloor: { id: requestedFloorId, name: currentName },
+    };
+  }
+
   async remove(
     id: string,
     actor: AuthenticatedUser,
@@ -556,6 +720,139 @@ export class LocationsService {
     }
 
     return deletedLocation;
+  }
+
+  private async getLocationForFloorMutation(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<LocationDocument> {
+    this.validateObjectId(id);
+    this.assertCanMutateTablePlanFloors(actor);
+    await this.accessPolicy.assertCanManageLocation(actor, id);
+
+    const tenantId = actor.tenantId;
+
+    if (!tenantId) {
+      throw new BadRequestException(
+        'Benutzer ohne Tenant-ID duerfen keine Etagen verwalten',
+      );
+    }
+
+    const location = await this.locationModel
+      .findOne({ _id: id, tenantId })
+      .exec();
+
+    if (!location) {
+      throw new NotFoundException('Standort nicht gefunden');
+    }
+
+    return location;
+  }
+
+  private assertCanMutateTablePlanFloors(actor: AuthenticatedUser): void {
+    if (this.isPlatformAdmin(actor)) {
+      throw new ForbiddenException(
+        'Platform Admins duerfen keine operativen Etagen verwalten',
+      );
+    }
+
+    const allowedRoles = [
+      Role.TenantAdmin,
+      Role.TenantAdminCode,
+      Role.RestaurantAdmin,
+      Role.CompanyAdmin,
+      Role.Admin,
+      Role.LocationManager,
+      Role.Filialleiter,
+    ];
+
+    if (!actor.roles?.some((role) => allowedRoles.includes(role as Role))) {
+      throw new ForbiddenException('Keine Berechtigung fuer Etagenverwaltung');
+    }
+  }
+
+  private normalizeFloorName(name: string | undefined): string {
+    const normalized = name?.trim();
+
+    if (!normalized) {
+      throw new BadRequestException('Etagenname ist erforderlich');
+    }
+
+    return normalized;
+  }
+
+  private normalizeOptionalFloorDescription(
+    description: string | undefined,
+  ): string | undefined {
+    const normalized = description?.trim();
+    return normalized || undefined;
+  }
+
+  private assertFloorNameAvailable(
+    floors: string[],
+    name: string,
+    currentName?: string,
+  ): void {
+    const normalizedName = name.toLowerCase();
+    const normalizedCurrentName = currentName?.toLowerCase();
+    const exists = floors.some(
+      (floor) =>
+        floor.toLowerCase() === normalizedName &&
+        floor.toLowerCase() !== normalizedCurrentName,
+    );
+
+    if (exists) {
+      throw new ConflictException('Etagenname existiert bereits');
+    }
+  }
+
+  private insertFloorAtSortOrder(
+    floors: string[],
+    floorName: string,
+    sortOrder: number | undefined,
+  ): string[] {
+    const uniqueFloors = this.normalizeFloors(floors).filter(
+      (floor) => floor.toLowerCase() !== floorName.toLowerCase(),
+    );
+
+    if (sortOrder === undefined) {
+      return [...uniqueFloors, floorName];
+    }
+
+    const safeIndex = Math.min(Math.max(sortOrder, 0), uniqueFloors.length);
+    return [
+      ...uniqueFloors.slice(0, safeIndex),
+      floorName,
+      ...uniqueFloors.slice(safeIndex),
+    ];
+  }
+
+  private async updateLocationFloors(
+    locationId: string,
+    floors: string[],
+    floorDescriptions?: Record<string, string>,
+  ): Promise<LocationDocument> {
+    const payload: Record<string, unknown> = {
+      tablePlanFloors: this.normalizeFloors(floors),
+    };
+
+    if (floorDescriptions) {
+      payload.tablePlanFloorDescriptions = floorDescriptions;
+    }
+
+    const updatedLocation = await this.locationModel
+      .findByIdAndUpdate(
+        locationId,
+        payload,
+        { returnDocument: 'after', runValidators: true },
+      )
+      .exec();
+
+    if (!updatedLocation) {
+      throw new NotFoundException('Standort nicht gefunden');
+    }
+
+    return updatedLocation;
   }
 
   private async ensureTablePlanFloors(

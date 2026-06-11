@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AccessPolicyService } from '../access/access-policy.service';
@@ -59,6 +64,7 @@ describe('LocationsService', () => {
     exists: jest.fn(),
     create: jest.fn(),
     deleteMany: jest.fn(),
+    updateMany: jest.fn(),
   };
   const dependencyModel = () => ({
     countDocuments: jest.fn(() => ({
@@ -162,6 +168,9 @@ describe('LocationsService', () => {
     });
     tableModel.deleteMany.mockReturnValue({
       exec: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+    });
+    tableModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
     });
   });
 
@@ -309,7 +318,7 @@ describe('LocationsService', () => {
       tablePlanObjects: [],
     } as unknown as LocationDocument;
 
-    locationModel.findById.mockReturnValue({
+    locationModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue(scopedLocation),
     });
     tableModel.find.mockReturnValue({
@@ -334,6 +343,10 @@ describe('LocationsService', () => {
       actor,
       location._id.toString(),
     );
+    expect(locationModel.findOne).toHaveBeenCalledWith({
+      _id: location._id.toString(),
+      tenantId: 'tenant-nrw',
+    });
     expect(tableModel.find).toHaveBeenCalledWith({
       locationId: location._id.toString(),
       floorId,
@@ -348,6 +361,7 @@ describe('LocationsService', () => {
       location._id.toString(),
       {
         tablePlanFloors: ['EG'],
+        tablePlanFloorDescriptions: {},
         tablePlanAreas: [scopedLocation.tablePlanAreas[0]],
         tablePlanObjects: [],
       },
@@ -363,6 +377,131 @@ describe('LocationsService', () => {
         { id: 'table-2', name: 'Tisch 2' },
       ],
     });
+  });
+
+  it('creates a table plan floor for a tenant admin', async () => {
+    const scopedLocation = {
+      ...location,
+      tablePlanFloors: ['EG'],
+    } as unknown as LocationDocument;
+    const updatedLocation = {
+      ...scopedLocation,
+      tablePlanFloors: ['EG', 'Terrasse'],
+    } as unknown as LocationDocument;
+
+    locationModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(scopedLocation),
+    });
+    locationModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(updatedLocation),
+    });
+    tableModel.countDocuments.mockResolvedValue(0);
+
+    const result = await service.createTablePlanFloor(
+      location._id.toString(),
+      { name: ' Terrasse ', sortOrder: 1 },
+      { ...actor, roles: ['TenantAdmin'] },
+    );
+
+    expect(locationModel.findOne).toHaveBeenCalledWith({
+      _id: location._id.toString(),
+      tenantId: 'tenant-nrw',
+    });
+    expect(locationModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      location._id.toString(),
+      { tablePlanFloors: ['EG', 'Terrasse'] },
+      { returnDocument: 'after', runValidators: true },
+    );
+    expect(tableModel.create).toHaveBeenCalledTimes(3);
+    expect(result.floor).toEqual({
+      id: `${location._id.toString()}:terrasse`,
+      name: 'Terrasse',
+    });
+  });
+
+  it('renames a table plan floor and scoped tables', async () => {
+    const floorId = `${location._id.toString()}:og`;
+    const scopedLocation = {
+      ...location,
+      tablePlanFloors: ['EG', 'OG'],
+      tablePlanAreas: [{ id: 'area-og', label: 'OG', floor: 'OG' }],
+      tablePlanObjects: [{ id: 'object-og', label: 'OG', floor: 'OG' }],
+    } as unknown as LocationDocument;
+    const updatedLocation = {
+      ...scopedLocation,
+      tablePlanFloors: ['EG', 'Obergeschoss'],
+      tablePlanAreas: [{ id: 'area-og', label: 'OG', floor: 'Obergeschoss' }],
+      tablePlanObjects: [
+        { id: 'object-og', label: 'OG', floor: 'Obergeschoss' },
+      ],
+    } as unknown as LocationDocument;
+
+    locationModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(scopedLocation),
+    });
+    locationModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(updatedLocation),
+    });
+
+    const result = await service.updateTablePlanFloor(
+      location._id.toString(),
+      floorId,
+      { name: 'Obergeschoss', sortOrder: 1 },
+      { ...actor, roles: ['Filialleiter'] },
+    );
+
+    expect(tableModel.updateMany).toHaveBeenCalledWith(
+      {
+        locationId: location._id.toString(),
+        floorId,
+        tenantId: 'tenant-nrw',
+      },
+      {
+        floorId: `${location._id.toString()}:obergeschoss`,
+        floorName: 'Obergeschoss',
+        planFloor: 'Obergeschoss',
+        area: 'Obergeschoss',
+      },
+    );
+    expect(result.previousFloor).toEqual({ id: floorId, name: 'OG' });
+    expect(result.floor).toEqual({
+      id: `${location._id.toString()}:obergeschoss`,
+      name: 'Obergeschoss',
+    });
+  });
+
+  it('rejects duplicate floor names case-insensitively', async () => {
+    const scopedLocation = {
+      ...location,
+      tablePlanFloors: ['EG', 'Terrasse'],
+    } as unknown as LocationDocument;
+
+    locationModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(scopedLocation),
+    });
+
+    await expect(
+      service.createTablePlanFloor(
+        location._id.toString(),
+        { name: 'terrasse' },
+        { ...actor, roles: ['TenantAdmin'] },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('blocks platform admins from operative floor mutations', async () => {
+    await expect(
+      service.createTablePlanFloor(
+        location._id.toString(),
+        { name: 'OG' },
+        {
+          ...actor,
+          roles: ['PlatformAdmin'],
+          tenantId: undefined,
+        } as never,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(accessPolicy.assertCanManageLocation).not.toHaveBeenCalled();
   });
 
   it('rejects tenant locations with mismatched hierarchy', async () => {

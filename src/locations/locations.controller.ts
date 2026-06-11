@@ -20,6 +20,10 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateLocationDto } from './dto/create-location.dto';
+import {
+  CreateTablePlanFloorDto,
+  UpdateTablePlanFloorDto,
+} from './dto/table-plan-floor.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { LocationsService } from './locations.service';
 
@@ -129,15 +133,55 @@ export class LocationsController {
     return this.locationsService.update(id, updateLocationDto, user);
   }
 
+  @Post(':id/floors')
+  @Permissions('locations.update')
+  @Roles(
+    Role.TenantAdmin,
+    Role.TenantAdminCode,
+    Role.RestaurantAdmin,
+    Role.CompanyAdmin,
+    Role.Admin,
+    Role.LocationManager,
+    Role.Filialleiter,
+  )
+  createTablePlanFloor(
+    @Param('id') id: string,
+    @Body() payload: CreateTablePlanFloorDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.locationsService.createTablePlanFloor(id, payload, user);
+  }
+
+  @Patch(':id/floors/:floorId')
+  @Permissions('locations.update')
+  @Roles(
+    Role.TenantAdmin,
+    Role.TenantAdminCode,
+    Role.RestaurantAdmin,
+    Role.CompanyAdmin,
+    Role.Admin,
+    Role.LocationManager,
+    Role.Filialleiter,
+  )
+  updateTablePlanFloor(
+    @Param('id') id: string,
+    @Param('floorId') floorId: string,
+    @Body() payload: UpdateTablePlanFloorDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.locationsService.updateTablePlanFloor(id, floorId, payload, user);
+  }
+
   @Delete(':id/floors')
   @Permissions('locations.update')
   @Roles(
     Role.TenantAdmin,
+    Role.TenantAdminCode,
     Role.RestaurantAdmin,
     Role.CompanyAdmin,
-    Role.RegionAdmin,
     Role.Admin,
-    Role.Regionalleiter,
+    Role.LocationManager,
+    Role.Filialleiter,
   )
   removeTablePlanFloor(
     @Param('id') id: string,
