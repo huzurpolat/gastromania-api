@@ -26,6 +26,10 @@ import {
 } from './schemas/time-entry-break.schema';
 import { TimeEntry, TimeEntrySchema } from './schemas/time-entry.schema';
 import { AuditLog, AuditLogSchema } from '../audit-logs/schemas/audit-log.schema';
+import {
+  Department,
+  DepartmentSchema,
+} from '../departments/schemas/department.schema';
 import { TimeTrackingController } from './time-tracking.controller';
 import { TimeTrackingService } from './time-tracking.service';
 
@@ -39,6 +43,7 @@ import { TimeTrackingService } from './time-tracking.service';
       { name: TimeCorrection.name, schema: TimeCorrectionSchema },
       { name: AuditLog.name, schema: AuditLogSchema },
       { name: Location.name, schema: LocationSchema },
+      { name: Department.name, schema: DepartmentSchema },
       { name: User.name, schema: UserSchema },
       {
         name: UserLocationAssignment.name,

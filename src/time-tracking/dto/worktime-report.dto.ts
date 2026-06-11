@@ -7,7 +7,11 @@ const optionalTrim = (value: unknown): unknown => {
   return trimmed || undefined;
 };
 
-export type WorktimeReportGroupBy = 'employee' | 'location' | 'day';
+export type WorktimeReportGroupBy =
+  | 'employee'
+  | 'location'
+  | 'day'
+  | 'department';
 
 export class WorktimeReportQueryDto {
   @IsISO8601()
@@ -28,6 +32,11 @@ export class WorktimeReportQueryDto {
 
   @Transform(({ value }) => optionalTrim(value))
   @IsOptional()
-  @IsIn(['employee', 'location', 'day'])
+  @IsString()
+  departmentId?: string;
+
+  @Transform(({ value }) => optionalTrim(value))
+  @IsOptional()
+  @IsIn(['employee', 'location', 'day', 'department'])
   groupBy?: WorktimeReportGroupBy;
 }

@@ -7,6 +7,7 @@ const tenantId = '6a2200000000000000000001';
 const locationId = '6a2200000000000000000002';
 const employeeId = '6a2200000000000000000003';
 const shiftId = '6a2200000000000000000004';
+const departmentId = '6a2200000000000000000006';
 
 const execResolved = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
 const sortedExecResolved = <T>(value: T) => ({
@@ -24,6 +25,7 @@ describe('TimeTrackingService', () => {
   let correctionModel: any;
   let auditLogModel: any;
   let locationModel: any;
+  let departmentModel: any;
   let userModel: any;
   let assignmentModel: any;
   let shiftModel: any;
@@ -92,6 +94,24 @@ describe('TimeTrackingService', () => {
       findById: jest.fn().mockReturnValue(execResolved(location)),
       find: jest.fn().mockReturnValue(execResolved([location])),
     };
+    departmentModel = {
+      findOne: jest.fn().mockReturnValue(
+        execResolved({
+          _id: { toString: () => departmentId },
+          tenantId,
+          name: 'Service',
+        }),
+      ),
+      find: jest.fn().mockReturnValue(
+        execResolved([
+          {
+            _id: { toString: () => departmentId },
+            tenantId,
+            name: 'Service',
+          },
+        ]),
+      ),
+    };
     userModel = {
       findById: jest.fn().mockReturnValue(execResolved(employee)),
       find: jest.fn().mockReturnValue(execResolved([employee])),
@@ -139,6 +159,7 @@ describe('TimeTrackingService', () => {
       correctionModel,
       auditLogModel,
       locationModel,
+      departmentModel,
       userModel,
       assignmentModel,
       shiftModel,
@@ -403,5 +424,132 @@ describe('TimeTrackingService', () => {
         plannedMinutes: 480,
       }),
     );
+  });
+
+  it('filters the worktime report by department using departmentIds', async () => {
+    accessPolicy.isManagementRole.mockReturnValue(true);
+    accessPolicy.getScopedResourceFilter.mockResolvedValue({});
+    const departmentEmployee = {
+      ...employee,
+      firstName: 'Max',
+      lastName: 'Service',
+      departmentIds: [departmentId],
+    };
+    userModel.find
+      .mockReturnValueOnce(execResolved([departmentEmployee]))
+      .mockReturnValueOnce(execResolved([departmentEmployee]));
+    shiftModel.find.mockReturnValue(execResolved([]));
+    timeEntryModel.find.mockReturnValue(execResolved([]));
+    absenceModel.find.mockReturnValue(execResolved([]));
+
+    const report = await service.getWorktimeReport(
+      { ...actor, roles: ['TENANT_ADMIN'] },
+      {
+        dateFrom: '2026-06-01',
+        dateTo: '2026-06-30',
+        departmentId,
+        groupBy: 'employee',
+      },
+    );
+
+    expect(departmentModel.findOne).toHaveBeenCalledWith({
+      _id: departmentId,
+      tenantId,
+    });
+    expect(shiftModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assignedUserIds: { $in: [employeeId] },
+      }),
+    );
+    expect(timeEntryModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        employeeId: { $in: [employeeId] },
+      }),
+    );
+    expect(report.items).toEqual([]);
+  });
+
+  it('groups the worktime report by department', async () => {
+    accessPolicy.isManagementRole.mockReturnValue(true);
+    accessPolicy.getScopedResourceFilter.mockResolvedValue({});
+    userModel.find.mockReturnValue(
+      execResolved([
+        {
+          ...employee,
+          firstName: 'Max',
+          lastName: 'Service',
+          departmentIds: [departmentId],
+        },
+      ]),
+    );
+    shiftModel.find.mockReturnValue(
+      execResolved([
+        {
+          tenantId,
+          locationId,
+          assignedUserIds: [employeeId],
+          status: 'published',
+          startTime: new Date('2026-06-08T08:00:00.000Z'),
+          endTime: new Date('2026-06-08T16:00:00.000Z'),
+        },
+      ]),
+    );
+    timeEntryModel.find.mockReturnValue(
+      execResolved([
+        {
+          tenantId,
+          locationId,
+          employeeId,
+          status: TimeEntryStatus.Closed,
+          clockIn: new Date('2026-06-08T08:00:00.000Z'),
+          clockOut: new Date('2026-06-08T16:00:00.000Z'),
+          durationMinutes: 480,
+          breakMinutes: 30,
+          netDurationMinutes: 450,
+        },
+      ]),
+    );
+    absenceModel.find.mockReturnValue(execResolved([]));
+
+    const report = await service.getWorktimeReport(
+      { ...actor, roles: ['TENANT_ADMIN'] },
+      {
+        dateFrom: '2026-06-01',
+        dateTo: '2026-06-30',
+        groupBy: 'department',
+      },
+    );
+
+    expect(report.items).toHaveLength(1);
+    expect(report.items[0]).toEqual(
+      expect.objectContaining({
+        departmentId,
+        departmentName: 'Service',
+        employeeCount: 1,
+        plannedMinutes: 480,
+        grossMinutes: 480,
+        breakMinutes: 30,
+        netMinutes: 450,
+        varianceMinutes: -30,
+      }),
+    );
+  });
+
+  it('blocks cross-tenant department filters', async () => {
+    accessPolicy.isManagementRole.mockReturnValue(true);
+    accessPolicy.getScopedResourceFilter.mockResolvedValue({});
+    departmentModel.findOne.mockReturnValue(execResolved(null));
+
+    await expect(
+      service.getWorktimeReport(
+        { ...actor, roles: ['TENANT_ADMIN'] },
+        {
+          dateFrom: '2026-06-01',
+          dateTo: '2026-06-30',
+          departmentId,
+          groupBy: 'department',
+        },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

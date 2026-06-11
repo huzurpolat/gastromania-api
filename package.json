@@ -21,6 +21,8 @@
     "verify:tenant-modules": "node dist/tenants/verify-tenant-modules.js",
     "verify:tenant-billing": "node dist/tenants/verify-tenant-billing.js",
     "verify:departments": "jest --runInBand departments.service.spec.ts",
+    "verify:staff-planning": "jest --runInBand staff-planning.service.spec.ts",
+    "verify:worktime-departments": "jest --runInBand time-tracking.service.spec.ts",
     "ensure:platform-admin": "node dist/users/ensure-platform-admin.js",
     "verify:platform-users": "jest --runInBand users.service.spec.ts",
     "verify:tenant-users": "jest --runInBand users.service.spec.ts",

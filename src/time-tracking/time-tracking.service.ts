@@ -10,6 +10,10 @@ import { AccessPolicyService } from '../access/access-policy.service';
 import { AuditLog, AuditLogDocument } from '../audit-logs/schemas/audit-log.schema';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
+  Department,
+  DepartmentDocument,
+} from '../departments/schemas/department.schema';
+import {
   Location,
   LocationDocument,
 } from '../locations/schemas/location.schema';
@@ -64,7 +68,9 @@ interface ReportPeriod {
 interface WorktimeScope {
   locationId?: string;
   employeeId?: string;
+  departmentId?: string;
   locationIds?: string[];
+  employeeIds?: string[];
 }
 
 export interface WorktimeReportTotals {
@@ -83,6 +89,9 @@ export interface WorktimeReportItem extends WorktimeReportTotals {
   groupKey: string;
   employeeId?: string;
   employeeName?: string;
+  departmentId?: string;
+  departmentName?: string;
+  employeeCount?: number;
   locationId?: string;
   locationName?: string;
   date?: string;
@@ -101,6 +110,8 @@ export class TimeTrackingService {
     private readonly auditLogModel: Model<AuditLogDocument>,
     @InjectModel(Location.name)
     private readonly locationModel: Model<LocationDocument>,
+    @InjectModel(Department.name)
+    private readonly departmentModel: Model<DepartmentDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     @InjectModel(UserLocationAssignment.name)
@@ -338,32 +349,85 @@ export class TimeTrackingService {
       this.findLocationsByIds([...locationIds]),
     ]);
     const employeeMap = new Map(
-      employees.map((user) => [user._id.toString(), this.getUserName(user)]),
+      employees.map((user) => [
+        user._id.toString(),
+        {
+          name: this.getUserName(user),
+          departmentIds: this.getUserDepartmentIds(user),
+        },
+      ]),
+    );
+    const reportDepartmentIds = new Set<string>();
+    if (scoped.departmentId) reportDepartmentIds.add(scoped.departmentId);
+    for (const employee of employees) {
+      this.getUserDepartmentIds(employee).forEach((id) =>
+        reportDepartmentIds.add(id),
+      );
+    }
+    const departments = await this.findDepartmentsByIds(
+      actor.tenantId,
+      [...reportDepartmentIds],
+    );
+    const departmentMap = new Map(
+      departments.map((department) => [
+        department._id.toString(),
+        department.name,
+      ]),
     );
     const locationMap = new Map(
       locations.map((location) => [location._id.toString(), location.name]),
     );
     const itemMap = new Map<string, WorktimeReportItem>();
+    const departmentEmployeeMap = new Map<string, Set<string>>();
 
     const getItem = (payload: {
       employeeId?: string;
+      departmentId?: string;
       locationId?: string;
       date?: string;
     }) => {
-      const key = this.reportGroupKey(groupBy, payload);
+      const reportPayload = {
+        ...payload,
+        departmentId:
+          payload.departmentId ??
+          this.getReportDepartmentId(
+            payload.employeeId,
+            employeeMap,
+            scoped.departmentId,
+          ),
+      };
+      const key = this.reportGroupKey(groupBy, reportPayload);
+      if (groupBy === 'department' && reportPayload.employeeId) {
+        const employeesForDepartment =
+          departmentEmployeeMap.get(key) ?? new Set<string>();
+        employeesForDepartment.add(reportPayload.employeeId);
+        departmentEmployeeMap.set(key, employeesForDepartment);
+      }
       const existing = itemMap.get(key);
       if (existing) return existing;
+      const departmentId =
+        reportPayload.departmentId && reportPayload.departmentId !== 'no-department'
+          ? reportPayload.departmentId
+          : undefined;
       const item: WorktimeReportItem = {
         groupKey: key,
-        employeeId: payload.employeeId,
-        employeeName: payload.employeeId
-          ? employeeMap.get(payload.employeeId) ?? payload.employeeId
+        employeeId: reportPayload.employeeId,
+        employeeName: reportPayload.employeeId
+          ? employeeMap.get(reportPayload.employeeId)?.name ??
+            reportPayload.employeeId
           : undefined,
-        locationId: payload.locationId,
-        locationName: payload.locationId
-          ? locationMap.get(payload.locationId) ?? payload.locationId
+        departmentId,
+        departmentName:
+          groupBy === 'department'
+            ? departmentId
+              ? departmentMap.get(departmentId) ?? departmentId
+              : 'Ohne Abteilung'
+            : undefined,
+        locationId: reportPayload.locationId,
+        locationName: reportPayload.locationId
+          ? locationMap.get(reportPayload.locationId) ?? reportPayload.locationId
           : undefined,
-        date: payload.date,
+        date: reportPayload.date,
         plannedMinutes: 0,
         grossMinutes: 0,
         breakMinutes: 0,
@@ -378,10 +442,15 @@ export class TimeTrackingService {
       return item;
     };
 
+    const scopedEmployeeIds = scoped.employeeIds
+      ? new Set(scoped.employeeIds)
+      : undefined;
+
     for (const shift of shifts) {
       const minutes = this.minutesBetween(shift.startTime, shift.endTime);
       for (const employeeId of shift.assignedUserIds ?? []) {
         if (scoped.employeeId && employeeId !== scoped.employeeId) continue;
+        if (scopedEmployeeIds && !scopedEmployeeIds.has(employeeId)) continue;
         const item = getItem({
           employeeId,
           locationId: shift.locationId,
@@ -413,6 +482,10 @@ export class TimeTrackingService {
     const items = [...itemMap.values()]
       .map((item) => ({
         ...item,
+        employeeCount:
+          groupBy === 'department'
+            ? departmentEmployeeMap.get(item.groupKey)?.size ?? 0
+            : item.employeeCount,
         varianceMinutes: item.netMinutes - item.plannedMinutes,
       }))
       .sort((a, b) => this.sortReportItems(a, b, groupBy));
@@ -811,6 +884,24 @@ export class TimeTrackingService {
       scope.employeeId = actor.sub;
     }
 
+    if (query.departmentId) {
+      this.validateObjectId(query.departmentId);
+      await this.assertDepartmentInTenant(actor, query.departmentId);
+      scope.departmentId = query.departmentId;
+      const departmentEmployeeIds = await this.findDepartmentEmployeeIds(
+        actor,
+        query.departmentId,
+      );
+
+      if (scope.employeeId) {
+        scope.employeeIds = departmentEmployeeIds.includes(scope.employeeId)
+          ? [scope.employeeId]
+          : [];
+      } else {
+        scope.employeeIds = departmentEmployeeIds;
+      }
+    }
+
     return scope;
   }
 
@@ -819,6 +910,7 @@ export class TimeTrackingService {
     period: ReportPeriod,
     scope: WorktimeScope,
   ): Promise<StaffShiftDocument[]> {
+    if (scope.employeeIds && !scope.employeeIds.length) return [];
     const query: Record<string, unknown> = {
       tenantId: actor.tenantId,
       status: { $nin: [StaffShiftStatus.Cancelled] },
@@ -827,6 +919,7 @@ export class TimeTrackingService {
     };
     this.applyReportLocationScope(query, scope);
     if (scope.employeeId) query.assignedUserIds = scope.employeeId;
+    else if (scope.employeeIds) query.assignedUserIds = { $in: scope.employeeIds };
 
     return this.shiftModel.find(query).exec();
   }
@@ -836,6 +929,7 @@ export class TimeTrackingService {
     period: ReportPeriod,
     scope: WorktimeScope,
   ): Promise<TimeEntryDocument[]> {
+    if (scope.employeeIds && !scope.employeeIds.length) return [];
     const query: Record<string, unknown> = {
       tenantId: actor.tenantId,
       status: { $in: [TimeEntryStatus.Closed, TimeEntryStatus.Corrected] },
@@ -843,6 +937,7 @@ export class TimeTrackingService {
     };
     this.applyReportLocationScope(query, scope);
     if (scope.employeeId) query.employeeId = scope.employeeId;
+    else if (scope.employeeIds) query.employeeId = { $in: scope.employeeIds };
 
     return this.timeEntryModel.find(query).exec();
   }
@@ -852,6 +947,7 @@ export class TimeTrackingService {
     period: ReportPeriod,
     scope: WorktimeScope,
   ): Promise<StaffAbsenceDocument[]> {
+    if (scope.employeeIds && !scope.employeeIds.length) return [];
     const query: Record<string, unknown> = {
       tenantId: actor.tenantId,
       status: StaffAbsenceStatus.Approved,
@@ -860,6 +956,11 @@ export class TimeTrackingService {
     };
     if (scope.employeeId) {
       query.$or = [{ employeeId: scope.employeeId }, { userId: scope.employeeId }];
+    } else if (scope.employeeIds) {
+      query.$or = [
+        { employeeId: { $in: scope.employeeIds } },
+        { userId: { $in: scope.employeeIds } },
+      ];
     }
     if (scope.locationId) {
       query.locationId = scope.locationId;
@@ -891,16 +992,85 @@ export class TimeTrackingService {
     return this.locationModel.find({ _id: { $in: ids } }).exec();
   }
 
+  private async findDepartmentsByIds(
+    tenantId: string | undefined,
+    ids: string[],
+  ): Promise<DepartmentDocument[]> {
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    if (!tenantId || !uniqueIds.length) return [];
+    return this.departmentModel
+      .find({ _id: { $in: uniqueIds }, tenantId })
+      .exec();
+  }
+
+  private async assertDepartmentInTenant(
+    actor: AuthenticatedUser,
+    departmentId: string,
+  ): Promise<void> {
+    const department = await this.departmentModel
+      .findOne({ _id: departmentId, tenantId: actor.tenantId })
+      .exec();
+
+    if (!department) {
+      throw new BadRequestException('Abteilung nicht gefunden');
+    }
+  }
+
+  private async findDepartmentEmployeeIds(
+    actor: AuthenticatedUser,
+    departmentId: string,
+  ): Promise<string[]> {
+    const users = await this.userModel
+      .find({
+        tenantId: actor.tenantId,
+        $or: [{ departmentId }, { departmentIds: departmentId }],
+      })
+      .exec();
+
+    return users.map((user) => user._id.toString());
+  }
+
   private getUserName(user: UserDocument): string {
     const firstName = 'firstName' in user ? user.firstName : undefined;
     const lastName = 'lastName' in user ? user.lastName : undefined;
     return [firstName, lastName].filter(Boolean).join(' ') || user.email;
   }
 
+  private getUserDepartmentIds(user: UserDocument): string[] {
+    const departmentId = (user as { departmentId?: string }).departmentId;
+    const departmentIds = (user as { departmentIds?: string[] }).departmentIds ?? [];
+    const ids = [departmentId, ...departmentIds].filter(
+      (value): value is string => typeof value === 'string' && value.length > 0,
+    );
+    return [...new Set(ids)];
+  }
+
+  private getReportDepartmentId(
+    employeeId: string | undefined,
+    employeeMap: Map<string, { name: string; departmentIds: string[] }>,
+    scopedDepartmentId?: string,
+  ): string {
+    const departmentIds = employeeId
+      ? employeeMap.get(employeeId)?.departmentIds ?? []
+      : [];
+    if (scopedDepartmentId && departmentIds.includes(scopedDepartmentId)) {
+      return scopedDepartmentId;
+    }
+    return departmentIds[0] ?? scopedDepartmentId ?? 'no-department';
+  }
+
   private reportGroupKey(
     groupBy: WorktimeReportGroupBy,
-    payload: { employeeId?: string; locationId?: string; date?: string },
+    payload: {
+      employeeId?: string;
+      departmentId?: string;
+      locationId?: string;
+      date?: string;
+    },
   ): string {
+    if (groupBy === 'department') {
+      return payload.departmentId ?? 'no-department';
+    }
     if (groupBy === 'location') return payload.locationId ?? 'no-location';
     if (groupBy === 'day') return payload.date ?? 'no-date';
     return payload.employeeId ?? 'no-employee';
@@ -1056,6 +1226,11 @@ export class TimeTrackingService {
     if (groupBy === 'location') {
       return (a.locationName ?? a.locationId ?? '').localeCompare(
         b.locationName ?? b.locationId ?? '',
+      );
+    }
+    if (groupBy === 'department') {
+      return (a.departmentName ?? a.departmentId ?? '').localeCompare(
+        b.departmentName ?? b.departmentId ?? '',
       );
     }
     return (a.employeeName ?? a.employeeId ?? '').localeCompare(

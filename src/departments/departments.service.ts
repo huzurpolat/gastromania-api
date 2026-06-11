@@ -2,7 +2,9 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -42,7 +44,9 @@ const DEFAULT_TENANT_DEPARTMENTS = [
 ];
 
 @Injectable()
-export class DepartmentsService {
+export class DepartmentsService implements OnModuleInit {
+  private readonly logger = new Logger(DepartmentsService.name);
+
   constructor(
     @InjectModel(Department.name)
     private readonly departmentModel: Model<DepartmentDocument>,
@@ -52,6 +56,10 @@ export class DepartmentsService {
     private readonly auditLogModel: Model<AuditLogDocument>,
     private readonly accessPolicy: AccessPolicyService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.dropLegacyLocationNameIndex();
+  }
 
   async create(
     dto: CreateDepartmentDto,
@@ -435,6 +443,25 @@ export class DepartmentsService {
 
   private normalizeName(value: string): string {
     return value.trim().toLowerCase();
+  }
+
+  private async dropLegacyLocationNameIndex(): Promise<void> {
+    try {
+      await this.departmentModel.collection.dropIndex('locationId_1_name_1');
+      this.logger.log(
+        'Legacy department index locationId_1_name_1 entfernt; Tenant-Abteilungen koennen Namen tenantweit wiederverwenden.',
+      );
+    } catch (error) {
+      const code = (error as { code?: number }).code;
+      if (code === 27) {
+        return;
+      }
+      this.logger.warn(
+        `Legacy department index locationId_1_name_1 konnte nicht entfernt werden: ${
+          (error as Error).message
+        }`,
+      );
+    }
   }
 
   private async audit(

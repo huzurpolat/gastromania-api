@@ -47,6 +47,9 @@ describe('DepartmentsService tenant departments', () => {
       findById: jest.fn(),
       findOneAndUpdate: jest.fn(),
       updateOne: jest.fn(() => execResult({ acknowledged: true })),
+      collection: {
+        dropIndex: jest.fn().mockResolvedValue({ ok: 1 }),
+      },
     };
     const userModel = {
       aggregate: jest.fn(() => execResult([{ _id: 'dep-service', count: 2 }])),

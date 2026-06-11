@@ -142,6 +142,11 @@ describe('StaffPlanningService', () => {
     shiftModel.countDocuments.mockReturnValue({
       exec: jest.fn().mockResolvedValue(0),
     });
+    shiftModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([]),
+      }),
+    });
     absenceModel.exists.mockResolvedValue(null);
     shiftModel.create.mockImplementation((payload: Record<string, unknown>) =>
       Promise.resolve({
@@ -304,6 +309,98 @@ describe('StaffPlanningService', () => {
         actor,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('allows assignment when the employee has the required leading department', async () => {
+    const departmentId = 'dept-service';
+    userModel.findById.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue({
+        ...employee,
+        departmentId,
+        departmentIds: [],
+      }),
+    });
+
+    await service.createShift(
+      {
+        locationId,
+        departmentId,
+        roleNeeded: Role.Service,
+        title: 'Service Frueh',
+        startTime: '2026-06-08T08:00:00.000Z',
+        endTime: '2026-06-08T14:00:00.000Z',
+        requiredStaffCount: 1,
+        assignedUserIds: [userId],
+      },
+      actor,
+    );
+
+    expect(shiftModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ departmentId }),
+    );
+  });
+
+  it('rejects assignment when the employee belongs to another department', async () => {
+    userModel.findById.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue({
+        ...employee,
+        departmentId: 'dept-kitchen',
+        departmentIds: [],
+      }),
+    });
+
+    await expect(
+      service.createShift(
+        {
+          locationId,
+          departmentId: 'dept-service',
+          roleNeeded: Role.Service,
+          title: 'Service Frueh',
+          startTime: '2026-06-08T08:00:00.000Z',
+          endTime: '2026-06-08T14:00:00.000Z',
+          requiredStaffCount: 1,
+          assignedUserIds: [userId],
+        },
+        actor,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('filters shifts by shift department and employees in that department', async () => {
+    const departmentId = 'dept-service';
+
+    await service.findShifts(actor, {
+      locationId,
+      departmentId,
+      start: '2026-06-08T00:00:00.000Z',
+      end: '2026-06-15T00:00:00.000Z',
+    });
+
+    expect(userModel.find).toHaveBeenCalledWith({
+      $and: [
+        { locationIds: locationId },
+        {
+          $or: [{ departmentId }, { departmentIds: departmentId }],
+        },
+      ],
+    });
+    expect(shiftModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        $and: [
+          { locationId },
+          {
+            $or: [
+              { departmentId },
+              { assignedUserIds: { $in: [userId] } },
+            ],
+          },
+        ],
+        startTime: {
+          $gte: new Date('2026-06-08T00:00:00.000Z'),
+          $lt: new Date('2026-06-15T00:00:00.000Z'),
+        },
+      }),
+    );
   });
 
   it('blocks assignment during approved vacation or sickness', async () => {

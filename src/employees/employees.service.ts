@@ -52,7 +52,13 @@ export class EmployeesService {
         user.locationAssignments
           ?.map((assignment) => assignment.role)
           .filter((role): role is string => Boolean(role)) ?? [];
-      const departmentIds = user.departmentIds ?? [];
+      const departmentIds = [
+        ...new Set(
+          [user.departmentId, ...(user.departmentIds ?? [])].filter(
+            (id): id is string => Boolean(id),
+          ),
+        ),
+      ];
       const qualifications = user.qualifications ?? [];
       const searchable = [
         user.employeeNumber,

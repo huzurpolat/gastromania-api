@@ -1139,7 +1139,21 @@ export class StaffPlanningService {
     if (!this.isStaffManager(actor) || filters.mine) {
       query.assignedUserIds = actor.sub;
     }
-    if (filters.departmentId) query.departmentId = filters.departmentId;
+    if (filters.departmentId) {
+      const departmentUserIds = await this.getManageableUserIds(
+        actor,
+        filters.departmentId,
+      );
+      const departmentQuery: Record<string, unknown> = {
+        $or: [
+          { departmentId: filters.departmentId },
+          ...(departmentUserIds.length
+            ? [{ assignedUserIds: { $in: departmentUserIds } }]
+            : []),
+        ],
+      };
+      query = { $and: [query, departmentQuery] };
+    }
     if (filters.roleNeeded) query.roleNeeded = filters.roleNeeded;
     if (filters.status) query.status = filters.status;
     if (filters.start || filters.end) {
@@ -1197,10 +1211,11 @@ export class StaffPlanningService {
         'Mitarbeiter ist diesem Standort nicht zugewiesen',
       );
     }
+    const userDepartmentIds = this.getUserDepartmentIds(user);
     if (
       options.departmentId &&
-      user.departmentIds?.length &&
-      !user.departmentIds.includes(options.departmentId)
+      userDepartmentIds.length &&
+      !userDepartmentIds.includes(options.departmentId)
     ) {
       throw new BadRequestException(
         'Mitarbeiter gehoert nicht zum benoetigten Department',
@@ -1319,10 +1334,37 @@ export class StaffPlanningService {
 
   private async getManageableUserIds(
     actor: AuthenticatedUser,
+    departmentId?: string,
   ): Promise<string[]> {
-    const query = await this.accessPolicy.getManageableUsersFilter(actor);
+    const manageableFilter = await this.accessPolicy.getManageableUsersFilter(actor);
+    const query = departmentId
+      ? {
+          $and: [
+            manageableFilter,
+            {
+              $or: [
+                { departmentId },
+                { departmentIds: departmentId },
+              ],
+            },
+          ],
+        }
+      : manageableFilter;
     const users = await this.userModel.find(query).select('_id').exec();
     return users.map((user) => user._id.toString());
+  }
+
+  private getUserDepartmentIds(user: {
+    departmentId?: string;
+    departmentIds?: string[];
+  }): string[] {
+    return [
+      ...new Set(
+        [user.departmentId, ...(user.departmentIds ?? [])].filter(
+          (id): id is string => Boolean(id),
+        ),
+      ),
+    ];
   }
 
   private async getLocationOrThrow(locationId: string) {
