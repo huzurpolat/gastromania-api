@@ -24,6 +24,7 @@
     "verify:cogs": "node dist/reports/verify-cogs.js",
     "verify:recipes": "node dist/recipes/verify-recipes.js",
     "verify:procurement": "node dist/stock/verify-procurement.js",
+    "verify:menu-extras": "jest --runInBand orders.service.spec.ts counter-order.service.spec.ts kds.service.spec.ts qr-orders.service.spec.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

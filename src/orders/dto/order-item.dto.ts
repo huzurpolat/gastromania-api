@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import {
   CourseType,
@@ -32,6 +33,26 @@ const stringArray = (value: unknown): string[] | undefined => {
     .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
     .filter(Boolean);
 };
+
+export class SelectedOrderItemExtraDto {
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsString()
+  extraId!: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber()
+  priceDelta?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  sendToKitchen?: boolean;
+}
 
 export class OrderItemDto {
   @Transform(({ value }) => optionalTrimString(value))
@@ -90,6 +111,18 @@ export class OrderItemDto {
   @IsArray()
   @IsString({ each: true })
   allergens?: string[];
+
+  @Transform(({ value }) => stringArray(value))
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  selectedExtraIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SelectedOrderItemExtraDto)
+  selectedExtras?: SelectedOrderItemExtraDto[];
 
   @Transform(({ value }) => optionalTrimString(value))
   @IsOptional()

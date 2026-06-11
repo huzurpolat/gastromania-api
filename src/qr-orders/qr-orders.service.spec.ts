@@ -65,6 +65,16 @@ describe('QrOrdersService', () => {
     isVegan: false,
     containsNuts: false,
     isActive: true,
+    extras: [
+      {
+        id: 'extra-cheese',
+        name: 'Extra Kaese',
+        priceDelta: 1.5,
+        isAvailable: true,
+        sendToKitchen: true,
+        sortOrder: 1,
+      },
+    ],
   };
   const tableModel = {
     findOne: jest.fn(),
@@ -161,6 +171,15 @@ describe('QrOrdersService', () => {
         name: 'Cheeseburger',
         price: 14,
         available: true,
+        extras: [
+          {
+            id: 'extra-cheese',
+            name: 'Extra Kaese',
+            priceDelta: 1.5,
+            sendToKitchen: true,
+            sortOrder: 1,
+          },
+        ],
       }),
     ]);
     expect(result.menu.items[0]).not.toHaveProperty('recipeId');
@@ -189,7 +208,14 @@ describe('QrOrdersService', () => {
       {
         customerName: 'Gast',
         guestNote: 'Bitte schnell',
-        items: [{ menuItemId, quantity: 2, note: 'ohne Zwiebeln' }],
+        items: [
+          {
+            menuItemId,
+            quantity: 2,
+            note: 'ohne Zwiebeln',
+            selectedExtraIds: ['extra-cheese'],
+          },
+        ],
       },
       { userAgent: 'jest' },
     );
@@ -204,15 +230,29 @@ describe('QrOrdersService', () => {
         source: OrderSource.Qr,
         status: OrderStatus.New,
         customerName: 'Gast',
-        total: 28,
+        total: 31,
         qrTokenId: token,
+        items: [
+          expect.objectContaining({
+            price: 15.5,
+            totalPrice: 31,
+            selectedExtras: [
+              {
+                extraId: 'extra-cheese',
+                name: 'Extra Kaese',
+                priceDelta: 1.5,
+                sendToKitchen: true,
+              },
+            ],
+          }),
+        ],
       }),
     );
     expect(tableModel.findByIdAndUpdate).toHaveBeenCalledWith(
       table._id,
       expect.objectContaining({
         status: TableStatus.Ordering,
-        currentTotal: 28,
+        currentTotal: 31,
       }),
       { returnDocument: 'after' },
     );

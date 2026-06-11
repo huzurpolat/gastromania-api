@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
 import { ModulesModule } from '../modules/modules.module';
+import { MenuItem, MenuItemSchema } from '../menu-items/schemas/menu-item.schema';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { Recipe, RecipeSchema } from '../recipes/schemas/recipe.schema';
@@ -43,6 +44,7 @@ import { OrdersService } from './orders.service';
     ModulesModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
+      { name: MenuItem.name, schema: MenuItemSchema },
       { name: Location.name, schema: LocationSchema },
       { name: Recipe.name, schema: RecipeSchema },
       { name: StockItem.name, schema: StockItemSchema },

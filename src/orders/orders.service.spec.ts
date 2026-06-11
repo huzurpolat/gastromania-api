@@ -8,6 +8,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RestaurantTable, TableStatus } from '../tables/schemas/table.schema';
 import { TableStatusLog } from '../tables/schemas/table-status-log.schema';
 import { KdsStatusLog } from '../kds/schemas/kds-status-log.schema';
+import { MenuItem } from '../menu-items/schemas/menu-item.schema';
 import { OrdersService } from './orders.service';
 import {
   Order,
@@ -26,6 +27,9 @@ describe('OrdersService', () => {
     countDocuments: jest.fn(),
     findById: jest.fn(),
     findByIdAndUpdate: jest.fn(),
+    find: jest.fn(),
+  };
+  const menuItemModel = {
     find: jest.fn(),
   };
   const logModel = {
@@ -87,6 +91,9 @@ describe('OrdersService', () => {
         ]),
       }),
     });
+    menuItemModel.find.mockReturnValue({
+      exec: jest.fn().mockResolvedValue([]),
+    });
     tableModel.findById.mockReturnValue({
       exec: jest.fn().mockResolvedValue({
         _id: { toString: () => tableId },
@@ -135,6 +142,7 @@ describe('OrdersService', () => {
       providers: [
         OrdersService,
         { provide: getModelToken(Order.name), useValue: orderModel },
+        { provide: getModelToken(MenuItem.name), useValue: menuItemModel },
         { provide: getModelToken(RestaurantTable.name), useValue: tableModel },
         {
           provide: getModelToken(TableStatusLog.name),
@@ -194,6 +202,138 @@ describe('OrdersService', () => {
       order,
     );
     expect(recipeInventoryService.consumeOrder).not.toHaveBeenCalled();
+  });
+
+  it('stores selected extras and calculates the item price on the server', async () => {
+    const menuItemId = '507f1f77bcf86cd799439099';
+    menuItemModel.find.mockReturnValue({
+      exec: jest.fn().mockResolvedValue([
+        {
+          _id: { toString: () => menuItemId },
+          id: menuItemId,
+          name: 'Cheese Burger',
+          category: 'Burger',
+          price: 10,
+          sellingPrice: 11,
+          isKitchenItem: true,
+          isActive: true,
+          extras: [
+            {
+              id: 'extra-cheese',
+              name: 'Extra Kaese',
+              priceDelta: 1.5,
+              isAvailable: true,
+              sendToKitchen: true,
+            },
+            {
+              id: 'coupon-note',
+              name: 'Kassenhinweis',
+              priceDelta: 0,
+              isAvailable: true,
+              sendToKitchen: false,
+            },
+          ],
+        },
+      ]),
+    });
+
+    const order = await service.create(
+      {
+        locationId,
+        items: [
+          {
+            menuItemId,
+            name: 'Manipulierter Name',
+            quantity: 2,
+            price: 0,
+            isKitchenItem: true,
+            selectedExtraIds: ['extra-cheese', 'coupon-note'],
+          },
+        ],
+      },
+      {
+        sub: 'waiter-1',
+        email: 'service@test.local',
+        roles: [],
+        companyId: 'company-1',
+        tenantId,
+      },
+    );
+
+    expect(order.items[0]).toEqual(
+      expect.objectContaining({
+        menuItemId,
+        name: 'Cheese Burger',
+        price: 12.5,
+        totalPrice: 25,
+        selectedExtras: [
+          {
+            extraId: 'extra-cheese',
+            name: 'Extra Kaese',
+            priceDelta: 1.5,
+            sendToKitchen: true,
+          },
+          {
+            extraId: 'coupon-note',
+            name: 'Kassenhinweis',
+            priceDelta: 0,
+            sendToKitchen: false,
+          },
+        ],
+      }),
+    );
+    expect(order.total).toBe(25);
+  });
+
+  it('rejects unavailable extras', async () => {
+    const menuItemId = '507f1f77bcf86cd799439098';
+    menuItemModel.find.mockReturnValue({
+      exec: jest.fn().mockResolvedValue([
+        {
+          _id: { toString: () => menuItemId },
+          id: menuItemId,
+          name: 'Pommes',
+          category: 'Beilagen',
+          price: 4,
+          isKitchenItem: true,
+          isActive: true,
+          extras: [
+            {
+              id: 'cheese-sauce',
+              name: 'Kaese-Sauce',
+              priceDelta: 1,
+              isAvailable: false,
+              sendToKitchen: true,
+            },
+          ],
+        },
+      ]),
+    });
+
+    await expect(
+      service.create(
+        {
+          locationId,
+          items: [
+            {
+              menuItemId,
+              name: 'Pommes',
+              quantity: 1,
+              price: 4,
+              isKitchenItem: true,
+              selectedExtraIds: ['cheese-sauce'],
+            },
+          ],
+        },
+        {
+          sub: 'waiter-1',
+          email: 'service@test.local',
+          roles: [],
+          companyId: 'company-1',
+          tenantId,
+        },
+      ),
+    ).rejects.toThrow('nicht verfuegbar');
   });
 
   it('deducts inventory exactly once when an order is sent to kitchen', async () => {

@@ -63,6 +63,11 @@ export class CounterOrderItemDto {
   @IsOptional()
   @IsBoolean()
   isKitchenItem?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  selectedExtraIds?: string[];
 }
 
 export class CreateCounterOrderDto {

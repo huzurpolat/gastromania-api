@@ -4,13 +4,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
-import { MenuItem, MenuItemDocument } from './schemas/menu-item.schema';
+import {
+  MenuItem,
+  MenuItemDocument,
+  MenuItemExtra,
+} from './schemas/menu-item.schema';
 
 @Injectable()
 export class MenuItemsService {
@@ -27,7 +32,10 @@ export class MenuItemsService {
     this.assertManagementActor(actor);
 
     try {
-      return await this.menuItemModel.create(createMenuItemDto);
+      return await this.menuItemModel.create({
+        ...createMenuItemDto,
+        extras: this.normalizeExtras(createMenuItemDto.extras),
+      });
     } catch (error) {
       if (this.isDuplicateKeyError(error)) {
         throw new ConflictException(
@@ -72,8 +80,14 @@ export class MenuItemsService {
     this.validateObjectId(id);
 
     try {
+      const updatePayload = {
+        ...updateMenuItemDto,
+        ...(updateMenuItemDto.extras !== undefined
+          ? { extras: this.normalizeExtras(updateMenuItemDto.extras) }
+          : {}),
+      };
       const updatedMenuItem = await this.menuItemModel
-        .findByIdAndUpdate(id, updateMenuItemDto, {
+        .findByIdAndUpdate(id, updatePayload, {
           returnDocument: 'after',
           runValidators: true,
         })
@@ -125,6 +139,40 @@ export class MenuItemsService {
         'Globale Speisekartenpflege ist Management vorbehalten',
       );
     }
+  }
+
+  private normalizeExtras(
+    extras: CreateMenuItemDto['extras'] | UpdateMenuItemDto['extras'],
+  ): MenuItemExtra[] {
+    if (!extras?.length) {
+      return [];
+    }
+
+    const seenIds = new Set<string>();
+
+    return extras.map((extra, index) => {
+      const id = extra.id?.trim() || randomUUID();
+
+      if (seenIds.has(id)) {
+        throw new BadRequestException(
+          `Doppelte Zusatzoption-ID ${id} ist nicht erlaubt`,
+        );
+      }
+      seenIds.add(id);
+
+      return {
+        id,
+        name: extra.name.trim(),
+        priceDelta: this.roundMoney(extra.priceDelta ?? 0),
+        isAvailable: extra.isAvailable ?? true,
+        sendToKitchen: extra.sendToKitchen ?? true,
+        sortOrder: extra.sortOrder ?? index + 1,
+      };
+    });
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 
   private isDuplicateKeyError(error: unknown): boolean {

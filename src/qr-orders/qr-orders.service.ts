@@ -97,6 +97,16 @@ export class QrOrdersService {
           isVegan: item.isVegan,
           containsNuts: item.containsNuts,
           available: item.isActive,
+          extras: (item.extras ?? [])
+            .filter((extra) => extra.isAvailable !== false)
+            .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999))
+            .map((extra) => ({
+              id: extra.id,
+              name: extra.name,
+              priceDelta: this.roundMoney(extra.priceDelta ?? 0),
+              sendToKitchen: extra.sendToKitchen ?? true,
+              sortOrder: extra.sortOrder,
+            })),
         })),
       },
     };
@@ -129,7 +139,14 @@ export class QrOrdersService {
         throw new BadRequestException('Artikel ist nicht verfuegbar');
       }
       const note = this.cleanText(item.note);
-      const price = menuItem.sellingPrice ?? menuItem.price;
+      const selectedExtras = this.resolveSelectedExtras(
+        menuItem,
+        item.selectedExtraIds ?? [],
+      );
+      const price = this.roundMoney(
+        (menuItem.sellingPrice ?? menuItem.price) +
+          selectedExtras.reduce((sum, extra) => sum + extra.priceDelta, 0),
+      );
 
       return {
         menuItemId: this.stringifyId(menuItem._id),
@@ -147,6 +164,7 @@ export class QrOrdersService {
         courseType: CourseType.Main,
         specialRequests: note ? [note] : [],
         allergens: [],
+        selectedExtras,
       };
     });
     const subtotal = this.roundMoney(
@@ -351,6 +369,35 @@ export class QrOrdersService {
 
   private roundMoney(value: number): number {
     return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private resolveSelectedExtras(
+    menuItem: MenuItem,
+    selectedExtraIds: string[],
+  ) {
+    if (!selectedExtraIds.length) {
+      return [];
+    }
+
+    const uniqueIds = [...new Set(selectedExtraIds.filter(Boolean))];
+    const extras = new Map((menuItem.extras ?? []).map((extra) => [extra.id, extra]));
+
+    return uniqueIds.map((extraId) => {
+      const extra = extras.get(extraId);
+
+      if (!extra || extra.isAvailable === false) {
+        throw new BadRequestException(
+          `Zusatzoption ${extraId} ist fuer ${menuItem.name} nicht verfuegbar`,
+        );
+      }
+
+      return {
+        extraId: extra.id,
+        name: extra.name,
+        priceDelta: this.roundMoney(extra.priceDelta ?? 0),
+        sendToKitchen: extra.sendToKitchen ?? true,
+      };
+    });
   }
 
   private stringifyId(value: unknown): string {

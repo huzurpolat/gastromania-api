@@ -33,6 +33,11 @@ export class PublicQrOrderItemDto {
   @IsString()
   @MaxLength(300)
   note?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  selectedExtraIds?: string[];
 }
 
 export class CreatePublicQrOrderDto {

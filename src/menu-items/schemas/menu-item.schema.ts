@@ -3,6 +3,29 @@ import { HydratedDocument } from 'mongoose';
 
 export type MenuItemDocument = HydratedDocument<MenuItem>;
 
+@Schema({ _id: false, versionKey: false })
+export class MenuItemExtra {
+  @Prop({ required: true, trim: true })
+  id!: string;
+
+  @Prop({ required: true, trim: true })
+  name!: string;
+
+  @Prop({ default: 0 })
+  priceDelta!: number;
+
+  @Prop({ default: true })
+  isAvailable!: boolean;
+
+  @Prop({ default: true })
+  sendToKitchen!: boolean;
+
+  @Prop({ min: 0, default: 999 })
+  sortOrder?: number;
+}
+
+export const MenuItemExtraSchema = SchemaFactory.createForClass(MenuItemExtra);
+
 @Schema({ timestamps: true, versionKey: false })
 export class MenuItem {
   @Prop({ required: true, trim: true, index: true })
@@ -61,6 +84,9 @@ export class MenuItem {
 
   @Prop({ default: true })
   isActive!: boolean;
+
+  @Prop({ type: [MenuItemExtraSchema], default: [] })
+  extras!: MenuItemExtra[];
 }
 
 export const MenuItemSchema = SchemaFactory.createForClass(MenuItem);

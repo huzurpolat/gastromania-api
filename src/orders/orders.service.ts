@@ -14,6 +14,11 @@ import {
   KdsStatusLog,
   KdsStatusLogDocument,
 } from '../kds/schemas/kds-status-log.schema';
+import {
+  MenuItem,
+  MenuItemDocument,
+  MenuItemExtra,
+} from '../menu-items/schemas/menu-item.schema';
 import { RecipeInventoryService } from '../recipes/recipe-inventory.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
@@ -54,11 +59,15 @@ export interface OrderFilters {
   date?: Date;
 }
 
+type OrderItemInput = CreateOrderDto['items'][number];
+
 @Injectable()
 export class OrdersService {
   constructor(
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(MenuItem.name)
+    private readonly menuItemModel: Model<MenuItemDocument>,
     @InjectModel(RestaurantTable.name)
     private readonly tableModel: Model<RestaurantTableDocument>,
     @InjectModel(TableStatusLog.name)
@@ -86,8 +95,9 @@ export class OrdersService {
       this.validateObjectId(createOrderDto.tableId, 'Tisch-ID');
     }
 
+    const orderItems = await this.normalizeOrderItems(createOrderDto.items);
     const status = createOrderDto.status ?? OrderStatus.New;
-    const totals = this.calculateTotals(createOrderDto.items);
+    const totals = this.calculateTotals(orderItems);
     const order = await this.orderModel.create({
       ...createOrderDto,
       companyId: actor.companyId,
@@ -108,19 +118,7 @@ export class OrdersService {
       statusTimestamps: {
         [status]: new Date(),
       },
-      items: createOrderDto.items.map((item) => ({
-        ...item,
-        totalPrice: this.calculateItemTotal(item),
-        status: item.status ?? OrderItemStatus.Open,
-        productionArea:
-          item.productionArea ??
-          (item.isKitchenItem === false
-            ? ProductionArea.Bar
-            : ProductionArea.Kitchen),
-        courseType: item.courseType ?? CourseType.Main,
-        specialRequests: item.specialRequests ?? [],
-        allergens: item.allergens ?? [],
-      })),
+      items: orderItems,
       subtotal: totals.subtotal,
       tax: totals.tax,
       total: totals.total,
@@ -231,28 +229,17 @@ export class OrdersService {
       this.validateObjectId(updateOrderDto.tableId, 'Tisch-ID');
     }
 
-    const totals = updateOrderDto.items
-      ? this.calculateTotals(updateOrderDto.items)
+    const orderItems = updateOrderDto.items
+      ? await this.normalizeOrderItems(updateOrderDto.items)
       : undefined;
+    const totals = orderItems ? this.calculateTotals(orderItems) : undefined;
     const { source: _ignoredSource, ...trustedUpdateDto } = updateOrderDto;
     const updatePayload = {
       ...trustedUpdateDto,
       tenantId: currentOrder.tenantId ?? actor.tenantId,
-      ...(updateOrderDto.items
+      ...(orderItems
         ? {
-            items: updateOrderDto.items.map((item) => ({
-              ...item,
-              totalPrice: this.calculateItemTotal(item),
-              status: item.status ?? OrderItemStatus.Open,
-              productionArea:
-                item.productionArea ??
-                (item.isKitchenItem === false
-                  ? ProductionArea.Bar
-                  : ProductionArea.Kitchen),
-              courseType: item.courseType ?? CourseType.Main,
-              specialRequests: item.specialRequests ?? [],
-              allergens: item.allergens ?? [],
-            })),
+            items: orderItems,
             subtotal: totals?.subtotal,
             tax: totals?.tax,
             total: totals?.total,
@@ -567,6 +554,110 @@ export class OrdersService {
 
   private uniqueValues(values: string[]): string[] {
     return [...new Set(values.filter(Boolean))];
+  }
+
+  private async normalizeOrderItems(items: OrderItemInput[]): Promise<OrderItem[]> {
+    const menuItemIds = this.uniqueValues(
+      items
+        .map((item) => item.menuItemId ?? item.productId)
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    const invalidMenuItemId = menuItemIds.find((id) => !Types.ObjectId.isValid(id));
+
+    if (invalidMenuItemId) {
+      throw new BadRequestException(`Ungueltige Menueartikel-ID ${invalidMenuItemId}`);
+    }
+
+    const menuItems = menuItemIds.length
+      ? await this.menuItemModel
+          .find({ _id: { $in: menuItemIds }, isActive: true })
+          .exec()
+      : [];
+    const menuItemById = new Map(
+      menuItems.map((menuItem) => [menuItem._id.toString(), menuItem]),
+    );
+
+    return items.map((item) => {
+      const menuItemId = item.menuItemId ?? item.productId;
+      const menuItem = menuItemId ? menuItemById.get(menuItemId) : undefined;
+      const selectedExtraIds = this.normalizeSelectedExtraIds(item);
+
+      if (selectedExtraIds.length && !menuItem) {
+        throw new BadRequestException(
+          `Zusatzoptionen fuer Menueartikel ${menuItemId ?? item.name} sind nicht verfuegbar`,
+        );
+      }
+
+      const selectedExtras = menuItem
+        ? this.resolveSelectedExtras(menuItem, selectedExtraIds)
+        : [];
+      const basePrice =
+        menuItem && (item.menuItemId || selectedExtras.length)
+          ? menuItem.sellingPrice ?? menuItem.price
+          : item.price;
+      const price = this.roundMoney(
+        basePrice + selectedExtras.reduce((sum, extra) => sum + extra.priceDelta, 0),
+      );
+      const isKitchenItem = item.isKitchenItem ?? menuItem?.isKitchenItem ?? true;
+
+      return {
+        ...item,
+        productId: menuItem?.id ?? item.productId ?? item.menuItemId,
+        menuItemId: menuItem?.id ?? item.menuItemId,
+        name: menuItem ? menuItem.name : item.name,
+        price,
+        totalPrice: this.calculateItemTotal({ quantity: item.quantity, price }),
+        status: item.status ?? OrderItemStatus.Open,
+        productionArea:
+          item.productionArea ??
+          (isKitchenItem === false ? ProductionArea.Bar : ProductionArea.Kitchen),
+        courseType: item.courseType ?? CourseType.Main,
+        specialRequests: item.specialRequests ?? [],
+        allergens: item.allergens ?? [],
+        selectedExtras,
+        isKitchenItem,
+      } satisfies OrderItem;
+    });
+  }
+
+  private normalizeSelectedExtraIds(item: OrderItemInput): string[] {
+    const directIds = item.selectedExtraIds ?? [];
+    const snapshotIds = (item.selectedExtras ?? [])
+      .map((extra) => extra.extraId)
+      .filter(Boolean);
+
+    return this.uniqueValues([...directIds, ...snapshotIds]);
+  }
+
+  private resolveSelectedExtras(
+    menuItem: MenuItemDocument,
+    selectedExtraIds: string[],
+  ): NonNullable<OrderItem['selectedExtras']> {
+    if (!selectedExtraIds.length) {
+      return [];
+    }
+
+    const extras = new Map(
+      (menuItem.extras ?? []).map((extra) => [extra.id, extra as MenuItemExtra]),
+    );
+
+    return selectedExtraIds.map((extraId) => {
+      const extra = extras.get(extraId);
+
+      if (!extra || extra.isAvailable === false) {
+        throw new BadRequestException(
+          `Zusatzoption ${extraId} ist fuer ${menuItem.name} nicht verfuegbar`,
+        );
+      }
+
+      return {
+        extraId: extra.id,
+        name: extra.name,
+        priceDelta: this.roundMoney(extra.priceDelta ?? 0),
+        sendToKitchen: extra.sendToKitchen ?? true,
+      };
+    });
   }
 
   private calculateTotals(items: Pick<OrderItem, 'quantity' | 'price'>[]): {

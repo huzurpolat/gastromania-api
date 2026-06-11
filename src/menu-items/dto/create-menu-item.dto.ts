@@ -1,15 +1,48 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 const trimString = (value: unknown): unknown =>
   typeof value === 'string' ? value.trim() : value;
+
+export class MenuItemExtraDto {
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  id?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber()
+  priceDelta?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isAvailable?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  sendToKitchen?: boolean;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  sortOrder?: number;
+}
 
 export class CreateMenuItemDto {
   @Transform(({ value }) => trimString(value))
@@ -105,4 +138,10 @@ export class CreateMenuItemDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MenuItemExtraDto)
+  extras?: MenuItemExtraDto[];
 }

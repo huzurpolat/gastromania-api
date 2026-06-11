@@ -75,6 +75,24 @@ export enum CourseType {
   Other = 'Sonstiges',
 }
 
+@Schema({ _id: false, versionKey: false })
+export class SelectedOrderItemExtra {
+  @Prop({ required: true, trim: true })
+  extraId!: string;
+
+  @Prop({ required: true, trim: true })
+  name!: string;
+
+  @Prop({ default: 0 })
+  priceDelta!: number;
+
+  @Prop({ default: true })
+  sendToKitchen!: boolean;
+}
+
+export const SelectedOrderItemExtraSchema =
+  SchemaFactory.createForClass(SelectedOrderItemExtra);
+
 @Schema()
 export class OrderItem {
   _id?: string;
@@ -131,6 +149,9 @@ export class OrderItem {
 
   @Prop({ type: [String], default: [] })
   allergens?: string[];
+
+  @Prop({ type: [SelectedOrderItemExtraSchema], default: [] })
+  selectedExtras?: SelectedOrderItemExtra[];
 
   @Prop({ trim: true })
   comment?: string;

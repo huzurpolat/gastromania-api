@@ -59,6 +59,11 @@ export class MobileOrderItemDto {
   @IsOptional()
   @IsString()
   comment?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  selectedExtraIds?: string[];
 }
 
 export class CreateMobileOrderDto {

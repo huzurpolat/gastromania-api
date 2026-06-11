@@ -13,6 +13,7 @@ import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
   MenuItem,
   MenuItemDocument,
+  MenuItemExtra,
 } from '../menu-items/schemas/menu-item.schema';
 import {
   CourseType,
@@ -113,7 +114,14 @@ export class CounterOrderService {
         );
       }
 
-      const price = menuItem.sellingPrice ?? menuItem.price;
+      const selectedExtras = this.resolveSelectedExtras(
+        menuItem,
+        item.selectedExtraIds ?? [],
+      );
+      const price = this.roundMoney(
+        (menuItem.sellingPrice ?? menuItem.price) +
+          selectedExtras.reduce((sum, extra) => sum + extra.priceDelta, 0),
+      );
       const specialRequests = [
         ...(item.specialRequests ?? []),
         ...(item.note ? [item.note] : []),
@@ -137,6 +145,7 @@ export class CounterOrderService {
         courseType: item.courseType ?? this.courseTypeFor(menuItem.category),
         specialRequests,
         allergens: item.allergens ?? [],
+        selectedExtras,
       } satisfies OrderItem;
     });
     const totals = this.calculateTotals(orderItems);
@@ -879,6 +888,37 @@ export class CounterOrderService {
         order.locationId,
       ),
       ...extra,
+    });
+  }
+
+  private resolveSelectedExtras(
+    menuItem: MenuItemDocument,
+    selectedExtraIds: string[],
+  ): NonNullable<OrderItem['selectedExtras']> {
+    if (!selectedExtraIds.length) {
+      return [];
+    }
+
+    const extras = new Map(
+      (menuItem.extras ?? []).map((extra) => [extra.id, extra as MenuItemExtra]),
+    );
+    const uniqueIds = this.uniqueValues(selectedExtraIds);
+
+    return uniqueIds.map((extraId) => {
+      const extra = extras.get(extraId);
+
+      if (!extra || extra.isAvailable === false) {
+        throw new BadRequestException(
+          `Zusatzoption ${extraId} ist fuer ${menuItem.name} nicht verfuegbar`,
+        );
+      }
+
+      return {
+        extraId: extra.id,
+        name: extra.name,
+        priceDelta: this.roundMoney(extra.priceDelta ?? 0),
+        sendToKitchen: extra.sendToKitchen ?? true,
+      };
     });
   }
 
