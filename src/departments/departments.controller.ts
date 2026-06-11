@@ -16,7 +16,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request.type';
-import { CreateDepartmentDto } from './dto/create-department.dto';
+import {
+  CreateDepartmentDto,
+  UpdateDepartmentStatusDto,
+} from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { DepartmentsService } from './departments.service';
 
@@ -61,5 +64,96 @@ export class DepartmentsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.departmentsService.update(id, dto, user);
+  }
+}
+
+@Controller('tenant/departments')
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+export class TenantDepartmentsController {
+  constructor(private readonly departmentsService: DepartmentsService) {}
+
+  @Get()
+  @Roles(
+    Role.TenantAdmin,
+    Role.TenantAdminCode,
+    Role.RestaurantAdmin,
+    Role.CompanyAdmin,
+    Role.Admin,
+    Role.RegionAdmin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.LocationManager,
+    Role.Filialleiter,
+    Role.Restaurantleiter,
+    Role.Schichtleiter,
+    Role.Waiter,
+    Role.Service,
+    Role.Kitchen,
+    Role.Kueche,
+    Role.Bar,
+    Role.Counter,
+    Role.Theke,
+    Role.Cashier,
+    Role.Kasse,
+    Role.InventoryManager,
+    Role.Lager,
+    Role.Dishwasher,
+    Role.Tellerwaescher,
+    Role.Staff,
+    Role.Employee,
+    Role.Reinigung,
+  )
+  findTenantDepartments(@CurrentUser() user: AuthenticatedUser) {
+    return this.departmentsService.findTenantDepartments(user);
+  }
+
+  @Post()
+  @Roles(
+    Role.TenantAdmin,
+    Role.TenantAdminCode,
+    Role.RestaurantAdmin,
+    Role.CompanyAdmin,
+    Role.Admin,
+  )
+  @Permissions('users.update')
+  createTenantDepartment(
+    @Body() dto: CreateDepartmentDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.departmentsService.createTenantDepartment(dto, user);
+  }
+
+  @Patch(':id')
+  @Roles(
+    Role.TenantAdmin,
+    Role.TenantAdminCode,
+    Role.RestaurantAdmin,
+    Role.CompanyAdmin,
+    Role.Admin,
+  )
+  @Permissions('users.update')
+  updateTenantDepartment(
+    @Param('id') id: string,
+    @Body() dto: UpdateDepartmentDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.departmentsService.updateTenantDepartment(id, dto, user);
+  }
+
+  @Patch(':id/status')
+  @Roles(
+    Role.TenantAdmin,
+    Role.TenantAdminCode,
+    Role.RestaurantAdmin,
+    Role.CompanyAdmin,
+    Role.Admin,
+  )
+  @Permissions('users.update')
+  updateTenantDepartmentStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateDepartmentStatusDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.departmentsService.updateTenantDepartmentStatus(id, dto, user);
   }
 }

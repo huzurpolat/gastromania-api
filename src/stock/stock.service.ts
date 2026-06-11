@@ -157,6 +157,7 @@ export interface StockMovementResponse {
   orderItemId?: string;
   recipeId?: string;
   menuItemId?: string;
+  extraId?: string;
   referenceType?: string;
   referenceId?: string;
   stockItemName: string;
@@ -2401,6 +2402,7 @@ export class StockService {
       orderItemId: movement.orderItemId,
       recipeId: movement.recipeId,
       menuItemId: movement.menuItemId,
+      extraId: movement.extraId,
       referenceType: movement.referenceType,
       referenceId: movement.referenceId,
       stockItemName: movement.stockItemName,

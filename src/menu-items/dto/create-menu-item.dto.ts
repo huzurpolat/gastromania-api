@@ -13,6 +13,28 @@ import {
 const trimString = (value: unknown): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
+export class MenuItemExtraInventoryImpactDto {
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @IsNotEmpty()
+  stockItemId!: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @IsNotEmpty()
+  stockItemName!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.000001)
+  quantity!: number;
+
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @IsNotEmpty()
+  unit!: string;
+}
+
 export class MenuItemExtraDto {
   @Transform(({ value }) => trimString(value))
   @IsOptional()
@@ -42,6 +64,12 @@ export class MenuItemExtraDto {
   @IsNumber()
   @Min(0)
   sortOrder?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MenuItemExtraInventoryImpactDto)
+  inventoryImpact?: MenuItemExtraInventoryImpactDto[];
 }
 
 export class CreateMenuItemDto {

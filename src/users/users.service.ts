@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { Model, Types } from 'mongoose';
 import { Role } from '../auth/enums/role.enum';
 import { normalizeRoles } from '../auth/role-utils';
@@ -17,16 +18,24 @@ import {
   Location,
   LocationDocument,
 } from '../locations/schemas/location.schema';
+import { Tenant, TenantDocument } from '../tenants/schemas/tenant.schema';
 import {
   CreateUserDto,
   USER_LOCATION_ASSIGNMENT_ROLES,
   UserLocationAssignmentDto,
 } from './dto/create-user.dto';
+import { PlatformUserStatus } from './dto/platform-user-status.dto';
+import {
+  CreatePlatformTenantAdminDto,
+  UpdatePlatformTenantAdminDto,
+} from './dto/platform-tenant-admin.dto';
+import { TenantUserStatus } from './dto/tenant-user-status.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
   toUserResponse,
   User,
   UserDocument,
+  UserLocationAssignmentResponse,
   UserResponse,
 } from './schemas/user.schema';
 import {
@@ -40,6 +49,46 @@ interface NormalizedLocationAssignment {
   isPrimary: boolean;
 }
 
+export interface PlatformTenantUserLocationResponse {
+  _id: string;
+  name: string;
+  city?: string;
+}
+
+export interface PlatformTenantUserResponse {
+  _id: string;
+  tenantId?: string;
+  email: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  displayName: string;
+  phone?: string;
+  mobile?: string;
+  roles: string[];
+  role: string;
+  status: string;
+  isActive: boolean;
+  lastLoginAt?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+  locationId?: string;
+  locationIds: string[];
+  primaryLocation?: PlatformTenantUserLocationResponse;
+  locations: PlatformTenantUserLocationResponse[];
+  locationAssignments: UserLocationAssignmentResponse[];
+}
+
+export interface PlatformPasswordResetResponse {
+  user: PlatformTenantUserResponse;
+  resetRequired: true;
+}
+
+export interface TenantPasswordResetResponse {
+  user: UserResponse;
+  resetRequired: true;
+}
+
 @Injectable()
 export class UsersService {
   private readonly passwordSaltRounds = 12;
@@ -49,6 +98,8 @@ export class UsersService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Location.name)
     private readonly locationModel: Model<LocationDocument>,
+    @InjectModel(Tenant.name)
+    private readonly tenantModel: Model<TenantDocument>,
     @InjectModel(AuditLog.name)
     private readonly auditLogModel: Model<AuditLogDocument>,
     @InjectModel(UserLocationAssignment.name)
@@ -159,7 +210,7 @@ export class UsersService {
         locationId: primaryLocationId,
         locationIds,
         managedLocationIds,
-        departmentIds: createUserDto.departmentIds ?? [],
+        departmentIds: this.resolveDepartmentIds(createUserDto),
         responsibilities: createUserDto.responsibilities ?? [],
       });
       await this.syncLocationAssignments(
@@ -224,6 +275,384 @@ export class UsersService {
     await this.assertCanManageUser(actor, user);
 
     return this.withLocationAssignments(toUserResponse(user), actor);
+  }
+
+  async resetTenantUserPassword(
+    userId: string,
+    newPassword: string,
+    actor: AuthenticatedUser,
+  ): Promise<TenantPasswordResetResponse> {
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('Passwort muss mindestens 8 Zeichen haben');
+    }
+
+    const user = await this.findManageableUserDocument(userId, actor);
+    user.passwordHash = await bcrypt.hash(
+      newPassword,
+      this.passwordSaltRounds,
+    );
+    user.permissionsVersion = Math.max(user.permissionsVersion ?? 1, 1) + 1;
+    const saved = await user.save();
+
+    await this.audit(actor, {
+      tenantId: saved.tenantId,
+      action: 'tenant_user.password_reset',
+      entityType: 'user',
+      entityId: saved._id.toString(),
+      metadata: {
+        targetUserId: saved._id.toString(),
+        email: saved.email,
+      },
+    });
+
+    return {
+      user: await this.withLocationAssignments(toUserResponse(saved), actor),
+      resetRequired: true,
+    };
+  }
+
+  async updateTenantUserStatus(
+    userId: string,
+    status: TenantUserStatus,
+    actor: AuthenticatedUser,
+  ): Promise<UserResponse> {
+    const user = await this.findManageableUserDocument(userId, actor);
+    const previousStatus = user.status ?? (user.isActive ? 'active' : 'disabled');
+
+    user.status = status;
+    user.isActive = status === 'active';
+    user.permissionsVersion = Math.max(user.permissionsVersion ?? 1, 1) + 1;
+    const saved = await user.save();
+
+    await this.audit(actor, {
+      tenantId: saved.tenantId,
+      action:
+        status === 'disabled'
+          ? 'tenant_user.disabled'
+          : 'tenant_user.activated',
+      entityType: 'user',
+      entityId: saved._id.toString(),
+      metadata: {
+        targetUserId: saved._id.toString(),
+        oldValues: { status: previousStatus },
+        newValues: { status },
+      },
+    });
+
+    return this.withLocationAssignments(toUserResponse(saved), actor);
+  }
+
+  async findPlatformTenantUsers(
+    tenantId: string,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse[]> {
+    this.assertPlatformActor(actor);
+    await this.assertTenantExists(tenantId);
+
+    const users = await this.userModel
+      .find({ tenantId })
+      .sort({ lastName: 1, firstName: 1, email: 1 })
+      .exec();
+
+    return this.toPlatformTenantUserResponses(users, tenantId);
+  }
+
+  async findPlatformTenantAdmins(
+    tenantId: string,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse[]> {
+    this.assertPlatformActor(actor);
+    await this.assertTenantExists(tenantId);
+
+    const admins = await this.userModel
+      .find({ tenantId, roles: { $in: [Role.TenantAdmin] } })
+      .sort({ lastName: 1, firstName: 1, email: 1 })
+      .exec();
+
+    return this.toPlatformTenantUserResponses(admins, tenantId);
+  }
+
+  async createPlatformTenantAdmin(
+    tenantId: string,
+    dto: CreatePlatformTenantAdminDto,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse> {
+    this.assertPlatformActor(actor);
+    await this.assertTenantExists(tenantId);
+
+    const existing = await this.userModel.exists({ email: dto.email });
+    if (existing) {
+      throw new ConflictException(
+        'Benutzer mit dieser E-Mail existiert bereits',
+      );
+    }
+
+    const admin = await this.userModel.create({
+      email: dto.email,
+      passwordHash: await bcrypt.hash(dto.password, this.passwordSaltRounds),
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      phone: dto.phone,
+      roles: [Role.TenantAdmin],
+      tenantId,
+      isActive: true,
+      status: 'active',
+      locationIds: [],
+      managedLocationIds: [],
+      regionIds: [],
+      areaIds: [],
+      departmentIds: [],
+      responsibilities: [],
+    });
+
+    await this.audit(actor, {
+      tenantId,
+      action: 'tenant_admin.created',
+      entityType: 'user',
+      entityId: admin._id.toString(),
+      metadata: {
+        targetUserId: admin._id.toString(),
+        email: admin.email,
+      },
+    });
+
+    const [response] = await this.toPlatformTenantUserResponses(
+      [admin],
+      tenantId,
+    );
+    return response;
+  }
+
+  async updatePlatformTenantAdmin(
+    tenantId: string,
+    userId: string,
+    dto: UpdatePlatformTenantAdminDto,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse> {
+    const admin = await this.findPlatformTenantAdminDocument(
+      tenantId,
+      userId,
+      actor,
+    );
+    const oldValues = {
+      email: admin.email,
+      firstName: admin.firstName,
+      lastName: admin.lastName,
+      phone: admin.phone,
+    };
+
+    if (
+      dto.email !== undefined &&
+      dto.email.toLowerCase() !== admin.email.toLowerCase()
+    ) {
+      const existing = await this.userModel.exists({
+        _id: { $ne: userId },
+        email: dto.email,
+      });
+      if (existing) {
+        throw new ConflictException(
+          'Benutzer mit dieser E-Mail existiert bereits',
+        );
+      }
+      admin.email = dto.email;
+    }
+    if (dto.firstName !== undefined) admin.firstName = dto.firstName;
+    if (dto.lastName !== undefined) admin.lastName = dto.lastName;
+    if (dto.phone !== undefined) admin.phone = dto.phone;
+
+    admin.roles = [Role.TenantAdmin];
+    admin.tenantId = tenantId;
+    const saved = await admin.save();
+
+    await this.audit(actor, {
+      tenantId,
+      action: 'tenant_admin.updated',
+      entityType: 'user',
+      entityId: saved._id.toString(),
+      metadata: {
+        targetUserId: saved._id.toString(),
+        oldValues,
+        newValues: dto,
+      },
+    });
+
+    const [response] = await this.toPlatformTenantUserResponses(
+      [saved],
+      tenantId,
+    );
+    return response;
+  }
+
+  async resetPlatformTenantAdminPassword(
+    tenantId: string,
+    userId: string,
+    newPassword: string,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformPasswordResetResponse> {
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('Passwort muss mindestens 8 Zeichen haben');
+    }
+    const admin = await this.findPlatformTenantAdminDocument(
+      tenantId,
+      userId,
+      actor,
+    );
+
+    admin.passwordHash = await bcrypt.hash(
+      newPassword,
+      this.passwordSaltRounds,
+    );
+    admin.permissionsVersion = Math.max(admin.permissionsVersion ?? 1, 1) + 1;
+    const saved = await admin.save();
+
+    await this.audit(actor, {
+      tenantId,
+      action: 'tenant_admin.password_reset',
+      entityType: 'user',
+      entityId: saved._id.toString(),
+      metadata: {
+        targetUserId: saved._id.toString(),
+        email: saved.email,
+      },
+    });
+
+    const [response] = await this.toPlatformTenantUserResponses(
+      [saved],
+      tenantId,
+    );
+    return { user: response, resetRequired: true };
+  }
+
+  async updatePlatformTenantAdminStatus(
+    tenantId: string,
+    userId: string,
+    status: 'active' | 'disabled',
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse> {
+    const admin = await this.findPlatformTenantAdminDocument(
+      tenantId,
+      userId,
+      actor,
+    );
+    const previousStatus = admin.status ?? (admin.isActive ? 'active' : 'disabled');
+
+    admin.status = status;
+    admin.isActive = status === 'active';
+    admin.permissionsVersion = Math.max(admin.permissionsVersion ?? 1, 1) + 1;
+    const saved = await admin.save();
+
+    await this.audit(actor, {
+      tenantId,
+      action:
+        status === 'disabled'
+          ? 'tenant_admin.disabled'
+          : 'tenant_admin.activated',
+      entityType: 'user',
+      entityId: saved._id.toString(),
+      metadata: {
+        targetUserId: saved._id.toString(),
+        oldValues: { status: previousStatus },
+        newValues: { status },
+      },
+    });
+
+    const [response] = await this.toPlatformTenantUserResponses(
+      [saved],
+      tenantId,
+    );
+    return response;
+  }
+
+  async findPlatformUser(
+    userId: string,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse> {
+    this.assertPlatformActor(actor);
+    this.validateObjectId(userId);
+
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user || !user.tenantId) {
+      throw new NotFoundException('Benutzer nicht gefunden');
+    }
+
+    await this.assertTenantExists(user.tenantId);
+    const [response] = await this.toPlatformTenantUserResponses(
+      [user],
+      user.tenantId,
+    );
+
+    return response;
+  }
+
+  async resetPlatformUserPassword(
+    userId: string,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformPasswordResetResponse> {
+    this.assertPlatformActor(actor);
+    const user = await this.findPlatformUserDocument(userId);
+
+    user.passwordHash = await bcrypt.hash(
+      this.generateTemporaryPassword(),
+      this.passwordSaltRounds,
+    );
+    user.permissionsVersion = Math.max(user.permissionsVersion ?? 1, 1) + 1;
+    const saved = await user.save();
+
+    await this.audit(actor, {
+      tenantId: saved.tenantId,
+      action: 'platform.user.password_reset',
+      entityType: 'user',
+      entityId: saved._id.toString(),
+      metadata: {
+        targetUserId: saved._id.toString(),
+        email: saved.email,
+      },
+    });
+
+    const [response] = await this.toPlatformTenantUserResponses(
+      [saved],
+      saved.tenantId as string,
+    );
+
+    return { user: response, resetRequired: true };
+  }
+
+  async updatePlatformUserStatus(
+    userId: string,
+    status: PlatformUserStatus,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse> {
+    this.assertPlatformActor(actor);
+    const user = await this.findPlatformUserDocument(userId);
+    const previousStatus = user.status ?? (user.isActive ? 'active' : 'inactive');
+
+    user.status = status;
+    user.isActive = status === 'active';
+    user.permissionsVersion = Math.max(user.permissionsVersion ?? 1, 1) + 1;
+    const saved = await user.save();
+
+    await this.audit(actor, {
+      tenantId: saved.tenantId,
+      action:
+        status === 'suspended'
+          ? 'platform.user.suspended'
+          : 'platform.user.activated',
+      entityType: 'user',
+      entityId: saved._id.toString(),
+      metadata: {
+        targetUserId: saved._id.toString(),
+        oldValues: { status: previousStatus },
+        newValues: { status },
+      },
+    });
+
+    const [response] = await this.toPlatformTenantUserResponses(
+      [saved],
+      saved.tenantId as string,
+    );
+
+    return response;
   }
 
   async update(
@@ -499,8 +928,11 @@ export class UsersService {
       update.managedLocationIds = managedLocationIds;
     }
 
-    if (updateUserDto.departmentIds !== undefined) {
-      update.departmentIds = updateUserDto.departmentIds;
+    if (
+      updateUserDto.departmentId !== undefined ||
+      updateUserDto.departmentIds !== undefined
+    ) {
+      update.departmentIds = this.resolveDepartmentIds(updateUserDto);
     }
 
     if (updateUserDto.responsibilities !== undefined) {
@@ -614,6 +1046,166 @@ export class UsersService {
     await this.assignmentModel.deleteMany({ userId: id }).exec();
   }
 
+  private async findPlatformUserDocument(userId: string): Promise<UserDocument> {
+    this.validateObjectId(userId);
+
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user || !user.tenantId) {
+      throw new NotFoundException('Benutzer nicht gefunden');
+    }
+
+    await this.assertTenantExists(user.tenantId);
+
+    return user;
+  }
+
+  private async findPlatformTenantAdminDocument(
+    tenantId: string,
+    userId: string,
+    actor: AuthenticatedUser,
+  ): Promise<UserDocument> {
+    this.assertPlatformActor(actor);
+    await this.assertTenantExists(tenantId);
+    this.validateObjectId(userId);
+
+    const admin = await this.userModel.findById(userId).exec();
+    if (
+      !admin ||
+      admin.tenantId !== tenantId ||
+      !normalizeRoles(admin.roles ?? []).includes(Role.TenantAdmin)
+    ) {
+      throw new NotFoundException('Tenant Admin nicht gefunden');
+    }
+
+    return admin;
+  }
+
+  private async findManageableUserDocument(
+    userId: string,
+    actor: AuthenticatedUser,
+  ): Promise<UserDocument> {
+    this.validateObjectId(userId);
+
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user) {
+      throw new NotFoundException('Benutzer nicht gefunden');
+    }
+
+    await this.assertCanManageUser(actor, user);
+
+    return user;
+  }
+
+  private assertPlatformActor(actor: AuthenticatedUser): void {
+    if (!this.accessPolicy.isPlatformAdmin(actor)) {
+      throw new ForbiddenException(
+        'Nur Platform Admins duerfen Tenant-Benutzer verwalten',
+      );
+    }
+  }
+
+  private async assertTenantExists(tenantId: string): Promise<void> {
+    this.validateObjectId(tenantId);
+    const tenant = await this.tenantModel
+      .findById(tenantId)
+      .select('_id')
+      .lean()
+      .exec();
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant nicht gefunden');
+    }
+  }
+
+  private async toPlatformTenantUserResponses(
+    users: UserDocument[],
+    tenantId: string,
+  ): Promise<PlatformTenantUserResponse[]> {
+    const baseUsers = await this.withLocationAssignmentsForUsers(
+      users.map((user) => toUserResponse(user)),
+      undefined,
+    );
+    const allLocationIds = [
+      ...new Set(
+        baseUsers.flatMap((user) => [
+          ...(user.locationIds ?? []),
+          ...(user.locationId ? [user.locationId] : []),
+          ...(user.locationAssignments ?? []).map(
+            (assignment) => assignment.locationId,
+          ),
+        ]),
+      ),
+    ].filter(Boolean);
+    const locations = allLocationIds.length
+      ? await this.locationModel
+          .find({ tenantId, _id: { $in: allLocationIds } })
+          .select('_id name city')
+          .lean()
+          .exec()
+      : [];
+    const locationById = new Map<string, PlatformTenantUserLocationResponse>(
+      locations.map((location) => [
+        location._id.toString(),
+        {
+          _id: location._id.toString(),
+          name: location.name,
+          city: location.city,
+        },
+      ]),
+    );
+
+    return baseUsers.map((user) => {
+      const locationIds = [
+        ...new Set([
+          ...(user.locationIds ?? []),
+          ...(user.locationId ? [user.locationId] : []),
+          ...(user.locationAssignments ?? []).map(
+            (assignment) => assignment.locationId,
+          ),
+        ]),
+      ].filter(Boolean);
+      const locationsForUser = locationIds
+        .map((locationId) => locationById.get(locationId))
+        .filter(
+          (location): location is PlatformTenantUserLocationResponse =>
+            Boolean(location),
+        );
+      const primaryLocation =
+        (user.locationId && locationById.get(user.locationId)) ||
+        locationsForUser[0];
+
+      return {
+        _id: user._id,
+        tenantId: user.tenantId,
+        email: user.email,
+        username: (user as UserResponse & { username?: string }).username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        displayName: user.name,
+        phone: user.phone,
+        mobile: user.mobile,
+        roles: user.roles ?? [],
+        role: user.role,
+        status: user.status ?? (user.isActive ? 'active' : 'inactive'),
+        isActive: user.isActive,
+        lastLoginAt: user.lastLoginAt,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        locationId: user.locationId,
+        locationIds,
+        primaryLocation,
+        locations: locationsForUser,
+        locationAssignments: user.locationAssignments ?? [],
+      };
+    });
+  }
+
+  private generateTemporaryPassword(): string {
+    return `${randomBytes(24).toString('base64url')}!1Aa`;
+  }
+
   async findByEmail(email: string): Promise<UserResponse | null> {
     const user = await this.userModel
       .findOne({ email: email.toLowerCase() })
@@ -675,7 +1267,10 @@ export class UsersService {
       managedLocationIds:
         payload.managedLocationIds ??
         (scopedLocationManager ? [] : existingUser?.managedLocationIds ?? []),
-      departmentIds: payload.departmentIds ?? existingUser?.departmentIds ?? [],
+      departmentIds:
+        payload.departmentId !== undefined || payload.departmentIds !== undefined
+          ? this.resolveDepartmentIds(payload)
+          : existingUser?.departmentIds ?? [],
       roles,
     };
 
@@ -800,6 +1395,18 @@ export class UsersService {
     locationIds: Array<string | undefined>,
   ): string[] {
     return [...new Set(locationIds.filter((id): id is string => Boolean(id)))];
+  }
+
+  private resolveDepartmentIds(payload: {
+    departmentId?: string;
+    departmentIds?: string[];
+  }): string[] {
+    if (payload.departmentId !== undefined) {
+      const departmentId = payload.departmentId.trim();
+      return departmentId ? [departmentId] : [];
+    }
+
+    return [...new Set((payload.departmentIds ?? []).filter(Boolean))];
   }
 
   private normalizeLocationAssignments(

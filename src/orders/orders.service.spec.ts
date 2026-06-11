@@ -224,6 +224,14 @@ describe('OrdersService', () => {
               priceDelta: 1.5,
               isAvailable: true,
               sendToKitchen: true,
+              inventoryImpact: [
+                {
+                  stockItemId: 'stock-cheese',
+                  stockItemName: 'Kaese',
+                  quantity: 1,
+                  unit: 'Scheibe',
+                },
+              ],
             },
             {
               id: 'coupon-note',
@@ -272,12 +280,21 @@ describe('OrdersService', () => {
             name: 'Extra Kaese',
             priceDelta: 1.5,
             sendToKitchen: true,
+            inventoryImpact: [
+              {
+                stockItemId: 'stock-cheese',
+                stockItemName: 'Kaese',
+                quantity: 1,
+                unit: 'Scheibe',
+              },
+            ],
           },
           {
             extraId: 'coupon-note',
             name: 'Kassenhinweis',
             priceDelta: 0,
             sendToKitchen: false,
+            inventoryImpact: [],
           },
         ],
       }),

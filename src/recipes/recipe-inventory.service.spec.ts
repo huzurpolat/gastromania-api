@@ -356,6 +356,170 @@ describe('RecipeInventoryService', () => {
     );
   });
 
+  it('adds selected extra inventory impact to stock movements and COGS value', async () => {
+    const recipe = {
+      _id: { toString: () => 'recipe-burger' },
+      name: 'Cheese Burger Rezept',
+      ingredients: [
+        {
+          stockItemId: 'stock-cheese',
+          stockItemName: 'Kaese',
+          quantity: 1,
+          unit: 'Scheibe',
+          purchasePriceNet: 0.2,
+        },
+      ],
+    };
+    const cheese = {
+      _id: { toString: () => 'stock-cheese' },
+      locationId: 'loc-1',
+      tenantId: 'tenant-1',
+      name: 'Kaese',
+      unit: 'Scheibe',
+      quantity: 10,
+      averageCost: 0.3,
+      purchasePriceNet: 0.2,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+
+    recipeModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(recipe),
+    });
+    stockItemModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(cheese),
+    });
+    movementModel.create.mockImplementation((payload: { extraId?: string }) =>
+      Promise.resolve({
+        _id: { toString: () => (payload.extraId ? 'movement-extra' : 'movement-base') },
+      }),
+    );
+
+    const result = await service.consumeOrder(
+      {
+        _id: 'order-extra-cheese',
+        tenantId: 'tenant-1',
+        locationId: 'loc-1',
+        items: [
+          {
+            _id: { toString: () => 'order-item-1' },
+            menuItemId: 'menu-burger',
+            name: 'Cheese Burger',
+            quantity: 2,
+            selectedExtras: [
+              {
+                extraId: 'extra-cheese',
+                name: 'Extra Kaese',
+                priceDelta: 1,
+                sendToKitchen: true,
+                inventoryImpact: [
+                  {
+                    stockItemId: 'stock-cheese',
+                    stockItemName: 'Kaese',
+                    quantity: 1,
+                    unit: 'Scheibe',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      } as never,
+      'user-1',
+    );
+
+    expect(result.movementIds).toEqual(['movement-base', 'movement-extra']);
+    expect(cheese.quantity).toBe(6);
+    expect(movementModel.create).toHaveBeenCalledTimes(2);
+    expect(movementModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stockItemId: 'stock-cheese',
+        recipeId: 'recipe-burger',
+        extraId: undefined,
+        quantityChange: -2,
+        valueNet: 0.6,
+      }),
+    );
+    expect(movementModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stockItemId: 'stock-cheese',
+        recipeId: 'recipe-burger',
+        extraId: 'extra-cheese',
+        quantityChange: -2,
+        valueNet: 0.6,
+        note: 'Automatischer Zutatenverbrauch: Cheese Burger / Cheese Burger Rezept / Extra Kaese',
+      }),
+    );
+  });
+
+  it('deducts extra inventory impact even when the menu item has no recipe', async () => {
+    const patty = {
+      _id: { toString: () => 'stock-patty' },
+      locationId: 'loc-1',
+      tenantId: 'tenant-1',
+      name: 'Patty',
+      unit: 'Stueck',
+      quantity: 5,
+      unitCost: 1.25,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+
+    recipeModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    stockItemModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(patty),
+    });
+    movementModel.create.mockResolvedValue({
+      _id: { toString: () => 'movement-extra-patty' },
+    });
+
+    const result = await service.consumeOrder(
+      {
+        _id: 'order-extra-only',
+        tenantId: 'tenant-1',
+        locationId: 'loc-1',
+        items: [
+          {
+            _id: { toString: () => 'order-item-extra-only' },
+            menuItemId: 'menu-burger',
+            name: 'Burger',
+            quantity: 2,
+            selectedExtras: [
+              {
+                extraId: 'extra-patty',
+                name: 'Extra Patty',
+                priceDelta: 3.5,
+                sendToKitchen: true,
+                inventoryImpact: [
+                  {
+                    stockItemId: 'stock-patty',
+                    stockItemName: 'Patty',
+                    quantity: 1,
+                    unit: 'Stueck',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      } as never,
+      'user-1',
+    );
+
+    expect(result.warnings).toContain('Kein Rezept fuer Burger gefunden.');
+    expect(result.movementIds).toEqual(['movement-extra-patty']);
+    expect(patty.quantity).toBe(3);
+    expect(movementModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipeId: undefined,
+        extraId: 'extra-patty',
+        quantityChange: -2,
+        valueNet: 2.5,
+        note: 'Automatischer Zutatenverbrauch: Burger / Extra Patty',
+      }),
+    );
+  });
+
   it('does not fail an order when a recipe is missing', async () => {
     recipeModel.findOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue(null),

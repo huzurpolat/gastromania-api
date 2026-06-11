@@ -14,6 +14,14 @@ import { UpdateTenantStatusDto } from './dto/update-tenant-status.dto';
 import { UpdateTenantBillingDto } from './dto/update-tenant-billing.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
+import { PlatformUserStatusDto } from '../users/dto/platform-user-status.dto';
+import {
+  CreatePlatformTenantAdminDto,
+  PlatformTenantAdminPasswordResetDto,
+  PlatformTenantAdminStatusDto,
+  UpdatePlatformTenantAdminDto,
+} from '../users/dto/platform-tenant-admin.dto';
+import { UsersService } from '../users/users.service';
 
 @Controller('platform')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -22,6 +30,7 @@ export class PlatformTenantsController {
   constructor(
     private readonly tenantsService: TenantsService,
     private readonly modulesService: ModulesService,
+    private readonly usersService: UsersService,
   ) {}
 
   @Get('tenants')
@@ -40,6 +49,105 @@ export class PlatformTenantsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.tenantsService.create(dto, actor);
+  }
+
+  @Get('tenants/:tenantId/users')
+  findTenantUsers(
+    @Param('tenantId') tenantId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.findPlatformTenantUsers(tenantId, actor);
+  }
+
+  @Get('tenants/:tenantId/admins')
+  findTenantAdmins(
+    @Param('tenantId') tenantId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.findPlatformTenantAdmins(tenantId, actor);
+  }
+
+  @Post('tenants/:tenantId/admins')
+  createTenantAdmin(
+    @Param('tenantId') tenantId: string,
+    @Body() dto: CreatePlatformTenantAdminDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.createPlatformTenantAdmin(tenantId, dto, actor);
+  }
+
+  @Patch('tenants/:tenantId/admins/:userId')
+  updateTenantAdmin(
+    @Param('tenantId') tenantId: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdatePlatformTenantAdminDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.updatePlatformTenantAdmin(
+      tenantId,
+      userId,
+      dto,
+      actor,
+    );
+  }
+
+  @Patch('tenants/:tenantId/admins/:userId/status')
+  updateTenantAdminStatus(
+    @Param('tenantId') tenantId: string,
+    @Param('userId') userId: string,
+    @Body() dto: PlatformTenantAdminStatusDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.updatePlatformTenantAdminStatus(
+      tenantId,
+      userId,
+      dto.status,
+      actor,
+    );
+  }
+
+  @Post('tenants/:tenantId/admins/:userId/reset-password')
+  resetTenantAdminPassword(
+    @Param('tenantId') tenantId: string,
+    @Param('userId') userId: string,
+    @Body() dto: PlatformTenantAdminPasswordResetDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.resetPlatformTenantAdminPassword(
+      tenantId,
+      userId,
+      dto.newPassword,
+      actor,
+    );
+  }
+
+  @Get('users/:userId')
+  findPlatformUser(
+    @Param('userId') userId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.findPlatformUser(userId, actor);
+  }
+
+  @Post('users/:userId/reset-password')
+  resetPlatformUserPassword(
+    @Param('userId') userId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.resetPlatformUserPassword(userId, actor);
+  }
+
+  @Patch('users/:userId/status')
+  updatePlatformUserStatus(
+    @Param('userId') userId: string,
+    @Body() dto: PlatformUserStatusDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.updatePlatformUserStatus(
+      userId,
+      dto.status,
+      actor,
+    );
   }
 
   @Get('tenants/:tenantId')

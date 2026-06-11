@@ -41,7 +41,7 @@ export class AuthService {
       throw new UnauthorizedException('E-Mail oder Passwort ist ungueltig');
     }
 
-    if (!user.isActive || user.status === 'disabled') {
+    if (this.isBlockedUserStatus(user.status) || !user.isActive) {
       throw new UnauthorizedException('Benutzer ist deaktiviert');
     }
 
@@ -124,6 +124,10 @@ export class AuthService {
         locationIds: payload.locationIds,
       },
     };
+  }
+
+  private isBlockedUserStatus(status?: string): boolean {
+    return ['disabled', 'suspended', 'inactive'].includes(status ?? '');
   }
 
   async bootstrapAdmin(createUserDto: CreateUserDto): Promise<UserResponse> {

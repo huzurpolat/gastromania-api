@@ -396,6 +396,12 @@ export class QrOrdersService {
         name: extra.name,
         priceDelta: this.roundMoney(extra.priceDelta ?? 0),
         sendToKitchen: extra.sendToKitchen ?? true,
+        inventoryImpact: (extra.inventoryImpact ?? []).map((impact) => ({
+          stockItemId: impact.stockItemId,
+          stockItemName: impact.stockItemName,
+          quantity: Number(impact.quantity),
+          unit: impact.unit,
+        })),
       };
     });
   }

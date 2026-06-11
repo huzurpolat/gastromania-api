@@ -1,7 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Order, OrderItem } from '../orders/schemas/order.schema';
+import {
+  Order,
+  OrderItem,
+} from '../orders/schemas/order.schema';
 import { InventoryBatch } from '../stock/schemas/inventory-batch.schema';
 import { StockAlert } from '../stock/schemas/stock-alert.schema';
 import {
@@ -16,7 +19,6 @@ import { resolveValuationUnitCost, roundMoney } from '../stock/stock-valuation';
 import {
   Recipe,
   RecipeDocument,
-  RecipeIngredient,
 } from './schemas/recipe.schema';
 
 type InventoryOrder = Order & {
@@ -32,12 +34,22 @@ export interface InventoryConsumptionResult {
 }
 
 interface ConsumptionPlanLine {
-  recipe: RecipeDocument;
-  ingredient: RecipeIngredient;
+  recipe?: RecipeDocument;
+  ingredient: {
+    stockItemId: string;
+    stockItemName: string;
+    quantity: number;
+    unit: string;
+    wasteFactor?: number;
+    purchasePriceNet?: number;
+    isOptional?: boolean;
+  };
   stockItem: StockItemDocument;
   orderItemId?: string;
   orderItemName: string;
   menuItemId?: string;
+  extraId?: string;
+  extraName?: string;
   requiredQuantity: number;
 }
 
@@ -211,73 +223,157 @@ export class RecipeInventoryService {
     for (const orderItem of order.items ?? []) {
       const recipe = await this.findRecipe(orderItem);
 
-      if (!recipe) {
+      if (recipe) {
+        await this.appendRecipeLines(lines, warnings, order, orderItem, recipe);
+      } else {
         warnings.push(`Kein Rezept fuer ${orderItem.name} gefunden.`);
+      }
+
+      await this.appendExtraLines(lines, warnings, order, orderItem, recipe);
+    }
+
+    return { lines, warnings };
+  }
+
+  private async appendRecipeLines(
+    lines: ConsumptionPlanLine[],
+    warnings: string[],
+    order: InventoryOrder,
+    orderItem: OrderItem,
+    recipe: RecipeDocument,
+  ): Promise<void> {
+    if (recipe.locationId && recipe.locationId !== order.locationId) {
+      throw new BadRequestException(
+        `Rezept ${recipe.name} gehoert nicht zum Standort der Bestellung`,
+      );
+    }
+
+    if (!recipe.ingredients.length) {
+      warnings.push(`Rezept ${recipe.name} enthaelt keine Zutaten.`);
+      return;
+    }
+
+    for (const ingredient of recipe.ingredients) {
+      if (ingredient.isOptional) {
         continue;
       }
 
-      if (recipe.locationId && recipe.locationId !== order.locationId) {
-        throw new BadRequestException(
-          `Rezept ${recipe.name} gehoert nicht zum Standort der Bestellung`,
-        );
-      }
+      const stockItem = await this.resolveStockItemForConsumption(
+        ingredient.stockItemId,
+        ingredient.stockItemName,
+        ingredient.unit,
+        order,
+        warnings,
+        'Zutat',
+      );
 
-      if (!recipe.ingredients.length) {
-        warnings.push(`Rezept ${recipe.name} enthaelt keine Zutaten.`);
+      if (!stockItem) {
         continue;
       }
 
-      for (const ingredient of recipe.ingredients) {
-        if (ingredient.isOptional) {
+      lines.push({
+        recipe,
+        ingredient,
+        stockItem,
+        orderItemId: this.stringifyId(orderItem._id),
+        orderItemName: orderItem.name,
+        menuItemId: orderItem.menuItemId ?? orderItem.productId,
+        requiredQuantity: this.requiredQuantity(
+          ingredient,
+          orderItem.quantity,
+        ),
+      });
+    }
+  }
+
+  private async appendExtraLines(
+    lines: ConsumptionPlanLine[],
+    warnings: string[],
+    order: InventoryOrder,
+    orderItem: OrderItem,
+    recipe?: RecipeDocument | null,
+  ): Promise<void> {
+    for (const extra of orderItem.selectedExtras ?? []) {
+      for (const impact of extra.inventoryImpact ?? []) {
+        if (!impact.stockItemId || Number(impact.quantity) <= 0) {
+          warnings.push(
+            `Lagerverbrauch fuer Extra ${extra.name} ist unvollstaendig.`,
+          );
           continue;
         }
 
-        const stockItem = await this.stockItemModel
-          .findById(ingredient.stockItemId)
-          .exec();
+        const stockItem = await this.resolveStockItemForConsumption(
+          impact.stockItemId,
+          impact.stockItemName,
+          impact.unit,
+          order,
+          warnings,
+          `Extra ${extra.name}`,
+        );
 
         if (!stockItem) {
-          warnings.push(`Lagerartikel ${ingredient.stockItemName} fehlt.`);
           continue;
-        }
-
-        if (stockItem.locationId !== order.locationId) {
-          throw new BadRequestException(
-            `Zutat ${stockItem.name} gehoert nicht zum Standort der Bestellung`,
-          );
-        }
-        if (
-          order.tenantId &&
-          stockItem.tenantId &&
-          stockItem.tenantId !== order.tenantId
-        ) {
-          throw new BadRequestException(
-            `Zutat ${stockItem.name} gehoert nicht zum Tenant der Bestellung`,
-          );
-        }
-
-        if (stockItem.unit !== ingredient.unit) {
-          warnings.push(
-            `Einheit abweichend fuer ${stockItem.name}: Rezept ${ingredient.unit}, Lager ${stockItem.unit}.`,
-          );
         }
 
         lines.push({
-          recipe,
-          ingredient,
+          recipe: recipe ?? undefined,
+          ingredient: {
+            stockItemId: impact.stockItemId,
+            stockItemName: impact.stockItemName,
+            quantity: Number(impact.quantity),
+            unit: impact.unit,
+            wasteFactor: 1,
+            purchasePriceNet: 0,
+          },
           stockItem,
           orderItemId: this.stringifyId(orderItem._id),
           orderItemName: orderItem.name,
           menuItemId: orderItem.menuItemId ?? orderItem.productId,
-          requiredQuantity: this.requiredQuantity(
-            ingredient,
-            orderItem.quantity,
-          ),
+          extraId: extra.extraId,
+          extraName: extra.name,
+          requiredQuantity: Number(impact.quantity) * orderItem.quantity,
         });
       }
     }
+  }
 
-    return { lines, warnings };
+  private async resolveStockItemForConsumption(
+    stockItemId: string,
+    stockItemName: string,
+    unit: string,
+    order: InventoryOrder,
+    warnings: string[],
+    sourceLabel: string,
+  ): Promise<StockItemDocument | null> {
+    const stockItem = await this.stockItemModel.findById(stockItemId).exec();
+
+    if (!stockItem) {
+      warnings.push(`Lagerartikel ${stockItemName} fehlt.`);
+      return null;
+    }
+
+    if (stockItem.locationId !== order.locationId) {
+      throw new BadRequestException(
+        `${sourceLabel} ${stockItem.name} gehoert nicht zum Standort der Bestellung`,
+      );
+    }
+    if (
+      order.tenantId &&
+      stockItem.tenantId &&
+      stockItem.tenantId !== order.tenantId
+    ) {
+      throw new BadRequestException(
+        `${sourceLabel} ${stockItem.name} gehoert nicht zum Tenant der Bestellung`,
+      );
+    }
+
+    if (stockItem.unit !== unit) {
+      warnings.push(
+        `Einheit abweichend fuer ${stockItem.name}: Verbrauch ${unit}, Lager ${stockItem.unit}.`,
+      );
+    }
+
+    return stockItem;
   }
 
   private async findRecipe(
@@ -303,7 +399,7 @@ export class RecipeInventoryService {
     const aggregate = new Map<string, ConsumptionPlanLine>();
 
     for (const line of lines) {
-      const key = `${line.recipe._id.toString()}:${line.stockItem._id.toString()}:${line.menuItemId ?? ''}:${line.orderItemId ?? ''}`;
+      const key = `${this.stringifyId(line.recipe?._id) || 'extra'}:${line.stockItem._id.toString()}:${line.menuItemId ?? ''}:${line.orderItemId ?? ''}:${line.extraId ?? ''}`;
       const current = aggregate.get(key);
 
       aggregate.set(key, {
@@ -352,8 +448,9 @@ export class RecipeInventoryService {
         batchId: batchIds.join(',') || undefined,
         orderId: this.stringifyId(order._id),
         orderItemId: line.orderItemId,
-        recipeId: this.stringifyId(line.recipe._id) || undefined,
+        recipeId: this.stringifyId(line.recipe?._id) || undefined,
         menuItemId: line.menuItemId,
+        extraId: line.extraId,
         referenceType: 'order',
         referenceId: this.stringifyId(order._id),
         stockItemName: item.name,
@@ -365,7 +462,7 @@ export class RecipeInventoryService {
         quantityAfter: item.quantity,
         unitPriceNet,
         valueNet: roundMoney(Math.abs(quantityChange) * unitPriceNet),
-        note: `${notePrefix}: ${line.orderItemName} / ${line.recipe.name}`,
+        note: `${notePrefix}: ${line.orderItemName} / ${this.describePlanLine(line)}`,
         reason: movementType,
         actorId,
       });
@@ -377,10 +474,18 @@ export class RecipeInventoryService {
   }
 
   private requiredQuantity(
-    ingredient: RecipeIngredient,
+    ingredient: ConsumptionPlanLine['ingredient'],
     portions: number,
   ): number {
     return ingredient.quantity * portions * (ingredient.wasteFactor ?? 1);
+  }
+
+  private describePlanLine(line: ConsumptionPlanLine): string {
+    const baseName = line.recipe?.name ?? line.extraName ?? 'Extra';
+
+    return line.extraName && line.recipe
+      ? `${baseName} / ${line.extraName}`
+      : baseName;
   }
 
   private async hasExistingOrderMovement(

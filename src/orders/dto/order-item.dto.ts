@@ -34,6 +34,26 @@ const stringArray = (value: unknown): string[] | undefined => {
     .filter(Boolean);
 };
 
+export class SelectedOrderItemExtraInventoryImpactDto {
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsString()
+  stockItemId!: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  stockItemName?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.000001)
+  quantity!: number;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsString()
+  unit!: string;
+}
+
 export class SelectedOrderItemExtraDto {
   @Transform(({ value }) => optionalTrimString(value))
   @IsString()
@@ -52,6 +72,12 @@ export class SelectedOrderItemExtraDto {
   @IsOptional()
   @IsBoolean()
   sendToKitchen?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SelectedOrderItemExtraInventoryImpactDto)
+  inventoryImpact?: SelectedOrderItemExtraInventoryImpactDto[];
 }
 
 export class OrderItemDto {

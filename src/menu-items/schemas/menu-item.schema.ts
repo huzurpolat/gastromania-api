@@ -4,6 +4,24 @@ import { HydratedDocument } from 'mongoose';
 export type MenuItemDocument = HydratedDocument<MenuItem>;
 
 @Schema({ _id: false, versionKey: false })
+export class MenuItemExtraInventoryImpact {
+  @Prop({ required: true, trim: true })
+  stockItemId!: string;
+
+  @Prop({ required: true, trim: true })
+  stockItemName!: string;
+
+  @Prop({ required: true, min: 0 })
+  quantity!: number;
+
+  @Prop({ required: true, trim: true })
+  unit!: string;
+}
+
+export const MenuItemExtraInventoryImpactSchema =
+  SchemaFactory.createForClass(MenuItemExtraInventoryImpact);
+
+@Schema({ _id: false, versionKey: false })
 export class MenuItemExtra {
   @Prop({ required: true, trim: true })
   id!: string;
@@ -22,6 +40,9 @@ export class MenuItemExtra {
 
   @Prop({ min: 0, default: 999 })
   sortOrder?: number;
+
+  @Prop({ type: [MenuItemExtraInventoryImpactSchema], default: [] })
+  inventoryImpact!: MenuItemExtraInventoryImpact[];
 }
 
 export const MenuItemExtraSchema = SchemaFactory.createForClass(MenuItemExtra);

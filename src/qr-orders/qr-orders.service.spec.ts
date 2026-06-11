@@ -242,6 +242,7 @@ describe('QrOrdersService', () => {
                 name: 'Extra Kaese',
                 priceDelta: 1.5,
                 sendToKitchen: true,
+                inventoryImpact: [],
               },
             ],
           }),

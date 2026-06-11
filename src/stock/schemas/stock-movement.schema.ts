@@ -46,6 +46,9 @@ export class StockMovement {
   menuItemId?: string;
 
   @Prop({ trim: true, index: true })
+  extraId?: string;
+
+  @Prop({ trim: true, index: true })
   referenceType?: string;
 
   @Prop({ trim: true, index: true })

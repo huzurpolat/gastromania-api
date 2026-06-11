@@ -51,6 +51,7 @@ export interface UserResponse {
   locationIds?: string[];
   locationAssignments?: UserLocationAssignmentResponse[];
   managedLocationIds?: string[];
+  departmentId?: string;
   departmentIds?: string[];
   responsibilities?: string[];
   createdAt?: Date;
@@ -275,6 +276,7 @@ export const toUserResponse = (user: UserDocument): UserResponse => {
     locationId: user.locationId,
     locationIds: user.locationIds,
     managedLocationIds: user.managedLocationIds,
+    departmentId: user.departmentIds?.[0],
     departmentIds: user.departmentIds,
     responsibilities: user.responsibilities,
     createdAt: user.createdAt,

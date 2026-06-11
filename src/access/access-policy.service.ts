@@ -377,10 +377,18 @@ export class AccessPolicyService {
 
     const department = await this.departmentModel
       .findById(departmentId)
-      .select('companyId locationId')
+      .select('tenantId companyId locationId')
       .exec();
 
     if (!department) {
+      return false;
+    }
+
+    if (department.tenantId) {
+      return user.tenantId === department.tenantId;
+    }
+
+    if (!department.companyId || !department.locationId) {
       return false;
     }
 

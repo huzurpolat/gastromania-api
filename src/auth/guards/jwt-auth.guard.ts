@@ -49,7 +49,11 @@ export class JwtAuthGuard implements CanActivate {
       .lean()
       .exec();
 
-    if (!currentUser || !currentUser.isActive || currentUser.status === 'disabled') {
+    if (
+      !currentUser ||
+      !currentUser.isActive ||
+      this.isBlockedUserStatus(currentUser.status)
+    ) {
       throw new UnauthorizedException('Benutzer ist deaktiviert');
     }
 
@@ -61,6 +65,10 @@ export class JwtAuthGuard implements CanActivate {
         'Session permissions are outdated. Please login again.',
       );
     }
+  }
+
+  private isBlockedUserStatus(status?: string): boolean {
+    return ['disabled', 'suspended', 'inactive'].includes(status ?? '');
   }
 
   private extractTokenFromHeader(request: Request): string | undefined {

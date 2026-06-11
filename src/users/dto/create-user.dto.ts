@@ -308,6 +308,11 @@ export class CreateUserDto {
   companyId?: string;
 
   @IsOptional()
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsString()
+  departmentId?: string;
+
+  @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
   @IsString({ each: true })

@@ -76,6 +76,24 @@ export enum CourseType {
 }
 
 @Schema({ _id: false, versionKey: false })
+export class SelectedOrderItemExtraInventoryImpact {
+  @Prop({ required: true, trim: true })
+  stockItemId!: string;
+
+  @Prop({ required: true, trim: true })
+  stockItemName!: string;
+
+  @Prop({ required: true, min: 0 })
+  quantity!: number;
+
+  @Prop({ required: true, trim: true })
+  unit!: string;
+}
+
+export const SelectedOrderItemExtraInventoryImpactSchema =
+  SchemaFactory.createForClass(SelectedOrderItemExtraInventoryImpact);
+
+@Schema({ _id: false, versionKey: false })
 export class SelectedOrderItemExtra {
   @Prop({ required: true, trim: true })
   extraId!: string;
@@ -88,6 +106,9 @@ export class SelectedOrderItemExtra {
 
   @Prop({ default: true })
   sendToKitchen!: boolean;
+
+  @Prop({ type: [SelectedOrderItemExtraInventoryImpactSchema], default: [] })
+  inventoryImpact!: SelectedOrderItemExtraInventoryImpact[];
 }
 
 export const SelectedOrderItemExtraSchema =
