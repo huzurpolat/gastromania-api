@@ -18,6 +18,7 @@ import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { CreateInventoryCategoryDto } from './dto/create-inventory-category.dto';
 import { CreateInventoryLocationDto } from './dto/create-inventory-location.dto';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
+import { CreateReorderPurchaseOrderDto } from './dto/create-reorder-purchase-order.dto';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
 import {
   CompleteInventorySessionDto,
@@ -25,6 +26,10 @@ import {
 } from './dto/inventory-session.dto';
 import { ReceiveStockDto } from './dto/receive-stock.dto';
 import { ReportWasteDto } from './dto/report-waste.dto';
+import {
+  CreateSupplierPriceDto,
+  UpdateSupplierPriceDto,
+} from './dto/supplier-price.dto';
 import { UpdatePurchaseOrderStatusDto } from './dto/update-purchase-order-status.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
 import {
@@ -49,7 +54,11 @@ import {
   InventorySessionStatus,
 } from './schemas/inventory-session.schema';
 import { StockAlert, StockAlertDocument } from './schemas/stock-alert.schema';
-import { StockItem, StockItemDocument } from './schemas/stock-item.schema';
+import {
+  StockItem,
+  StockItemDocument,
+  StockSupplierPrice,
+} from './schemas/stock-item.schema';
 import {
   StockMovement,
   StockMovementDocument,
@@ -72,6 +81,27 @@ import {
   resolveValuationUnitCost,
   roundMoney,
 } from './stock-valuation';
+import {
+  calculateSupplierPriceDifference,
+  findDuplicateSupplierPrice,
+  getCheapestSupplierPrice,
+  getPreferredSupplierPrice,
+} from './supplier-price-utils';
+
+export interface SupplierPriceResponse {
+  supplierId: string;
+  supplierName?: string;
+  unitPriceNet: number;
+  currency: string;
+  unit: string;
+  minimumOrderQuantity?: number;
+  leadTimeDays?: number;
+  isPreferred: boolean;
+  lastPurchasedAt?: string;
+  lastPurchasePriceNet?: number;
+  notes?: string;
+  updatedAt?: string;
+}
 
 export interface StockItemResponse {
   _id: string;
@@ -107,6 +137,10 @@ export interface StockItemResponse {
   lowStock: boolean;
   stockValueNet: number;
   valuationWarnings: string[];
+  supplierPrices: SupplierPriceResponse[];
+  preferredSupplierPrice?: SupplierPriceResponse;
+  cheapestSupplierPrice?: SupplierPriceResponse;
+  supplierPriceDifferenceNet?: number;
   criticalStock: boolean;
   negativeStock: boolean;
   createdAt?: string;
@@ -204,10 +238,97 @@ export interface PurchaseOrderResponse {
   status: PurchaseOrderStatus;
   lines: PurchaseOrderLineResponse[];
   totalNet: number;
+  expectedDeliveryDate?: string;
   note?: string;
   createdBy: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type ReorderSuggestionStrategy = 'preferred' | 'cheapest';
+
+export interface ReorderSuggestionItemResponse {
+  stockItemId: string;
+  stockItemName: string;
+  currentStock: number;
+  minimumStock: number;
+  targetStock?: number;
+  unit: string;
+  openPurchaseQuantity: number;
+  suggestedQuantity: number;
+  supplierId?: string;
+  supplierName?: string;
+  unitPriceNet?: number;
+  currency?: string;
+  estimatedTotalNet?: number;
+  warnings: string[];
+}
+
+export interface ReorderSuggestionsResponse {
+  summary: {
+    totalItems: number;
+    suggestedItems: number;
+    coveredItems: number;
+    warningCount: number;
+    estimatedTotalNet: number;
+  };
+  items: ReorderSuggestionItemResponse[];
+}
+
+export interface ProcurementDashboardResponse {
+  summary: {
+    openOrders: number;
+    partiallyReceivedOrders: number;
+    overdueOrders: number;
+    openOrderValueNet: number;
+    receiptsToday: number;
+    criticalStockItems: number;
+    reorderSuggestions: number;
+    purchaseVolumeNet: number;
+    receiptValueNet: number;
+  };
+  purchaseOrders: Array<
+    PurchaseOrderResponse & {
+      openQuantity: number;
+      locationName?: string;
+      isOverdue: boolean;
+    }
+  >;
+  receipts: Array<
+    StockMovementResponse & {
+      purchaseOrderNumber?: string;
+      locationName?: string;
+    }
+  >;
+  supplierRanking: Array<{
+    supplierId: string;
+    supplierName: string;
+    orderCount: number;
+    purchaseValueNet: number;
+    openOrders: number;
+    lastPurchaseAt?: string;
+  }>;
+  reorderSuggestions: ReorderSuggestionItemResponse[];
+  warnings: Array<{
+    type:
+      | 'overdue_order'
+      | 'missing_supplier'
+      | 'missing_supplier_price'
+      | 'critical_stock'
+      | 'missing_purchase_price';
+    message: string;
+    severity: 'warning' | 'critical';
+    stockItemId?: string;
+    purchaseOrderId?: string;
+    supplierId?: string;
+    locationId?: string;
+  }>;
+  filters: {
+    locationIds: string[];
+    range: 'today' | 'week' | 'month' | 'custom';
+    dateFrom: string;
+    dateTo: string;
+  };
 }
 
 export interface StockEvent {
@@ -301,6 +422,160 @@ export class StockService {
     return items.map((item) => this.toItemResponse(item));
   }
 
+  async listSupplierPrices(
+    stockItemId: string,
+    actor: AuthenticatedUser,
+  ): Promise<SupplierPriceResponse[]> {
+    const item = await this.findStockItemForActor(stockItemId, actor);
+    return this.toSupplierPriceResponses(item.supplierPrices ?? []);
+  }
+
+  async addSupplierPrice(
+    stockItemId: string,
+    payload: CreateSupplierPriceDto,
+    actor: AuthenticatedUser,
+  ): Promise<StockItemResponse> {
+    const item = await this.findStockItemForActor(stockItemId, actor);
+    const supplier = await this.assertSupplierForLocation(
+      payload.supplierId,
+      item.locationId,
+    );
+    const unit = payload.unit.trim();
+    const prices = item.supplierPrices ?? [];
+    if (findDuplicateSupplierPrice(prices, supplier._id.toString(), unit)) {
+      throw new BadRequestException(
+        'Lieferantenpreis fuer Lieferant und Einheit existiert bereits',
+      );
+    }
+
+    const supplierPrice: StockSupplierPrice = {
+      supplierId: supplier._id.toString(),
+      supplierName: supplier.name,
+      unitPriceNet: roundMoney(payload.unitPriceNet),
+      currency: (payload.currency ?? item.currency ?? 'EUR').toUpperCase(),
+      unit,
+      minimumOrderQuantity: payload.minimumOrderQuantity,
+      leadTimeDays: payload.leadTimeDays,
+      isPreferred: payload.isPreferred ?? false,
+      notes: payload.notes,
+      updatedAt: new Date(),
+    };
+
+    if (supplierPrice.isPreferred) {
+      prices.forEach((price) => {
+        price.isPreferred = false;
+      });
+      item.supplierId = supplierPrice.supplierId;
+      item.supplierName = supplierPrice.supplierName;
+    }
+
+    item.supplierPrices = [...prices, supplierPrice];
+    const saved = await item.save();
+    return this.toItemResponse(saved);
+  }
+
+  async updateSupplierPrice(
+    stockItemId: string,
+    supplierId: string,
+    payload: UpdateSupplierPriceDto,
+    actor: AuthenticatedUser,
+  ): Promise<StockItemResponse> {
+    const item = await this.findStockItemForActor(stockItemId, actor);
+    const prices = item.supplierPrices ?? [];
+    const index = prices.findIndex((price) => price.supplierId === supplierId);
+    if (index < 0) {
+      throw new NotFoundException('Lieferantenpreis nicht gefunden');
+    }
+
+    await this.assertSupplierForLocation(supplierId, item.locationId);
+    const current = prices[index];
+    const nextUnit = payload.unit?.trim() || current.unit;
+    if (findDuplicateSupplierPrice(prices, supplierId, nextUnit, index)) {
+      throw new BadRequestException(
+        'Lieferantenpreis fuer Lieferant und Einheit existiert bereits',
+      );
+    }
+
+    if (payload.unitPriceNet !== undefined) {
+      current.unitPriceNet = roundMoney(payload.unitPriceNet);
+    }
+    if (payload.currency !== undefined) {
+      current.currency = payload.currency.toUpperCase();
+    }
+    current.unit = nextUnit;
+    if ('minimumOrderQuantity' in payload) {
+      current.minimumOrderQuantity = payload.minimumOrderQuantity;
+    }
+    if ('leadTimeDays' in payload) {
+      current.leadTimeDays = payload.leadTimeDays;
+    }
+    if ('notes' in payload) {
+      current.notes = payload.notes;
+    }
+    current.updatedAt = new Date();
+
+    if (payload.isPreferred === true) {
+      prices.forEach((price) => {
+        price.isPreferred = false;
+      });
+      current.isPreferred = true;
+      item.supplierId = current.supplierId;
+      item.supplierName = current.supplierName;
+    } else if (payload.isPreferred === false) {
+      current.isPreferred = false;
+    }
+
+    item.supplierPrices = prices;
+    const saved = await item.save();
+    return this.toItemResponse(saved);
+  }
+
+  async deleteSupplierPrice(
+    stockItemId: string,
+    supplierId: string,
+    actor: AuthenticatedUser,
+  ): Promise<StockItemResponse> {
+    const item = await this.findStockItemForActor(stockItemId, actor);
+    const prices = item.supplierPrices ?? [];
+    const nextPrices = prices.filter((price) => price.supplierId !== supplierId);
+    if (nextPrices.length === prices.length) {
+      throw new NotFoundException('Lieferantenpreis nicht gefunden');
+    }
+    if (item.supplierId === supplierId) {
+      const nextPreferred = getPreferredSupplierPrice(nextPrices);
+      item.supplierId = nextPreferred?.supplierId;
+      item.supplierName = nextPreferred?.supplierName;
+    }
+    item.supplierPrices = nextPrices;
+    const saved = await item.save();
+    return this.toItemResponse(saved);
+  }
+
+  async preferSupplierPrice(
+    stockItemId: string,
+    supplierId: string,
+    actor: AuthenticatedUser,
+  ): Promise<StockItemResponse> {
+    const item = await this.findStockItemForActor(stockItemId, actor);
+    const prices = item.supplierPrices ?? [];
+    const preferred = prices.find((price) => price.supplierId === supplierId);
+    if (!preferred) {
+      throw new NotFoundException('Lieferantenpreis nicht gefunden');
+    }
+    await this.assertSupplierForLocation(supplierId, item.locationId);
+    prices.forEach((price) => {
+      price.isPreferred = price.supplierId === supplierId;
+      if (price.isPreferred) {
+        price.updatedAt = new Date();
+      }
+    });
+    item.supplierId = preferred.supplierId;
+    item.supplierName = preferred.supplierName;
+    item.supplierPrices = prices;
+    const saved = await item.save();
+    return this.toItemResponse(saved);
+  }
+
   async findMovements(
     actor: AuthenticatedUser,
     locationId?: string,
@@ -391,6 +666,12 @@ export class StockService {
     item.supplierId = payload.supplierId ?? item.supplierId;
     item.supplierName = payload.supplierName ?? item.supplierName;
     item.storageLocation = payload.storageLocation ?? item.storageLocation;
+    this.applySupplierPriceLastPurchase(
+      item,
+      purchaseOrder?.supplierId ?? payload.supplierId ?? item.supplierId,
+      unitPriceNet,
+      receivedAt,
+    );
     const saved = await item.save();
 
     const batch = await this.batchModel.create({
@@ -481,65 +762,200 @@ export class StockService {
     );
   }
 
-  async reorderSuggestions(actor: AuthenticatedUser, locationId?: string) {
-    const items = await this.findAll(actor, locationId);
-    const lowItems = items.filter(
-      (item) =>
-        item.isActive && !item.isArchived && item.quantity <= item.minQuantity,
+  async reorderSuggestions(
+    actor: AuthenticatedUser,
+    locationId?: string,
+    options: {
+      supplierId?: string;
+      includeCovered?: boolean;
+      strategy?: ReorderSuggestionStrategy;
+    } = {},
+  ): Promise<ReorderSuggestionsResponse> {
+    const locationIds = locationId
+      ? [locationId]
+      : await this.getReadableLocationIds(actor);
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
     );
-    const grouped = new Map<
-      string,
-      {
-        supplierId: string;
-        supplierName: string;
-        lines: Array<{
-          stockItemId: string;
-          stockItemName: string;
-          quantity: number;
-          unit: string;
-          unitPriceNet: number;
-          totalNet: number;
-          currentQuantity: number;
-          minQuantity: number;
-          targetQuantity: number;
-        }>;
-        totalNet: number;
-      }
-    >();
 
-    for (const item of lowItems) {
-      const targetQuantity =
-        item.targetQuantity ??
-        Math.max(item.minQuantity * 2, item.minQuantity + 1);
-      const quantity = Math.max(0, targetQuantity - item.quantity);
-      const supplierId = item.supplierId ?? 'unassigned';
-      const supplierName = item.supplierName ?? 'Ohne Lieferant';
-      const group = grouped.get(supplierId) ?? {
-        supplierId,
-        supplierName,
-        lines: [],
-        totalNet: 0,
-      };
-      const unitPriceNet = resolveValuationUnitCost(item);
-      const totalNet = roundMoney(quantity * unitPriceNet);
-      group.lines.push({
-        stockItemId: item._id,
-        stockItemName: item.name,
-        quantity,
-        unit: item.unit,
-        unitPriceNet,
-        totalNet,
-        currentQuantity: item.quantity,
-        minQuantity: item.minQuantity,
-        targetQuantity,
-      });
-      group.totalNet += totalNet;
-      grouped.set(supplierId, group);
+    if (options.supplierId) {
+      const supplierLocation = locationId ?? locationIds[0];
+      if (supplierLocation) {
+        await this.assertSupplierForLocation(options.supplierId, supplierLocation);
+      }
     }
 
-    return Array.from(grouped.values()).sort((a, b) =>
-      a.supplierName.localeCompare(b.supplierName),
-    );
+    const [items, openPurchaseQuantities, activeSuppliers] = await Promise.all([
+      this.stockItemModel
+        .find({
+          locationId: { $in: locationIds },
+          isActive: { $ne: false },
+          isArchived: { $ne: true },
+          ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
+        })
+        .sort({ category: 1, name: 1 })
+        .exec(),
+      this.getOpenPurchaseQuantities(actor, locationIds),
+      this.getActiveSuppliersByLocation(locationIds),
+    ]);
+
+    const strategy = options.strategy ?? 'preferred';
+    const suggestionItems: ReorderSuggestionItemResponse[] = [];
+    let coveredItems = 0;
+
+    for (const item of items) {
+      const warnings: string[] = [];
+      const minimumStock = Number(item.minQuantity ?? 0);
+      const currentStock = Number(item.quantity ?? 0);
+      const targetStock = item.targetQuantity;
+
+      if (minimumStock <= 0) {
+        warnings.push('Missing minimum stock');
+      }
+      if (targetStock === undefined || targetStock === null) {
+        warnings.push('Missing target stock');
+      }
+
+      if (minimumStock <= 0 || currentStock > minimumStock) {
+        continue;
+      }
+
+      const target = targetStock && targetStock > 0 ? targetStock : minimumStock;
+      const shortageQuantity = Math.max(0, target - currentStock);
+      const openPurchaseQuantity = openPurchaseQuantities.get(item._id.toString()) ?? 0;
+      const suggestedQuantity = Math.max(0, shortageQuantity - openPurchaseQuantity);
+      if (shortageQuantity > 0 && suggestedQuantity === 0) {
+        coveredItems += 1;
+        warnings.push('Open purchase order already covers shortage');
+      }
+      if (suggestedQuantity <= 0 && !options.includeCovered) {
+        continue;
+      }
+
+      const supplierSelection = this.selectReorderSupplier(
+        item,
+        activeSuppliers,
+        strategy,
+        options.supplierId,
+      );
+      warnings.push(...supplierSelection.warnings);
+
+      const unitPriceNet =
+        supplierSelection.unitPriceNet ??
+        item.lastPurchasePrice ??
+        resolveValuationUnitCost(item) ??
+        0;
+      if (!supplierSelection.unitPriceNet) {
+        warnings.push('Missing supplier price');
+      }
+      if (!unitPriceNet) {
+        warnings.push('Missing purchase price');
+      }
+
+      const estimatedTotalNet = roundMoney(suggestedQuantity * unitPriceNet);
+      suggestionItems.push({
+        stockItemId: item._id.toString(),
+        stockItemName: item.name,
+        currentStock,
+        minimumStock,
+        targetStock,
+        unit: item.unit,
+        openPurchaseQuantity,
+        suggestedQuantity,
+        supplierId: supplierSelection.supplierId,
+        supplierName: supplierSelection.supplierName,
+        unitPriceNet: unitPriceNet || undefined,
+        currency: supplierSelection.currency ?? item.currency ?? 'EUR',
+        estimatedTotalNet: unitPriceNet ? estimatedTotalNet : undefined,
+        warnings: Array.from(new Set(warnings)),
+      });
+    }
+
+    const visibleItems = options.supplierId
+      ? suggestionItems.filter((item) => item.supplierId === options.supplierId)
+      : suggestionItems;
+
+    return {
+      summary: {
+        totalItems: items.length,
+        suggestedItems: visibleItems.filter((item) => item.suggestedQuantity > 0).length,
+        coveredItems,
+        warningCount: visibleItems.reduce(
+          (sum, item) => sum + item.warnings.length,
+          0,
+        ),
+        estimatedTotalNet: roundMoney(
+          visibleItems.reduce(
+            (sum, item) => sum + (item.estimatedTotalNet ?? 0),
+            0,
+          ),
+        ),
+      },
+      items: visibleItems,
+    };
+  }
+
+  async createPurchaseOrdersFromReorderSuggestions(
+    payload: CreateReorderPurchaseOrderDto,
+    actor: AuthenticatedUser,
+  ): Promise<PurchaseOrderResponse[]> {
+    await this.assertCanUseLocation(actor, payload.locationId);
+    if (!payload.items.length) {
+      throw new BadRequestException(
+        'Bestellvorschlag benoetigt mindestens eine Position',
+      );
+    }
+
+    const grouped = new Map<
+      string,
+      Array<{ stockItemId: string; quantity: number; expectedUnitCost?: number }>
+    >();
+    const activeSuppliers = await this.getActiveSuppliersByLocation([
+      payload.locationId,
+    ]);
+
+    for (const item of payload.items) {
+      const stockItem = await this.findStockItemForActor(item.stockItemId, actor);
+      if (stockItem.locationId !== payload.locationId) {
+        throw new BadRequestException(
+          'Bestellvorschlag enthaelt Artikel aus anderem Standort',
+        );
+      }
+      const supplierId =
+        item.supplierId ??
+        payload.supplierId ??
+        this.selectReorderSupplier(stockItem, activeSuppliers, 'preferred')
+          .supplierId;
+      if (!supplierId) {
+        throw new BadRequestException(
+          `Kein Lieferant fuer ${stockItem.name} ausgewaehlt`,
+        );
+      }
+      await this.assertSupplierForLocation(supplierId, payload.locationId);
+      const lines = grouped.get(supplierId) ?? [];
+      lines.push({
+        stockItemId: item.stockItemId,
+        quantity: item.quantity,
+        expectedUnitCost: item.expectedUnitCost,
+      });
+      grouped.set(supplierId, lines);
+    }
+
+    const orders: PurchaseOrderResponse[] = [];
+    for (const [supplierId, lines] of grouped.entries()) {
+      orders.push(
+        await this.createPurchaseOrder(
+          {
+            locationId: payload.locationId,
+            supplierId,
+            lines,
+            note: 'Aus Bestellvorschlaegen erstellt',
+          },
+          actor,
+        ),
+      );
+    }
+    return orders;
   }
 
   async listPurchaseOrders(
@@ -587,8 +1003,11 @@ export class StockService {
         throw new NotFoundException('Nachbestellartikel nicht gefunden');
       }
       this.assertTenantMatch(actor, item.tenantId, 'Nachbestellartikel');
-      const unitPriceNet =
-        line.expectedUnitCost ?? resolveValuationUnitCost(item);
+      const unitPriceNet = this.resolvePurchaseOrderUnitCost(
+        item,
+        payload.supplierId,
+        line.expectedUnitCost,
+      );
       lines.push({
         stockItemId: item._id.toString(),
         stockItemName: item.name,
@@ -612,6 +1031,10 @@ export class StockService {
       status: PurchaseOrderStatus.Draft,
       lines,
       totalNet,
+      expectedDeliveryDate: this.parseOptionalDate(
+        payload.expectedDeliveryDate,
+        'Lieferdatum',
+      ),
       note: payload.note,
       createdBy: actor.sub,
     });
@@ -869,6 +1292,239 @@ export class StockService {
         name: entry.name,
         quantity: entry.quantity,
       })),
+    };
+  }
+
+  async procurementDashboard(
+    actor: AuthenticatedUser,
+    options: {
+      locationId?: string;
+      supplierId?: string;
+      status?: PurchaseOrderStatus;
+      range?: 'today' | 'week' | 'month' | 'custom';
+      dateFrom?: string;
+      dateTo?: string;
+    } = {},
+  ): Promise<ProcurementDashboardResponse> {
+    const locationIds = options.locationId
+      ? [options.locationId]
+      : await this.getReadableLocationIds(actor);
+    await Promise.all(
+      locationIds.map((id) => this.assertCanUseLocation(actor, id)),
+    );
+
+    const range = this.resolveProcurementDateRange(
+      options.range,
+      options.dateFrom,
+      options.dateTo,
+    );
+    const orderQuery = {
+      locationId: { $in: locationIds },
+      ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
+      ...(options.supplierId ? { supplierId: options.supplierId } : {}),
+      ...(options.status ? { status: options.status } : {}),
+    };
+    const receiptQuery = {
+      locationId: { $in: locationIds },
+      ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
+      type: StockMovementType.Receipt,
+      createdAt: { $gte: range.from, $lte: range.to },
+      ...(options.supplierId ? { supplierId: options.supplierId } : {}),
+    };
+
+    const [orders, receipts, items, reorderSuggestions, locations] =
+      await Promise.all([
+        this.purchaseOrderModel.find(orderQuery).sort({ createdAt: -1 }).exec(),
+        this.movementModel.find(receiptQuery).sort({ createdAt: -1 }).limit(80).exec(),
+        this.stockItemModel
+          .find({
+            locationId: { $in: locationIds },
+            ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
+            isActive: { $ne: false },
+            isArchived: { $ne: true },
+          })
+          .sort({ name: 1 })
+          .exec(),
+        this.reorderSuggestions(actor, options.locationId, {
+          supplierId: options.supplierId,
+          includeCovered: true,
+          strategy: 'preferred',
+        }),
+        this.locationModel
+          .find({ _id: { $in: locationIds } })
+          .select('_id name')
+          .lean()
+          .exec(),
+      ]);
+
+    const locationNames = new Map(
+      locations.map((location) => [location._id.toString(), location.name]),
+    );
+    const ordersById = new Map(
+      orders.map((order) => [order._id.toString(), order]),
+    );
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const openStatuses = [
+      PurchaseOrderStatus.Ordered,
+      PurchaseOrderStatus.PartiallyReceived,
+    ];
+    const unresolvedStatuses = [
+      PurchaseOrderStatus.Draft,
+      PurchaseOrderStatus.Ordered,
+      PurchaseOrderStatus.PartiallyReceived,
+    ];
+    const openOrders = orders.filter((order) =>
+      openStatuses.includes(order.status),
+    );
+    const overdueOrders = orders.filter(
+      (order) =>
+        Boolean(order.expectedDeliveryDate) &&
+        order.expectedDeliveryDate! < today &&
+        ![PurchaseOrderStatus.Received, PurchaseOrderStatus.Cancelled].includes(
+          order.status,
+        ),
+    );
+    const criticalItems = items.filter(
+      (item) => item.quantity <= item.minQuantity,
+    );
+    const warnings: ProcurementDashboardResponse['warnings'] = [];
+
+    for (const order of overdueOrders) {
+      warnings.push({
+        type: 'overdue_order',
+        severity: 'critical',
+        purchaseOrderId: order._id.toString(),
+        supplierId: order.supplierId,
+        locationId: order.locationId,
+        message: `Bestellung ${order.orderNumber} ist ueberfaellig.`,
+      });
+    }
+
+    for (const item of criticalItems.slice(0, 20)) {
+      warnings.push({
+        type: 'critical_stock',
+        severity: 'warning',
+        stockItemId: item._id.toString(),
+        supplierId: item.supplierId,
+        locationId: item.locationId,
+        message: `${item.name} liegt am oder unter Mindestbestand.`,
+      });
+    }
+
+    for (const suggestion of reorderSuggestions.items) {
+      for (const warning of suggestion.warnings) {
+        warnings.push({
+          type: this.mapReorderWarningType(warning),
+          severity: warning === 'Missing supplier' ? 'critical' : 'warning',
+          stockItemId: suggestion.stockItemId,
+          supplierId: suggestion.supplierId,
+          message: `${suggestion.stockItemName}: ${warning}`,
+        });
+      }
+    }
+
+    const supplierRanking = new Map<
+      string,
+      {
+        supplierId: string;
+        supplierName: string;
+        orderCount: number;
+        purchaseValueNet: number;
+        openOrders: number;
+        lastPurchaseAt?: string;
+      }
+    >();
+    for (const order of orders) {
+      const entry = supplierRanking.get(order.supplierId) ?? {
+        supplierId: order.supplierId,
+        supplierName: order.supplierName,
+        orderCount: 0,
+        purchaseValueNet: 0,
+        openOrders: 0,
+      };
+      entry.orderCount += 1;
+      entry.purchaseValueNet = roundMoney(entry.purchaseValueNet + order.totalNet);
+      if (unresolvedStatuses.includes(order.status)) {
+        entry.openOrders += 1;
+      }
+      const createdAt = (order as PurchaseOrderDocument & { createdAt?: Date }).createdAt;
+      if (
+        createdAt &&
+        (!entry.lastPurchaseAt || createdAt > new Date(entry.lastPurchaseAt))
+      ) {
+        entry.lastPurchaseAt = createdAt.toISOString();
+      }
+      supplierRanking.set(order.supplierId, entry);
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const receiptResponses = receipts.map((movement) => {
+      const response = this.toMovementResponse(movement);
+      const order = response.referenceId
+        ? ordersById.get(response.referenceId)
+        : undefined;
+      return {
+        ...response,
+        purchaseOrderNumber: order?.orderNumber,
+        locationName: locationNames.get(response.locationId),
+      };
+    });
+    const purchaseOrders = orders.map((order) => {
+      const response = this.toPurchaseOrderResponse(order);
+      const openQuantity = response.lines.reduce(
+        (sum, line) => sum + line.openQuantity,
+        0,
+      );
+      return {
+        ...response,
+        openQuantity: this.roundQuantity(openQuantity),
+        locationName: locationNames.get(response.locationId),
+        isOverdue: overdueOrders.some(
+          (entry) => entry._id.toString() === response._id,
+        ),
+      };
+    });
+
+    return {
+      summary: {
+        openOrders: openOrders.length,
+        partiallyReceivedOrders: orders.filter(
+          (order) => order.status === PurchaseOrderStatus.PartiallyReceived,
+        ).length,
+        overdueOrders: overdueOrders.length,
+        openOrderValueNet: roundMoney(
+          openOrders.reduce((sum, order) => sum + order.totalNet, 0),
+        ),
+        receiptsToday: receipts.filter((movement) => {
+          const createdAt = (movement as StockMovementDocument & { createdAt?: Date }).createdAt;
+          return createdAt ? createdAt >= todayStart : false;
+        }).length,
+        criticalStockItems: criticalItems.length,
+        reorderSuggestions: reorderSuggestions.summary.suggestedItems,
+        purchaseVolumeNet: roundMoney(
+          orders.reduce((sum, order) => sum + order.totalNet, 0),
+        ),
+        receiptValueNet: roundMoney(
+          receipts.reduce((sum, movement) => sum + Number(movement.valueNet ?? 0), 0),
+        ),
+      },
+      purchaseOrders,
+      receipts: receiptResponses,
+      supplierRanking: [...supplierRanking.values()].sort(
+        (left, right) => right.purchaseValueNet - left.purchaseValueNet,
+      ),
+      reorderSuggestions: reorderSuggestions.items.filter(
+        (item) => item.suggestedQuantity > 0,
+      ),
+      warnings,
+      filters: {
+        locationIds,
+        range: range.range,
+        dateFrom: range.from.toISOString(),
+        dateTo: range.to.toISOString(),
+      },
     };
   }
 
@@ -1222,7 +1878,23 @@ export class StockService {
         'Lieferant gehoert nicht zum Standort der Bestellung',
       );
     }
+    if (supplier.isArchived || supplier.isActive === false) {
+      throw new BadRequestException('Lieferant ist nicht aktiv');
+    }
     return supplier;
+  }
+
+  private async findStockItemForActor(
+    stockItemId: string,
+    actor: AuthenticatedUser,
+  ): Promise<StockItemDocument> {
+    const item = await this.stockItemModel.findById(stockItemId).exec();
+    if (!item) {
+      throw new NotFoundException('Lagerartikel nicht gefunden');
+    }
+    await this.assertCanUseLocation(actor, item.locationId);
+    this.assertTenantMatch(actor, item.tenantId, 'Lagerartikel');
+    return item;
   }
 
   private assertTenantMatch(
@@ -1239,6 +1911,153 @@ export class StockService {
 
   private roundQuantity(value: number): number {
     return Math.round(value * 1000) / 1000;
+  }
+
+  private async getOpenPurchaseQuantities(
+    actor: AuthenticatedUser,
+    locationIds: string[],
+  ): Promise<Map<string, number>> {
+    const orders = await this.purchaseOrderModel
+      .find({
+        locationId: { $in: locationIds },
+        ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
+        status: {
+          $in: [
+            PurchaseOrderStatus.Draft,
+            PurchaseOrderStatus.Ordered,
+            PurchaseOrderStatus.PartiallyReceived,
+          ],
+        },
+      })
+      .exec();
+    const quantities = new Map<string, number>();
+    for (const order of orders) {
+      for (const line of order.lines ?? []) {
+        const openQuantity = Math.max(
+          0,
+          Number(line.quantity ?? 0) - Number(line.receivedQuantity ?? 0),
+        );
+        quantities.set(
+          line.stockItemId,
+          this.roundQuantity(
+            (quantities.get(line.stockItemId) ?? 0) + openQuantity,
+          ),
+        );
+      }
+    }
+    return quantities;
+  }
+
+  private async getActiveSuppliersByLocation(
+    locationIds: string[],
+  ): Promise<Map<string, SupplierDocument>> {
+    const suppliers = await this.supplierModel
+      .find({
+        locationId: { $in: locationIds },
+        isActive: { $ne: false },
+        isArchived: { $ne: true },
+      })
+      .exec();
+    return new Map(
+      suppliers.map((supplier) => [supplier._id.toString(), supplier]),
+    );
+  }
+
+  private selectReorderSupplier(
+    item: StockItemDocument,
+    activeSuppliers: Map<string, SupplierDocument>,
+    strategy: ReorderSuggestionStrategy,
+    requiredSupplierId?: string,
+  ): {
+    supplierId?: string;
+    supplierName?: string;
+    unitPriceNet?: number;
+    currency?: string;
+    warnings: string[];
+  } {
+    const warnings: string[] = [];
+    const activePrices = (item.supplierPrices ?? []).filter((price) =>
+      activeSuppliers.has(price.supplierId),
+    );
+    const requiredPrice = requiredSupplierId
+      ? activePrices.find((price) => price.supplierId === requiredSupplierId)
+      : undefined;
+    const preferredPrice = getPreferredSupplierPrice(activePrices);
+    const cheapestPrice = getCheapestSupplierPrice(activePrices);
+    const selectedPrice =
+      requiredPrice ??
+      (strategy === 'cheapest' ? cheapestPrice : preferredPrice ?? cheapestPrice);
+
+    if (requiredSupplierId && !requiredPrice) {
+      warnings.push('Missing supplier price');
+    }
+    if (selectedPrice) {
+      return {
+        supplierId: selectedPrice.supplierId,
+        supplierName:
+          selectedPrice.supplierName ??
+          activeSuppliers.get(selectedPrice.supplierId)?.name,
+        unitPriceNet: selectedPrice.unitPriceNet,
+        currency: selectedPrice.currency ?? item.currency ?? 'EUR',
+        warnings,
+      };
+    }
+
+    if (item.supplierId && activeSuppliers.has(item.supplierId)) {
+      warnings.push('Missing supplier price');
+      return {
+        supplierId: item.supplierId,
+        supplierName:
+          item.supplierName ?? activeSuppliers.get(item.supplierId)?.name,
+        warnings,
+      };
+    }
+
+    warnings.push('Missing supplier');
+    return { warnings };
+  }
+
+  private resolvePurchaseOrderUnitCost(
+    item: StockItemDocument,
+    supplierId: string,
+    explicitUnitCost?: number,
+  ): number {
+    if (explicitUnitCost !== undefined) {
+      return roundMoney(explicitUnitCost);
+    }
+    const supplierPrice = (item.supplierPrices ?? []).find(
+      (price) => price.supplierId === supplierId,
+    );
+    if (supplierPrice) {
+      return roundMoney(supplierPrice.unitPriceNet ?? 0);
+    }
+    return roundMoney(
+      item.lastPurchasePrice ??
+        item.averageCost ??
+        item.unitCost ??
+        item.purchasePriceNet ??
+        0,
+    );
+  }
+
+  private applySupplierPriceLastPurchase(
+    item: StockItemDocument,
+    supplierId: string | undefined,
+    unitPriceNet: number,
+    purchasedAt: Date,
+  ): void {
+    if (!supplierId) {
+      return;
+    }
+    const supplierPrice = (item.supplierPrices ?? []).find(
+      (price) => price.supplierId === supplierId,
+    );
+    if (!supplierPrice) {
+      return;
+    }
+    supplierPrice.lastPurchasedAt = purchasedAt;
+    supplierPrice.lastPurchasePriceNet = roundMoney(unitPriceNet);
+    supplierPrice.updatedAt = new Date();
   }
 
   private async assertCanUseLocation(
@@ -1406,6 +2225,71 @@ export class StockService {
     return date;
   }
 
+  private resolveProcurementDateRange(
+    value?: 'today' | 'week' | 'month' | 'custom',
+    dateFrom?: string,
+    dateTo?: string,
+  ): {
+    range: 'today' | 'week' | 'month' | 'custom';
+    from: Date;
+    to: Date;
+  } {
+    const range = value ?? 'month';
+    const now = new Date();
+    const from = new Date(now);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(now);
+    to.setHours(23, 59, 59, 999);
+
+    if (range === 'custom') {
+      return {
+        range,
+        from: this.parseOptionalDate(dateFrom, 'Startdatum') ?? from,
+        to: this.endOfDay(this.parseOptionalDate(dateTo, 'Enddatum') ?? to),
+      };
+    }
+
+    if (range === 'week') {
+      from.setDate(from.getDate() - 6);
+    } else if (range === 'month') {
+      from.setDate(from.getDate() - 29);
+    }
+
+    return { range, from, to };
+  }
+
+  private mapReorderWarningType(
+    warning: string,
+  ): ProcurementDashboardResponse['warnings'][number]['type'] {
+    if (warning === 'Missing supplier') {
+      return 'missing_supplier';
+    }
+    if (warning === 'Missing supplier price') {
+      return 'missing_supplier_price';
+    }
+    if (warning === 'Missing purchase price') {
+      return 'missing_purchase_price';
+    }
+    return 'critical_stock';
+  }
+
+  private parseOptionalDate(value?: string, label = 'Datum'): Date | undefined {
+    if (!value?.trim()) {
+      return undefined;
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException(`Ungueltiges ${label}`);
+    }
+    return date;
+  }
+
+  private endOfDay(value: Date): Date {
+    const date = new Date(value);
+    date.setHours(23, 59, 59, 999);
+    return date;
+  }
+
   private daysUntil(value?: Date): number | undefined {
     if (!value) {
       return undefined;
@@ -1418,12 +2302,38 @@ export class StockService {
     return Math.ceil((date.getTime() - now.getTime()) / 86_400_000);
   }
 
+  private toSupplierPriceResponses(
+    prices: StockSupplierPrice[],
+  ): SupplierPriceResponse[] {
+    return prices.map((price) => ({
+      supplierId: price.supplierId,
+      supplierName: price.supplierName,
+      unitPriceNet: roundMoney(price.unitPriceNet ?? 0),
+      currency: price.currency ?? 'EUR',
+      unit: price.unit,
+      minimumOrderQuantity: price.minimumOrderQuantity,
+      leadTimeDays: price.leadTimeDays,
+      isPreferred: price.isPreferred ?? false,
+      lastPurchasedAt: price.lastPurchasedAt?.toISOString(),
+      lastPurchasePriceNet: price.lastPurchasePriceNet,
+      notes: price.notes,
+      updatedAt: price.updatedAt?.toISOString(),
+    }));
+  }
+
   private toItemResponse(item: StockItemDocument): StockItemResponse {
     const timestamped = item as StockItemDocument & {
       createdAt?: Date;
       updatedAt?: Date;
     };
     const averagePurchasePrice = resolveValuationUnitCost(item);
+    const supplierPrices = this.toSupplierPriceResponses(
+      item.supplierPrices ?? [],
+    );
+    const preferredSupplierPrice = getPreferredSupplierPrice(supplierPrices);
+    const cheapestSupplierPrice = getCheapestSupplierPrice(supplierPrices);
+    const supplierPriceDifferenceNet =
+      calculateSupplierPriceDifference(supplierPrices);
 
     return {
       _id: item._id.toString(),
@@ -1460,6 +2370,10 @@ export class StockService {
         item.isActive && !item.isArchived && item.quantity <= item.minQuantity,
       stockValueNet: calculateStockValueNet(item),
       valuationWarnings: createValuationWarnings(item),
+      supplierPrices,
+      preferredSupplierPrice,
+      cheapestSupplierPrice,
+      supplierPriceDifferenceNet,
       criticalStock:
         item.isActive &&
         !item.isArchived &&
@@ -1665,6 +2579,7 @@ export class StockService {
       status: order.status,
       lines,
       totalNet: order.totalNet,
+      expectedDeliveryDate: order.expectedDeliveryDate?.toISOString(),
       note: order.note,
       createdBy: order.createdBy,
       createdAt: timestamped.createdAt?.toISOString(),

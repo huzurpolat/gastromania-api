@@ -3,6 +3,48 @@ import { HydratedDocument } from 'mongoose';
 
 export type StockItemDocument = HydratedDocument<StockItem>;
 
+@Schema({ _id: false, versionKey: false })
+export class StockSupplierPrice {
+  @Prop({ required: true, trim: true })
+  supplierId!: string;
+
+  @Prop({ trim: true })
+  supplierName?: string;
+
+  @Prop({ required: true, min: 0 })
+  unitPriceNet!: number;
+
+  @Prop({ trim: true, default: 'EUR' })
+  currency!: string;
+
+  @Prop({ required: true, trim: true })
+  unit!: string;
+
+  @Prop({ min: 0 })
+  minimumOrderQuantity?: number;
+
+  @Prop({ min: 0 })
+  leadTimeDays?: number;
+
+  @Prop({ default: false })
+  isPreferred!: boolean;
+
+  @Prop()
+  lastPurchasedAt?: Date;
+
+  @Prop({ min: 0 })
+  lastPurchasePriceNet?: number;
+
+  @Prop({ trim: true })
+  notes?: string;
+
+  @Prop()
+  updatedAt?: Date;
+}
+
+export const StockSupplierPriceSchema =
+  SchemaFactory.createForClass(StockSupplierPrice);
+
 @Schema({ timestamps: true, versionKey: false })
 export class StockItem {
   @Prop({ trim: true, index: true })
@@ -91,6 +133,9 @@ export class StockItem {
 
   @Prop({ default: false, index: true })
   isArchived!: boolean;
+
+  @Prop({ type: [StockSupplierPriceSchema], default: [] })
+  supplierPrices!: StockSupplierPrice[];
 }
 
 export const StockItemSchema = SchemaFactory.createForClass(StockItem);

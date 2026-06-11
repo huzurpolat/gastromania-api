@@ -54,6 +54,21 @@ interface StockItemBody {
   averagePurchasePrice: number;
   stockValueNet: number;
   currency: string;
+  supplierPrices: SupplierPriceBody[];
+  preferredSupplierPrice?: SupplierPriceBody;
+  cheapestSupplierPrice?: SupplierPriceBody;
+  supplierPriceDifferenceNet?: number;
+}
+
+interface SupplierPriceBody {
+  supplierId: string;
+  supplierName?: string;
+  unitPriceNet: number;
+  currency: string;
+  unit: string;
+  isPreferred: boolean;
+  lastPurchasedAt?: string;
+  lastPurchasePriceNet?: number;
 }
 
 interface PurchaseOrderBody {
@@ -65,6 +80,7 @@ interface PurchaseOrderBody {
   orderNumber: string;
   status: PurchaseOrderStatus;
   totalNet: number;
+  expectedDeliveryDate?: string;
   lines: Array<{
     _id: string;
     stockItemId: string;
@@ -75,6 +91,60 @@ interface PurchaseOrderBody {
     receivedQuantity: number;
     openQuantity: number;
   }>;
+}
+
+interface ReorderSuggestionsBody {
+  summary: {
+    totalItems: number;
+    suggestedItems: number;
+    coveredItems: number;
+    warningCount: number;
+    estimatedTotalNet: number;
+  };
+  items: Array<{
+    stockItemId: string;
+    stockItemName: string;
+    currentStock: number;
+    minimumStock: number;
+    targetStock?: number;
+    unit: string;
+    openPurchaseQuantity: number;
+    suggestedQuantity: number;
+    supplierId?: string;
+    supplierName?: string;
+    unitPriceNet?: number;
+    estimatedTotalNet?: number;
+    warnings: string[];
+  }>;
+}
+
+interface ProcurementDashboardBody {
+  summary: {
+    openOrders: number;
+    overdueOrders: number;
+    receiptsToday: number;
+    criticalStockItems: number;
+    reorderSuggestions: number;
+    openOrderValueNet: number;
+  };
+  purchaseOrders: Array<PurchaseOrderBody & { isOverdue: boolean; openQuantity: number }>;
+  receipts: Array<{
+    _id: string;
+    referenceId?: string;
+    stockItemId: string;
+    stockItemName: string;
+    quantityChange: number;
+    valueNet: number;
+  }>;
+  supplierRanking: Array<{
+    supplierId: string;
+    supplierName: string;
+    orderCount: number;
+    purchaseValueNet: number;
+    openOrders: number;
+  }>;
+  reorderSuggestions: ReorderSuggestionsBody['items'];
+  warnings: Array<{ type: string; message: string; severity: string }>;
 }
 
 interface ReceiveBody {
@@ -111,10 +181,10 @@ async function verifyProcurement() {
   await app.listen(0, '127.0.0.1');
 
   const createdIds: {
-    supplierId?: string;
-    stockItemId?: string;
-    purchaseOrderId?: string;
-  } = {};
+    supplierIds: string[];
+    stockItemIds: string[];
+    purchaseOrderIds: string[];
+  } = { supplierIds: [], stockItemIds: [], purchaseOrderIds: [] };
 
   try {
     const address = app.getHttpServer().address() as AddressInfo;
@@ -158,6 +228,8 @@ async function verifyProcurement() {
     const locationId = location!._id.toString();
     const runId = Date.now().toString();
     const supplierName = `Verify Procurement Supplier ${runId}`;
+    const alternateSupplierName = `Verify Procurement Alternate ${runId}`;
+    const temporarySupplierName = `Verify Procurement Temp ${runId}`;
     const stockItemName = `Verify Procurement Stock ${runId}`;
 
     const supplier = await request<SupplierBody>(
@@ -174,7 +246,39 @@ async function verifyProcurement() {
       },
     );
     assertStatus(supplier, 201, 'Lieferant erstellen');
-    createdIds.supplierId = supplier.body._id;
+    createdIds.supplierIds.push(supplier.body._id);
+
+    const alternateSupplier = await request<SupplierBody>(
+      baseUrl,
+      'POST',
+      '/suppliers',
+      token,
+      {
+        locationId,
+        name: alternateSupplierName,
+        contactName: 'Verify Einkauf 2',
+        email: `procurement-alt-${runId}@gastromania.local`,
+        isActive: true,
+      },
+    );
+    assertStatus(alternateSupplier, 201, 'Zweiten Lieferanten erstellen');
+    createdIds.supplierIds.push(alternateSupplier.body._id);
+
+    const temporarySupplier = await request<SupplierBody>(
+      baseUrl,
+      'POST',
+      '/suppliers',
+      token,
+      {
+        locationId,
+        name: temporarySupplierName,
+        contactName: 'Verify Einkauf Temp',
+        email: `procurement-temp-${runId}@gastromania.local`,
+        isActive: true,
+      },
+    );
+    assertStatus(temporarySupplier, 201, 'Temp-Lieferant erstellen');
+    createdIds.supplierIds.push(temporarySupplier.body._id);
 
     const stockItem = await request<StockItemBody>(
       baseUrl,
@@ -201,10 +305,431 @@ async function verifyProcurement() {
       },
     );
     assertStatus(stockItem, 201, 'Lagerartikel erstellen');
-    createdIds.stockItemId = stockItem.body._id;
+    createdIds.stockItemIds.push(stockItem.body._id);
     assert(
       stockItem.body.tenantId === tenantId,
       'Lagerartikel wurde nicht tenantgebunden erstellt',
+    );
+
+    const preferredPrice = await request<StockItemBody>(
+      baseUrl,
+      'POST',
+      `/stock/items/${stockItem.body._id}/supplier-prices`,
+      token,
+      {
+        supplierId: supplier.body._id,
+        unitPriceNet: 4.25,
+        currency: 'EUR',
+        unit: 'Stueck',
+        isPreferred: true,
+        minimumOrderQuantity: 5,
+        leadTimeDays: 2,
+      },
+    );
+    assertStatus(preferredPrice, 201, 'Bevorzugten Lieferantenpreis erstellen');
+    assert(
+      preferredPrice.body.preferredSupplierPrice?.supplierId === supplier.body._id,
+      'Bevorzugter Lieferantenpreis wurde nicht gesetzt',
+    );
+
+    const cheapestPrice = await request<StockItemBody>(
+      baseUrl,
+      'POST',
+      `/stock/items/${stockItem.body._id}/supplier-prices`,
+      token,
+      {
+        supplierId: alternateSupplier.body._id,
+        unitPriceNet: 4,
+        currency: 'EUR',
+        unit: 'Stueck',
+        leadTimeDays: 3,
+      },
+    );
+    assertStatus(cheapestPrice, 201, 'Guengstigeren Lieferantenpreis erstellen');
+    assert(
+      cheapestPrice.body.cheapestSupplierPrice?.supplierId ===
+        alternateSupplier.body._id,
+      'Guengstigster Lieferantenpreis wurde nicht erkannt',
+    );
+    assertClose(
+      cheapestPrice.body.supplierPriceDifferenceNet ?? 0,
+      0.25,
+      'Preisunterschied zwischen bevorzugtem und guengstigstem Lieferanten falsch',
+    );
+
+    const duplicatePrice = await request<unknown>(
+      baseUrl,
+      'POST',
+      `/stock/items/${stockItem.body._id}/supplier-prices`,
+      token,
+      {
+        supplierId: supplier.body._id,
+        unitPriceNet: 4.1,
+        currency: 'EUR',
+        unit: 'Stueck',
+      },
+    );
+    assertStatus(duplicatePrice, 400, 'Doppelten Lieferantenpreis blockieren');
+
+    const foreignLocation = await locationModel
+      .findOne({
+        tenantId,
+        _id: { $ne: locationId },
+        isActive: { $ne: false },
+      })
+      .sort({ name: 1 })
+      .exec();
+    if (foreignLocation) {
+      const foreignSupplier = await request<SupplierBody>(
+        baseUrl,
+        'POST',
+        '/suppliers',
+        token,
+        {
+          locationId: foreignLocation._id.toString(),
+          name: `Verify Procurement Foreign ${runId}`,
+          contactName: 'Verify Einkauf Fremdstandort',
+          email: `procurement-foreign-${runId}@gastromania.local`,
+          isActive: true,
+        },
+      );
+      assertStatus(foreignSupplier, 201, 'Fremdstandort-Lieferant erstellen');
+      createdIds.supplierIds.push(foreignSupplier.body._id);
+      const crossLocationPrice = await request<unknown>(
+        baseUrl,
+        'POST',
+        `/stock/items/${stockItem.body._id}/supplier-prices`,
+        token,
+        {
+          supplierId: foreignSupplier.body._id,
+          unitPriceNet: 3.5,
+          currency: 'EUR',
+          unit: 'Stueck',
+        },
+      );
+      assertStatus(
+        crossLocationPrice,
+        400,
+        'Lieferantenpreis aus Fremdstandort blockieren',
+      );
+    }
+
+    const tempPrice = await request<StockItemBody>(
+      baseUrl,
+      'POST',
+      `/stock/items/${stockItem.body._id}/supplier-prices`,
+      token,
+      {
+        supplierId: temporarySupplier.body._id,
+        unitPriceNet: 5,
+        currency: 'EUR',
+        unit: 'Stueck',
+      },
+    );
+    assertStatus(tempPrice, 201, 'Temp-Lieferantenpreis erstellen');
+    const removedTempPrice = await request<StockItemBody>(
+      baseUrl,
+      'DELETE',
+      `/stock/items/${stockItem.body._id}/supplier-prices/${temporarySupplier.body._id}`,
+      token,
+    );
+    assertStatus(removedTempPrice, 200, 'Temp-Lieferantenpreis loeschen');
+
+    const preferredAlternate = await request<StockItemBody>(
+      baseUrl,
+      'POST',
+      `/stock/items/${stockItem.body._id}/supplier-prices/${alternateSupplier.body._id}/prefer`,
+      token,
+    );
+    assertStatus(preferredAlternate, 201, 'Guengstigeren Lieferanten bevorzugen');
+    assert(
+      preferredAlternate.body.supplierPrices.filter((price) => price.isPreferred)
+        .length === 1 &&
+        preferredAlternate.body.preferredSupplierPrice?.supplierId ===
+          alternateSupplier.body._id,
+      'Es darf genau einen bevorzugten Lieferantenpreis geben',
+    );
+
+    const overdueStockItem = await request<StockItemBody>(
+      baseUrl,
+      'POST',
+      '/stock',
+      token,
+      {
+        locationId,
+        name: `Verify Overdue Procurement Stock ${runId}`,
+        category: 'Verify',
+        unit: 'Stueck',
+        quantity: 12,
+        minQuantity: 5,
+        criticalQuantity: 2,
+        targetQuantity: 20,
+        supplierId: alternateSupplier.body._id,
+        supplierName: alternateSupplier.body.name,
+        purchasePriceNet: 6,
+        lastPurchasePrice: 6,
+        averageCost: 6,
+        unitCost: 6,
+        purchasePriceGross: 7.14,
+        isActive: true,
+      },
+    );
+    assertStatus(overdueStockItem, 201, 'Overdue-Lagerartikel erstellen');
+    createdIds.stockItemIds.push(overdueStockItem.body._id);
+
+    const overdueSupplierPrice = await request<StockItemBody>(
+      baseUrl,
+      'POST',
+      `/stock/items/${overdueStockItem.body._id}/supplier-prices`,
+      token,
+      {
+        supplierId: alternateSupplier.body._id,
+        unitPriceNet: 6,
+        currency: 'EUR',
+        unit: 'Stueck',
+        isPreferred: true,
+      },
+    );
+    assertStatus(
+      overdueSupplierPrice,
+      201,
+      'Overdue-Lieferantenpreis erstellen',
+    );
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const overduePurchaseOrder = await request<PurchaseOrderBody>(
+      baseUrl,
+      'POST',
+      '/stock/purchase-orders',
+      token,
+      {
+        locationId,
+        supplierId: alternateSupplier.body._id,
+        lines: [{ stockItemId: overdueStockItem.body._id, quantity: 3 }],
+        expectedDeliveryDate: yesterday.toISOString(),
+        note: 'Verify ueberfaellige Bestellung',
+      },
+    );
+    assertStatus(overduePurchaseOrder, 201, 'Ueberfaellige Purchase Order erstellen');
+    createdIds.purchaseOrderIds.push(overduePurchaseOrder.body._id);
+    assert(
+      Boolean(overduePurchaseOrder.body.expectedDeliveryDate),
+      'Expected Delivery Date wurde nicht gespeichert',
+    );
+
+    const orderedOverdue = await request<PurchaseOrderBody>(
+      baseUrl,
+      'PATCH',
+      `/stock/purchase-orders/${overduePurchaseOrder.body._id}/status`,
+      token,
+      { status: PurchaseOrderStatus.Ordered },
+    );
+    assertStatus(orderedOverdue, 200, 'Ueberfaellige Purchase Order bestellen');
+    const overdueLineId = orderedOverdue.body.lines[0]._id;
+    const overdueReceipt = await request<ReceiveBody>(
+      baseUrl,
+      'POST',
+      '/stock/receive',
+      token,
+      {
+        stockItemId: overdueStockItem.body._id,
+        quantity: 1,
+        unitPriceNet: 6,
+        purchaseOrderId: orderedOverdue.body._id,
+        purchaseOrderLineId: overdueLineId,
+        note: 'Verify Wareneingang fuer Procurement Dashboard',
+      },
+    );
+    assertStatus(overdueReceipt, 201, 'Dashboard-Wareneingang buchen');
+
+    const reorderStockItem = await request<StockItemBody>(
+      baseUrl,
+      'POST',
+      '/stock',
+      token,
+      {
+        locationId,
+        name: `Verify Reorder Stock ${runId}`,
+        category: 'Verify',
+        unit: 'Stueck',
+        quantity: 8,
+        minQuantity: 20,
+        criticalQuantity: 2,
+        targetQuantity: 60,
+        supplierId: alternateSupplier.body._id,
+        supplierName: alternateSupplier.body.name,
+        purchasePriceNet: 3,
+        lastPurchasePrice: 3,
+        averageCost: 3,
+        unitCost: 3,
+        purchasePriceGross: 3.57,
+        isActive: true,
+      },
+    );
+    assertStatus(reorderStockItem, 201, 'Reorder-Lagerartikel erstellen');
+    createdIds.stockItemIds.push(reorderStockItem.body._id);
+
+    const reorderSupplierPrice = await request<StockItemBody>(
+      baseUrl,
+      'POST',
+      `/stock/items/${reorderStockItem.body._id}/supplier-prices`,
+      token,
+      {
+        supplierId: alternateSupplier.body._id,
+        unitPriceNet: 3,
+        currency: 'EUR',
+        unit: 'Stueck',
+        isPreferred: true,
+      },
+    );
+    assertStatus(
+      reorderSupplierPrice,
+      201,
+      'Reorder-Lieferantenpreis erstellen',
+    );
+
+    const reorderSuggestions = await request<ReorderSuggestionsBody>(
+      baseUrl,
+      'GET',
+      `/stock/reorder-suggestions?locationId=${locationId}&strategy=preferred`,
+      token,
+    );
+    assertStatus(reorderSuggestions, 200, 'Bestellvorschlaege laden');
+    const reorderSuggestion = reorderSuggestions.body.items.find(
+      (item) => item.stockItemId === reorderStockItem.body._id,
+    );
+    assert(reorderSuggestion, 'Reorder-Artikel fehlt in Bestellvorschlaegen');
+    assert(
+      reorderSuggestion!.suggestedQuantity === 52,
+      'Bestellvorschlag berechnet Zielmenge minus Bestand falsch',
+    );
+    assert(
+      reorderSuggestion!.supplierId === alternateSupplier.body._id,
+      'Bestellvorschlag waehlt nicht den bevorzugten Lieferantenpreis',
+    );
+    assertClose(
+      reorderSuggestion!.estimatedTotalNet ?? 0,
+      156,
+      'Bestellvorschlag berechnet erwartete Kosten falsch',
+    );
+
+    const procurementDashboard = await request<ProcurementDashboardBody>(
+      baseUrl,
+      'GET',
+      `/stock/procurement-dashboard?locationId=${locationId}&range=month`,
+      token,
+    );
+    assertStatus(procurementDashboard, 200, 'Procurement Dashboard laden');
+    assert(
+      procurementDashboard.body.summary.openOrders > 0,
+      'Procurement Dashboard zeigt keine offenen Bestellungen',
+    );
+    assert(
+      procurementDashboard.body.summary.overdueOrders > 0,
+      'Procurement Dashboard zeigt keine ueberfaelligen Bestellungen',
+    );
+    assert(
+      procurementDashboard.body.summary.receiptsToday > 0 &&
+        procurementDashboard.body.receipts.some(
+          (receipt) => receipt.referenceId === orderedOverdue.body._id,
+        ),
+      'Procurement Dashboard zeigt Wareneingaenge nicht',
+    );
+    assert(
+      procurementDashboard.body.summary.reorderSuggestions > 0 &&
+        procurementDashboard.body.reorderSuggestions.some(
+          (item) => item.stockItemId === reorderStockItem.body._id,
+        ),
+      'Procurement Dashboard integriert Bestellvorschlaege nicht',
+    );
+    assert(
+      procurementDashboard.body.purchaseOrders.some(
+        (order) => order._id === orderedOverdue.body._id && order.isOverdue,
+      ),
+      'Procurement Dashboard markiert ueberfaellige PO nicht',
+    );
+    assert(
+      procurementDashboard.body.supplierRanking.some(
+        (supplier) =>
+          supplier.supplierId === alternateSupplier.body._id &&
+          supplier.orderCount > 0 &&
+          supplier.openOrders > 0,
+      ),
+      'Procurement Dashboard berechnet Lieferantenranking nicht',
+    );
+    assert(
+      procurementDashboard.body.warnings.some(
+        (warning) => warning.type === 'overdue_order',
+      ),
+      'Procurement Dashboard zeigt keine Ueberfaelligkeitswarnung',
+    );
+
+    const reorderPurchaseOrders = await request<PurchaseOrderBody[]>(
+      baseUrl,
+      'POST',
+      '/stock/reorder-suggestions/create-purchase-order',
+      token,
+      {
+        locationId,
+        items: [
+          {
+            stockItemId: reorderSuggestion!.stockItemId,
+            quantity: reorderSuggestion!.suggestedQuantity,
+            unit: reorderSuggestion!.unit,
+            supplierId: reorderSuggestion!.supplierId,
+            expectedUnitCost: reorderSuggestion!.unitPriceNet,
+          },
+        ],
+      },
+    );
+    assertStatus(
+      reorderPurchaseOrders,
+      201,
+      'Bestellvorschlag in Purchase Order umwandeln',
+    );
+    assert(
+      reorderPurchaseOrders.body.length === 1,
+      'Bestellvorschlag erzeugt nicht genau eine Purchase Order',
+    );
+    const reorderPurchaseOrder = reorderPurchaseOrders.body[0];
+    createdIds.purchaseOrderIds.push(reorderPurchaseOrder._id);
+    assert(
+      reorderPurchaseOrder.supplierId === alternateSupplier.body._id,
+      'Bestellvorschlag erzeugt Purchase Order beim falschen Lieferanten',
+    );
+    assert(
+      reorderPurchaseOrder.lines[0]?.stockItemId === reorderStockItem.body._id &&
+        reorderPurchaseOrder.lines[0]?.quantity === 52 &&
+        reorderPurchaseOrder.lines[0]?.openQuantity === 52,
+      'Bestellvorschlag erzeugt falsche Purchase-Order-Position',
+    );
+
+    const coveredSuggestions = await request<ReorderSuggestionsBody>(
+      baseUrl,
+      'GET',
+      `/stock/reorder-suggestions?locationId=${locationId}&strategy=preferred&includeCovered=true`,
+      token,
+    );
+    assertStatus(
+      coveredSuggestions,
+      200,
+      'Gedeckte Bestellvorschlaege laden',
+    );
+    const coveredSuggestion = coveredSuggestions.body.items.find(
+      (item) => item.stockItemId === reorderStockItem.body._id,
+    );
+    assert(coveredSuggestion, 'Gedeckter Reorder-Artikel fehlt');
+    assert(
+      coveredSuggestion!.openPurchaseQuantity === 52 &&
+        coveredSuggestion!.suggestedQuantity === 0,
+      'Offene Purchase Order deckt Bestellvorschlag nicht korrekt ab',
+    );
+    assert(
+      coveredSuggestion!.warnings.includes(
+        'Open purchase order already covers shortage',
+      ),
+      'Gedeckter Bestellvorschlag enthaelt keine Warnung zur offenen Bestellung',
     );
 
     const purchaseOrder = await request<PurchaseOrderBody>(
@@ -214,15 +739,13 @@ async function verifyProcurement() {
       token,
       {
         locationId,
-        supplierId: supplier.body._id,
-        lines: [
-          { stockItemId: stockItem.body._id, quantity: 10, expectedUnitCost: 4 },
-        ],
+        supplierId: alternateSupplier.body._id,
+        lines: [{ stockItemId: stockItem.body._id, quantity: 10 }],
         note: 'Verify Procurement',
       },
     );
     assertStatus(purchaseOrder, 201, 'Purchase Order erstellen');
-    createdIds.purchaseOrderId = purchaseOrder.body._id;
+    createdIds.purchaseOrderIds.push(purchaseOrder.body._id);
     assert(
       purchaseOrder.body.status === PurchaseOrderStatus.Draft,
       'Neue Purchase Order ist nicht im Entwurf',
@@ -233,7 +756,7 @@ async function verifyProcurement() {
     );
     assert(
       purchaseOrder.body.lines[0]?.expectedUnitCost === 4,
-      'Expected Unit Cost wurde nicht aus der Purchase Order uebernommen',
+      'Expected Unit Cost wurde nicht aus dem Lieferantenpreis uebernommen',
     );
     assert(
       purchaseOrder.body.lines[0]?.receivedQuantity === 0 &&
@@ -344,6 +867,18 @@ async function verifyProcurement() {
       finalReceipt.body.item.lastPurchasePrice === 4,
       'Vollwareneingang behaelt den letzten Einkaufspreis nicht',
     );
+    const finalSupplierPrice = finalReceipt.body.item.supplierPrices.find(
+      (price) => price.supplierId === alternateSupplier.body._id,
+    );
+    assert(
+      finalSupplierPrice?.lastPurchasePriceNet === 4 &&
+        Boolean(finalSupplierPrice.lastPurchasedAt),
+      'Wareneingang aktualisiert letzten Lieferanten-EK nicht',
+    );
+    assert(
+      finalSupplierPrice.unitPriceNet === 4,
+      'Wareneingang darf den Stammpreis des Lieferanten nicht ueberschreiben',
+    );
     assertClose(
       finalReceipt.body.item.averagePurchasePrice,
       3,
@@ -432,12 +967,16 @@ async function verifyProcurement() {
           tenantId,
           locationId,
           purchaseOrderId: ordered.body._id,
+          reorderPurchaseOrderId: reorderPurchaseOrder._id,
           orderNumber: ordered.body.orderNumber,
           finalStatus: receivedOrder.status,
           finalQuantity: finalReceipt.body.item.quantity,
           lastPurchasePrice: finalReceipt.body.item.lastPurchasePrice,
           averagePurchasePrice: finalReceipt.body.item.averagePurchasePrice,
           stockValueNet: finalReceipt.body.item.stockValueNet,
+          preferredSupplierId: finalReceipt.body.item.preferredSupplierPrice?.supplierId,
+          cheapestSupplierId: finalReceipt.body.item.cheapestSupplierPrice?.supplierId,
+          supplierPriceCount: finalReceipt.body.item.supplierPrices.length,
           receiptMovements: movements.length,
         },
         null,
@@ -460,22 +999,26 @@ async function verifyProcurement() {
     const supplierModel = app.get<Model<SupplierDocument>>(
       getModelToken(Supplier.name),
     );
-    if (createdIds.purchaseOrderId) {
+    if (createdIds.purchaseOrderIds.length) {
       await stockMovementModel
-        .deleteMany({ referenceId: createdIds.purchaseOrderId })
+        .deleteMany({ referenceId: { $in: createdIds.purchaseOrderIds } })
         .exec();
       await purchaseOrderModel
-        .deleteOne({ _id: createdIds.purchaseOrderId })
+        .deleteMany({ _id: { $in: createdIds.purchaseOrderIds } })
         .exec();
     }
-    if (createdIds.stockItemId) {
+    if (createdIds.stockItemIds.length) {
       await inventoryBatchModel
-        .deleteMany({ stockItemId: createdIds.stockItemId })
+        .deleteMany({ stockItemId: { $in: createdIds.stockItemIds } })
         .exec();
-      await stockItemModel.deleteOne({ _id: createdIds.stockItemId }).exec();
+      await stockItemModel
+        .deleteMany({ _id: { $in: createdIds.stockItemIds } })
+        .exec();
     }
-    if (createdIds.supplierId) {
-      await supplierModel.deleteOne({ _id: createdIds.supplierId }).exec();
+    if (createdIds.supplierIds.length) {
+      await supplierModel
+        .deleteMany({ _id: { $in: createdIds.supplierIds } })
+        .exec();
     }
     await app.close();
   }

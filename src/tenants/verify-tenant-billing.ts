@@ -37,6 +37,10 @@ interface TenantBody {
   billingEmail?: string;
 }
 
+interface TenantDetailBody {
+  tenant: TenantBody;
+}
+
 interface BillingPlanBody {
   key: string;
   name: string;
@@ -164,6 +168,71 @@ async function verifyTenantBilling() {
       })
       .exec();
 
+    const billingDetail = await request<{ tenant: TenantBody; plans: BillingPlanBody[] }>(
+      baseUrl,
+      'GET',
+      `/platform/tenants/${frittenwerk._id}/billing`,
+      platformToken,
+    );
+    assertStatus(billingDetail, 200, 'Tenant Billing laden');
+    assert(
+      billingDetail.body.tenant._id === frittenwerk._id,
+      'Tenant Billing liefert falschen Tenant',
+    );
+    assert(
+      billingDetail.body.plans.length === 3,
+      'Tenant Billing liefert nicht alle Tarife',
+    );
+
+    const updateToBasic = await request<TenantBody>(
+      baseUrl,
+      'PATCH',
+      `/platform/tenants/${frittenwerk._id}/billing`,
+      platformToken,
+      {
+        planKey: 'basic',
+        billingStatus: 'active',
+        billingEmail: 'billing@frittenwerk-demo.demo',
+        billingNotes: 'Verify tenant billing basic',
+      },
+    );
+    assertStatus(updateToBasic, 200, 'Platform Admin Tarifwechsel auf Basic');
+    assert(updateToBasic.body.planKey === 'basic', 'Tarif wurde nicht auf Basic geaendert');
+    assert(
+      updateToBasic.body.monthlyPriceCents === 9000,
+      'Serverseitiger Basic-Preis wurde nicht gesetzt',
+    );
+    assert(updateToBasic.body.currency === 'EUR', 'Basic Currency ist nicht EUR');
+
+    const tenantsAfterBasic = await request<TenantBody[]>(
+      baseUrl,
+      'GET',
+      '/platform/tenants',
+      platformToken,
+    );
+    assertStatus(tenantsAfterBasic, 200, 'Tenantliste nach Basic laden');
+    const basicListTenant = tenantsAfterBasic.body.find(
+      (tenant) => tenant._id === frittenwerk._id,
+    );
+    assert(
+      basicListTenant?.planKey === 'basic' &&
+        basicListTenant.monthlyPriceCents === 9000,
+      'Tenantliste zeigt Basic-Tarif nicht an',
+    );
+
+    const detailAfterBasic = await request<TenantDetailBody>(
+      baseUrl,
+      'GET',
+      `/platform/tenants/${frittenwerk._id}`,
+      platformToken,
+    );
+    assertStatus(detailAfterBasic, 200, 'Tenant Detail nach Basic laden');
+    assert(
+      detailAfterBasic.body.tenant.planKey === 'basic' &&
+        detailAfterBasic.body.tenant.monthlyPriceCents === 9000,
+      'Tenant Detail zeigt Basic-Tarif nicht an',
+    );
+
     const updateToAdvance = await request<TenantBody>(
       baseUrl,
       'PATCH',
@@ -186,6 +255,22 @@ async function verifyTenantBilling() {
     assert(
       updateToAdvance.body.billingStatus === 'active',
       'Billing-Status wurde nicht geaendert',
+    );
+
+    const tenantsAfterAdvance = await request<TenantBody[]>(
+      baseUrl,
+      'GET',
+      '/platform/tenants',
+      platformToken,
+    );
+    assertStatus(tenantsAfterAdvance, 200, 'Tenantliste nach Advance laden');
+    const advanceListTenant = tenantsAfterAdvance.body.find(
+      (tenant) => tenant._id === frittenwerk._id,
+    );
+    assert(
+      advanceListTenant?.planKey === 'advance' &&
+        advanceListTenant.monthlyPriceCents === 30000,
+      'Tenantliste zeigt Advance-Tarif nicht an',
     );
 
     const invalidPlan = await request<ApiJson>(
@@ -246,6 +331,19 @@ async function verifyTenantBilling() {
     assert(restorePro.body.planKey === 'pro', 'Frittenwerk Tarif wurde nicht wiederhergestellt');
     assert(restorePro.body.monthlyPriceCents === 90000, 'Pro-Preis wurde nicht wiederhergestellt');
 
+    const detailAfterPro = await request<TenantDetailBody>(
+      baseUrl,
+      'GET',
+      `/platform/tenants/${frittenwerk._id}`,
+      platformToken,
+    );
+    assertStatus(detailAfterPro, 200, 'Tenant Detail nach Pro laden');
+    assert(
+      detailAfterPro.body.tenant.planKey === 'pro' &&
+        detailAfterPro.body.tenant.monthlyPriceCents === 90000,
+      'Tenant Detail zeigt Pro-Tarif nicht an',
+    );
+
     const auditAfter = await auditLogModel
       .countDocuments({
         tenantId: frittenwerk._id,
@@ -274,6 +372,8 @@ async function verifyTenantBilling() {
           })),
           demoTenantPlans: expectedDemoTenantPlans,
           platformAdminCanUpdateBilling: true,
+          billingRouteLoadsTenant: true,
+          listAndDetailShowUpdatedPlan: true,
           tenantAdminBillingPatchStatus: tenantBlocked.status,
           invalidPlanStatus: invalidPlan.status,
           tenantSelfBillingHidden: true,

@@ -9,6 +9,7 @@ describe('StockController', () => {
   } as never;
   const stockService = {
     dashboard: jest.fn(),
+    procurementDashboard: jest.fn(),
     createLocation: jest.fn(),
     createCategory: jest.fn(),
     startInventory: jest.fn(),
@@ -26,6 +27,27 @@ describe('StockController', () => {
     controller.dashboard(actor, 'loc-1');
 
     expect(stockService.dashboard).toHaveBeenCalledWith(actor, 'loc-1');
+  });
+
+  it('routes procurement dashboard requests with filters', () => {
+    controller.procurementDashboard(
+      actor,
+      'loc-1',
+      'supplier-1',
+      'Bestellt' as never,
+      'week',
+      '2026-06-01',
+      '2026-06-11',
+    );
+
+    expect(stockService.procurementDashboard).toHaveBeenCalledWith(actor, {
+      locationId: 'loc-1',
+      supplierId: 'supplier-1',
+      status: 'Bestellt',
+      range: 'week',
+      dateFrom: '2026-06-01',
+      dateTo: '2026-06-11',
+    });
   });
 
   it('creates inventory locations through the stock service', () => {

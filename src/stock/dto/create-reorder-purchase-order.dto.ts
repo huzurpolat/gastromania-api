@@ -4,13 +4,12 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class CreatePurchaseOrderLineDto {
+export class CreateReorderPurchaseOrderItemDto {
   @IsMongoId()
   stockItemId!: string;
 
@@ -18,35 +17,29 @@ export class CreatePurchaseOrderLineDto {
   @Min(0.001)
   quantity!: number;
 
+  @IsString()
+  unit!: string;
+
+  @IsOptional()
+  @IsMongoId()
+  supplierId?: string;
+
   @IsOptional()
   @IsNumber()
   @Min(0)
   expectedUnitCost?: number;
 }
 
-export class CreatePurchaseOrderDto {
+export class CreateReorderPurchaseOrderDto {
   @IsMongoId()
   locationId!: string;
 
-  @IsMongoId()
-  supplierId!: string;
-
   @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  supplierName?: string;
+  @IsMongoId()
+  supplierId?: string;
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreatePurchaseOrderLineDto)
-  lines!: CreatePurchaseOrderLineDto[];
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  note?: string;
-
-  @IsOptional()
-  @IsString()
-  expectedDeliveryDate?: string;
+  @Type(() => CreateReorderPurchaseOrderItemDto)
+  items!: CreateReorderPurchaseOrderItemDto[];
 }

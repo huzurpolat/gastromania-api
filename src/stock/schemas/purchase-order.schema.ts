@@ -77,6 +77,9 @@ export class PurchaseOrder {
   @Prop({ min: 0, default: 0 })
   totalNet!: number;
 
+  @Prop({ type: Date })
+  expectedDeliveryDate?: Date;
+
   @Prop({ trim: true })
   note?: string;
 

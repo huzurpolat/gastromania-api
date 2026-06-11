@@ -27,6 +27,7 @@ import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { CreateInventoryCategoryDto } from './dto/create-inventory-category.dto';
 import { CreateInventoryLocationDto } from './dto/create-inventory-location.dto';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
+import { CreateReorderPurchaseOrderDto } from './dto/create-reorder-purchase-order.dto';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
 import {
   CompleteInventorySessionDto,
@@ -34,10 +35,15 @@ import {
 } from './dto/inventory-session.dto';
 import { ReceiveStockDto } from './dto/receive-stock.dto';
 import { ReportWasteDto } from './dto/report-waste.dto';
+import {
+  CreateSupplierPriceDto,
+  UpdateSupplierPriceDto,
+} from './dto/supplier-price.dto';
 import { UpdatePurchaseOrderStatusDto } from './dto/update-purchase-order-status.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
 import { StockService } from './stock.service';
 import { StockMovementType } from './schemas/stock-movement.schema';
+import { PurchaseOrderStatus } from './schemas/purchase-order.schema';
 
 @Controller('stock')
 @RequireModule(INVENTORY_MODULE_KEY)
@@ -96,6 +102,27 @@ export class StockController {
     @Query('locationId') locationId?: string,
   ) {
     return this.stockService.dashboard(user, locationId);
+  }
+
+  @Get('procurement-dashboard')
+  @Permissions('inventory.view')
+  procurementDashboard(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('locationId') locationId?: string,
+    @Query('supplierId') supplierId?: string,
+    @Query('status') status?: PurchaseOrderStatus,
+    @Query('range') range?: 'today' | 'week' | 'month' | 'custom',
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.stockService.procurementDashboard(user, {
+      locationId,
+      supplierId,
+      status,
+      range,
+      dateFrom,
+      dateTo,
+    });
   }
 
   @Get('alerts')
@@ -365,8 +392,39 @@ export class StockController {
   reorderSuggestions(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
+    @Query('supplierId') supplierId?: string,
+    @Query('includeCovered') includeCovered?: string,
+    @Query('strategy') strategy?: 'preferred' | 'cheapest',
   ) {
-    return this.stockService.reorderSuggestions(user, locationId);
+    return this.stockService.reorderSuggestions(user, locationId, {
+      supplierId,
+      includeCovered: includeCovered === 'true',
+      strategy: strategy === 'cheapest' ? 'cheapest' : 'preferred',
+    });
+  }
+
+  @Post('reorder-suggestions/create-purchase-order')
+  @Permissions('inventory.create')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Lager,
+    Role.Einkauf,
+  )
+  createPurchaseOrdersFromReorderSuggestions(
+    @Body() payload: CreateReorderPurchaseOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.createPurchaseOrdersFromReorderSuggestions(
+      payload,
+      user,
+    );
   }
 
   @Get('purchase-orders')
@@ -419,6 +477,117 @@ export class StockController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.stockService.updatePurchaseOrderStatus(id, payload, user);
+  }
+
+  @Get('items/:stockItemId/supplier-prices')
+  @Permissions('inventory.view')
+  listSupplierPrices(
+    @Param('stockItemId') stockItemId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.listSupplierPrices(stockItemId, user);
+  }
+
+  @Post('items/:stockItemId/supplier-prices')
+  @Permissions('inventory.update')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Lager,
+    Role.Einkauf,
+  )
+  addSupplierPrice(
+    @Param('stockItemId') stockItemId: string,
+    @Body() payload: CreateSupplierPriceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.addSupplierPrice(stockItemId, payload, user);
+  }
+
+  @Patch('items/:stockItemId/supplier-prices/:supplierId')
+  @Permissions('inventory.update')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Lager,
+    Role.Einkauf,
+  )
+  updateSupplierPrice(
+    @Param('stockItemId') stockItemId: string,
+    @Param('supplierId') supplierId: string,
+    @Body() payload: UpdateSupplierPriceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.updateSupplierPrice(
+      stockItemId,
+      supplierId,
+      payload,
+      user,
+    );
+  }
+
+  @Delete('items/:stockItemId/supplier-prices/:supplierId')
+  @Permissions('inventory.update')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Lager,
+    Role.Einkauf,
+  )
+  deleteSupplierPrice(
+    @Param('stockItemId') stockItemId: string,
+    @Param('supplierId') supplierId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.deleteSupplierPrice(
+      stockItemId,
+      supplierId,
+      user,
+    );
+  }
+
+  @Post('items/:stockItemId/supplier-prices/:supplierId/prefer')
+  @Permissions('inventory.update')
+  @Roles(
+    Role.PlatformAdmin,
+    Role.SuperAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Lager,
+    Role.Einkauf,
+  )
+  preferSupplierPrice(
+    @Param('stockItemId') stockItemId: string,
+    @Param('supplierId') supplierId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stockService.preferSupplierPrice(
+      stockItemId,
+      supplierId,
+      user,
+    );
   }
 
   @Patch(':id')
