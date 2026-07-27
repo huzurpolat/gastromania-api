@@ -31,6 +31,20 @@ import {
 } from './dto/availability.dto';
 import { CreateShiftSwapRequestDto } from './dto/shift-swap.dto';
 import {
+  GenerateShiftSuggestionsDto,
+  ShiftSuggestionQueryDto,
+} from './dto/shift-suggestion.dto';
+import {
+  ApplyStaffingPlanItemDto,
+  GenerateStaffingPlanDto,
+  StaffingAssistantPlanQueryDto,
+} from './dto/staffing-assistant.dto';
+import {
+  PublishStaffScheduleDto,
+  StaffMyScheduleQueryDto,
+  StaffSchedulePublicationQueryDto,
+} from './dto/schedule-publication.dto';
+import {
   CreateShiftTemplateDto,
   UpdateShiftTemplateDto,
 } from './dto/shift-template.dto';
@@ -40,10 +54,12 @@ import {
   UnassignStaffShiftDto,
   UpdateStaffShiftDto,
 } from './dto/staff-shift.dto';
+import { WorkingTimeAccountQueryDto } from './dto/working-time-account.dto';
+import { UpdateWorkingTimeSettingsDto } from './dto/working-time-settings.dto';
 import { StaffShiftStatus } from './schemas/staff-shift.schema';
 import { StaffPlanningService } from './staff-planning.service';
 
-const staffRoles = [
+export const staffRoles = [
   Role.TenantAdminCode,
   Role.CompanyAdmin,
   Role.RegionAdmin,
@@ -76,6 +92,24 @@ const staffRoles = [
 export class StaffPlanningController {
   constructor(private readonly staffPlanningService: StaffPlanningService) {}
 
+  @Get('publications')
+  @Permissions('schedule.view')
+  findPublication(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: StaffSchedulePublicationQueryDto,
+  ) {
+    return this.staffPlanningService.findPublication(user, query);
+  }
+
+  @Post('publications/publish')
+  @Permissions('schedule.publish')
+  publishSchedule(
+    @Body() payload: PublishStaffScheduleDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.publishSchedule(payload, user);
+  }
+
   @Get('shift-templates')
   @Permissions('schedule.view')
   findTemplates(
@@ -92,6 +126,128 @@ export class StaffPlanningController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.staffPlanningService.createTemplate(payload, user);
+  }
+
+  @Get('shift-suggestions')
+  @Permissions('schedule.view')
+  findShiftSuggestions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: ShiftSuggestionQueryDto,
+  ) {
+    return this.staffPlanningService.findShiftSuggestions(user, query);
+  }
+
+  @Post('shift-suggestions/generate')
+  @Permissions('schedule.create')
+  generateShiftSuggestions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() payload: GenerateShiftSuggestionsDto,
+  ) {
+    return this.staffPlanningService.generateShiftSuggestions(user, payload);
+  }
+
+  @Patch('shift-suggestions/:id/apply')
+  @Permissions('schedule.create')
+  applyShiftSuggestion(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.applyShiftSuggestion(id, user);
+  }
+
+  @Patch('shift-suggestions/:id/dismiss')
+  @Permissions('schedule.update')
+  dismissShiftSuggestion(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.dismissShiftSuggestion(id, user);
+  }
+
+  @Get('staffing-assistant/plans')
+  @Permissions('schedule.view')
+  findStaffingAssistantPlans(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: StaffingAssistantPlanQueryDto,
+  ) {
+    return this.staffPlanningService.findStaffingAssistantPlans(user, query);
+  }
+
+  @Post('staffing-assistant/generate')
+  @Permissions('schedule.create')
+  generateStaffingAssistantPlan(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() payload: GenerateStaffingPlanDto,
+  ) {
+    return this.staffPlanningService.generateStaffingAssistantPlan(user, payload);
+  }
+
+  @Patch('staffing-assistant/plans/:id/apply-item')
+  @Permissions('schedule.create')
+  applyStaffingAssistantItem(
+    @Param('id') id: string,
+    @Body() payload: ApplyStaffingPlanItemDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.applyStaffingAssistantItem(id, payload, user);
+  }
+
+  @Patch('staffing-assistant/plans/:id/apply-all')
+  @Permissions('schedule.create')
+  applyAllStaffingAssistantItems(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.applyAllStaffingAssistantItems(id, user);
+  }
+
+  @Patch('staffing-assistant/plans/:id/dismiss')
+  @Permissions('schedule.update')
+  dismissStaffingAssistantPlan(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.dismissStaffingAssistantPlan(id, user);
+  }
+
+  @Get('my-schedule')
+  findMySchedule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: StaffMyScheduleQueryDto,
+  ) {
+    return this.staffPlanningService.findMySchedule(user, query);
+  }
+
+  @Get('working-time-account')
+  @Permissions('timeTracking.view')
+  findWorkingTimeAccount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: WorkingTimeAccountQueryDto,
+  ) {
+    return this.staffPlanningService.findWorkingTimeAccount(user, query);
+  }
+
+  @Get('working-time-account/me')
+  findMyWorkingTimeAccount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: WorkingTimeAccountQueryDto,
+  ) {
+    return this.staffPlanningService.findMyWorkingTimeAccount(user, query);
+  }
+
+  @Get('working-time-settings')
+  @Permissions('timeTracking.view')
+  findWorkingTimeSettings(@CurrentUser() user: AuthenticatedUser) {
+    return this.staffPlanningService.findWorkingTimeSettings(user);
+  }
+
+  @Patch('working-time-settings')
+  @Permissions('settings.update')
+  updateWorkingTimeSettings(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() payload: UpdateWorkingTimeSettingsDto,
+  ) {
+    return this.staffPlanningService.updateWorkingTimeSettings(user, payload);
   }
 
   @Patch('shift-templates/:id')
@@ -225,7 +381,7 @@ export class StaffPlanningController {
   }
 
   @Post('availability')
-  @Permissions('schedule.update')
+  @Permissions('schedule.view')
   createAvailability(
     @Body() payload: CreateAvailabilityDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -234,7 +390,7 @@ export class StaffPlanningController {
   }
 
   @Patch('availability/:id')
-  @Permissions('schedule.update')
+  @Permissions('schedule.view')
   updateAvailability(
     @Param('id') id: string,
     @Body() payload: UpdateAvailabilityDto,
@@ -244,7 +400,7 @@ export class StaffPlanningController {
   }
 
   @Delete('availability/:id')
-  @Permissions('schedule.update')
+  @Permissions('schedule.view')
   deleteAvailability(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -306,13 +462,11 @@ export class StaffPlanningController {
   }
 
   @Get('shift-swaps')
-  @Permissions('schedule.view')
   findShiftSwaps(@CurrentUser() user: AuthenticatedUser) {
     return this.staffPlanningService.findShiftSwaps(user);
   }
 
   @Post('shift-swaps')
-  @Permissions('schedule.update')
   createShiftSwap(
     @Body() payload: CreateShiftSwapRequestDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -321,12 +475,19 @@ export class StaffPlanningController {
   }
 
   @Patch('shift-swaps/:id/accept')
-  @Permissions('schedule.update')
   acceptShiftSwap(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.staffPlanningService.acceptShiftSwap(id, user);
+  }
+
+  @Patch('shift-swaps/:id/request')
+  requestShiftSwap(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.requestShiftSwap(id, user);
   }
 
   @Patch('shift-swaps/:id/approve')
@@ -345,5 +506,13 @@ export class StaffPlanningController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.staffPlanningService.rejectShiftSwap(id, user);
+  }
+
+  @Patch('shift-swaps/:id/cancel')
+  cancelShiftSwap(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.staffPlanningService.cancelShiftSwap(id, user);
   }
 }

@@ -344,7 +344,6 @@ export class CreateUserDto {
 
   @IsOptional()
   @IsArray()
-  @ArrayNotEmpty()
   @IsString({ each: true })
   managedLocationIds?: string[];
 

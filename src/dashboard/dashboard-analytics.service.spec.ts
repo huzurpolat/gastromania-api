@@ -48,12 +48,18 @@ describe('DashboardAnalyticsService', () => {
     const checklistModel = createModelMock();
     const dutyShiftModel = createModelMock();
     const userModel = createModelMock();
+    const waitlistModel = createModelMock();
     const stockItemModel = createModelMock();
     const stockMovementModel = createModelMock();
     const dailyClosingModel = createModelMock();
     const employeeDocumentModel = createModelMock();
     const employeeFeedbackModel = createModelMock();
     const jobApplicantModel = createModelMock();
+    const guestProfileModel = createModelMock();
+    const loyaltyAccountModel = createModelMock();
+    const voucherModel = createModelMock();
+    const marketingCampaignModel = createModelMock();
+    const marketingAutomationModel = createModelMock();
     const service = new DashboardAnalyticsService(
       locationModel as never,
       orderModel as never,
@@ -63,12 +69,18 @@ describe('DashboardAnalyticsService', () => {
       checklistModel as never,
       dutyShiftModel as never,
       userModel as never,
+      waitlistModel as never,
       stockItemModel as never,
       stockMovementModel as never,
       dailyClosingModel as never,
       employeeDocumentModel as never,
       employeeFeedbackModel as never,
       jobApplicantModel as never,
+      guestProfileModel as never,
+      loyaltyAccountModel as never,
+      voucherModel as never,
+      marketingCampaignModel as never,
+      marketingAutomationModel as never,
     );
 
     jest.spyOn(service, 'alerts').mockResolvedValue([]);
@@ -83,12 +95,18 @@ describe('DashboardAnalyticsService', () => {
       checklistModel,
       dutyShiftModel,
       userModel,
+      waitlistModel,
       stockItemModel,
       stockMovementModel,
       dailyClosingModel,
       employeeDocumentModel,
       employeeFeedbackModel,
       jobApplicantModel,
+      guestProfileModel,
+      loyaltyAccountModel,
+      voucherModel,
+      marketingCampaignModel,
+      marketingAutomationModel,
     };
   }
 
@@ -122,6 +140,7 @@ describe('DashboardAnalyticsService', () => {
       .mockResolvedValueOnce(3);
     reservationModel.countDocuments
       .mockResolvedValueOnce(4)
+      .mockResolvedValueOnce(0)
       .mockResolvedValueOnce(7);
     tableModel.countDocuments
       .mockResolvedValueOnce(20)

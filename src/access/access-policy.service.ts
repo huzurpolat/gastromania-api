@@ -408,7 +408,7 @@ export class AccessPolicyService {
     }
 
     if (this.isPlatformAdmin(user)) {
-      return this.platformRoles().includes(normalizedRole);
+      return !this.platformRoles().includes(normalizedRole);
     }
 
     if (this.platformRoles().includes(normalizedRole)) {
@@ -736,7 +736,9 @@ export class AccessPolicyService {
       Role.Kueche,
       Role.Bar,
       Role.Theke,
+      Role.Kasse,
       Role.Lager,
+      Role.Dishwasher,
       Role.Einkauf,
       Role.Buchhaltung,
       Role.Marketing,
@@ -745,6 +747,7 @@ export class AccessPolicyService {
       Role.Eventmanager,
       Role.Kunde,
       Role.Tellerwaescher,
+      Role.Staff,
     ];
   }
 

@@ -30,6 +30,10 @@ import {
   TimeEntrySchema,
 } from '../time-tracking/schemas/time-entry.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import {
+  WaitlistEntry,
+  WaitlistEntrySchema,
+} from '../waitlist/schemas/waitlist-entry.schema';
 import { DashboardAnalyticsService } from './dashboard-analytics.service';
 import { DashboardController } from './dashboard.controller';
 import { DashboardRealtimeService } from './dashboard-realtime.service';
@@ -58,6 +62,26 @@ import {
   JobApplicant,
   JobApplicantSchema,
 } from '../hr/schemas/job-applicant.schema';
+import {
+  GuestProfile,
+  GuestProfileSchema,
+} from '../guests/schemas/guest-profile.schema';
+import {
+  GuestLoyaltyAccount,
+  GuestLoyaltyAccountSchema,
+} from '../loyalty/schemas/guest-loyalty-account.schema';
+import {
+  GuestVoucher,
+  GuestVoucherSchema,
+} from '../loyalty/schemas/guest-voucher.schema';
+import {
+  MarketingCampaign,
+  MarketingCampaignSchema,
+} from '../marketing/schemas/marketing-campaign.schema';
+import {
+  MarketingAutomation,
+  MarketingAutomationSchema,
+} from '../marketing/schemas/marketing-automation.schema';
 
 @Module({
   imports: [
@@ -72,6 +96,7 @@ import {
       { name: Checklist.name, schema: ChecklistSchema },
       { name: DutyShift.name, schema: DutyShiftSchema },
       { name: User.name, schema: UserSchema },
+      { name: WaitlistEntry.name, schema: WaitlistEntrySchema },
       { name: StockItem.name, schema: StockItemSchema },
       { name: StockMovement.name, schema: StockMovementSchema },
       { name: DashboardPreference.name, schema: DashboardPreferenceSchema },
@@ -83,6 +108,11 @@ import {
       },
       { name: EmployeeFeedback.name, schema: EmployeeFeedbackSchema },
       { name: JobApplicant.name, schema: JobApplicantSchema },
+      { name: GuestProfile.name, schema: GuestProfileSchema },
+      { name: GuestLoyaltyAccount.name, schema: GuestLoyaltyAccountSchema },
+      { name: GuestVoucher.name, schema: GuestVoucherSchema },
+      { name: MarketingCampaign.name, schema: MarketingCampaignSchema },
+      { name: MarketingAutomation.name, schema: MarketingAutomationSchema },
     ]),
   ],
   controllers: [DashboardController],

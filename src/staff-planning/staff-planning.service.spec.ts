@@ -3,11 +3,16 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { Role } from '../auth/enums/role.enum';
+import { Department } from '../departments/schemas/department.schema';
 import { Location } from '../locations/schemas/location.schema';
 import { RealtimeService } from '../realtime/realtime.service';
+import { ForecastService } from '../reports/forecast.service';
+import { TimeEntry } from '../time-tracking/schemas/time-entry.schema';
 import { UserLocationAssignment } from '../users/schemas/user-location-assignment.schema';
 import { User } from '../users/schemas/user.schema';
 import { ShiftSwapRequest } from './schemas/shift-swap-request.schema';
+import { ShiftSuggestion } from './schemas/shift-suggestion.schema';
+import { StaffingPlanSuggestion } from './schemas/staffing-plan-suggestion.schema';
 import {
   StaffAbsence,
   StaffAbsenceStatus,
@@ -16,6 +21,8 @@ import {
 import { StaffAvailability } from './schemas/staff-availability.schema';
 import { StaffNotification } from './schemas/staff-notification.schema';
 import { StaffPlanningAudit } from './schemas/staff-planning-audit.schema';
+import { StaffSchedulePublication } from './schemas/staff-schedule-publication.schema';
+import { StaffWorkingTimeSettings } from './schemas/staff-working-time-settings.schema';
 import { StaffShift, StaffShiftStatus } from './schemas/staff-shift.schema';
 import { ShiftTemplate } from './schemas/shift-template.schema';
 import { StaffPlanningService } from './staff-planning.service';
@@ -56,6 +63,11 @@ describe('StaffPlanningService', () => {
     countDocuments: jest.fn(),
     findById: jest.fn(),
     find: jest.fn(),
+    updateMany: jest.fn(),
+  };
+  const publicationModel = {
+    findOne: jest.fn(),
+    findOneAndUpdate: jest.fn(),
   };
   const availabilityModel = {
     create: jest.fn(),
@@ -73,8 +85,27 @@ describe('StaffPlanningService', () => {
     findById: jest.fn(),
     find: jest.fn(),
   };
+  const suggestionModel = {
+    create: jest.fn(),
+    find: jest.fn(),
+    findOne: jest.fn(),
+    findById: jest.fn(),
+    findByIdAndUpdate: jest.fn(),
+  };
+  const staffingPlanModel = {
+    create: jest.fn(),
+    find: jest.fn(),
+    findOne: jest.fn(),
+    findById: jest.fn(),
+    findByIdAndUpdate: jest.fn(),
+  };
   const auditModel = { create: jest.fn() };
-  const notificationModel = { create: jest.fn() };
+  const notificationModel = {
+    create: jest.fn(),
+    find: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+    updateMany: jest.fn(),
+  };
   const templateModel = {
     create: jest.fn(),
     find: jest.fn(),
@@ -89,7 +120,13 @@ describe('StaffPlanningService', () => {
   const assignmentModel = {
     findOne: jest.fn(),
   };
-  const locationModel = { findById: jest.fn() };
+  const locationModel = { findById: jest.fn(), find: jest.fn() };
+  const departmentModel = { find: jest.fn() };
+  const timeEntryModel = { find: jest.fn() };
+  const workingTimeSettingsModel = {
+    findOne: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+  };
   const accessPolicy = {
     isPlatformAdmin: jest.fn(),
     isScopedLocationManager: jest.fn(),
@@ -104,6 +141,7 @@ describe('StaffPlanningService', () => {
     getManageableUsersFilter: jest.fn(),
   };
   const realtimeService = { publish: jest.fn() };
+  const forecastService = { getForecast: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -123,10 +161,31 @@ describe('StaffPlanningService', () => {
     locationModel.findById.mockReturnValue({
       exec: jest.fn().mockResolvedValue(location),
     });
+    locationModel.find = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([
+          {
+            _id: { toString: () => locationId },
+            name: 'Frittenwerk Demo Duesseldorf',
+          },
+        ]),
+      }),
+    });
+    departmentModel.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([
+          {
+            _id: { toString: () => 'dept-service' },
+            name: 'Service',
+          },
+        ]),
+      }),
+    });
     userModel.findById.mockReturnValue({
       exec: jest.fn().mockResolvedValue(employee),
     });
     userModel.find.mockReturnValue({
+      exec: jest.fn().mockResolvedValue([employee]),
       select: jest.fn().mockReturnValue({
         exec: jest.fn().mockResolvedValue([employee]),
       }),
@@ -143,8 +202,89 @@ describe('StaffPlanningService', () => {
       exec: jest.fn().mockResolvedValue(0),
     });
     shiftModel.find.mockReturnValue({
+      exec: jest.fn().mockResolvedValue([]),
       sort: jest.fn().mockReturnValue({
         exec: jest.fn().mockResolvedValue([]),
+      }),
+    });
+    suggestionModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([]),
+      }),
+    });
+    suggestionModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    suggestionModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    suggestionModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    suggestionModel.create.mockImplementation((payload: Record<string, unknown>) =>
+      Promise.resolve({
+        _id: { toString: () => '507f1f77bcf86cd799439040' },
+        ...payload,
+      }),
+    );
+    staffingPlanModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([]),
+      }),
+    });
+    staffingPlanModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    staffingPlanModel.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    staffingPlanModel.findByIdAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    staffingPlanModel.create.mockImplementation((payload: Record<string, unknown>) =>
+      Promise.resolve({
+        _id: { toString: () => '507f1f77bcf86cd799439041' },
+        ...payload,
+      }),
+    );
+    timeEntryModel.find.mockReturnValue({
+      exec: jest.fn().mockResolvedValue([]),
+    });
+    workingTimeSettingsModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    workingTimeSettingsModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        maxDailyHours: 10,
+        maxWeeklyHours: 48,
+        maxMonthlyHours: 192,
+        overtimeWarningThresholdHours: 5,
+        varianceWarningThresholdHours: 2,
+      }),
+    });
+    shiftModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+    });
+    publicationModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    publicationModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: 'publication-1',
+        tenantId: 'tenant-1',
+        companyId: 'company-1',
+        locationId,
+        week: 24,
+        year: 2026,
+        status: 'PUBLISHED',
+        changedAfterPublish: false,
+        toObject: () => ({
+          _id: 'publication-1',
+          locationId,
+          week: 24,
+          year: 2026,
+          status: 'PUBLISHED',
+        }),
       }),
     });
     absenceModel.exists.mockResolvedValue(null);
@@ -180,6 +320,42 @@ describe('StaffPlanningService', () => {
     notificationModel.create.mockImplementation(
       (payload: Record<string, unknown>) => Promise.resolve(payload),
     );
+    notificationModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        limit: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
+    notificationModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({
+        _id: '507f1f77bcf86cd799439016',
+        tenantId: 'tenant-1',
+        recipientUserId: actor.sub,
+        type: 'SCHEDULE_PUBLISHED',
+        title: 'Dienstplan veroeffentlicht',
+        message: 'Dein Dienstplan wurde veroeffentlicht.',
+        read: true,
+        readAt: new Date(),
+      }),
+    });
+    notificationModel.updateMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+    forecastService.getForecast.mockResolvedValue({
+      generatedAt: new Date().toISOString(),
+      formula: 'test',
+      period: { mode: 'week', week: 24, year: 2026, dateFrom: '2026-06-08', dateTo: '2026-06-15' },
+      forecastRevenue: 0,
+      forecastHours: 0,
+      plannedHours: 0,
+      varianceHours: 0,
+      expectedLaborCost: 0,
+      confidence: 'LOW',
+      staffingWarnings: [],
+      locations: [],
+      departments: [],
+    });
     auditModel.create.mockResolvedValue({});
     realtimeService.publish.mockReturnValue(undefined);
 
@@ -193,14 +369,24 @@ describe('StaffPlanningService', () => {
         },
         { provide: getModelToken(StaffAbsence.name), useValue: absenceModel },
         { provide: getModelToken(ShiftSwapRequest.name), useValue: swapModel },
+        { provide: getModelToken(ShiftSuggestion.name), useValue: suggestionModel },
+        { provide: getModelToken(StaffingPlanSuggestion.name), useValue: staffingPlanModel },
         { provide: getModelToken(ShiftTemplate.name), useValue: templateModel },
         {
           provide: getModelToken(StaffPlanningAudit.name),
           useValue: auditModel,
         },
         {
+          provide: getModelToken(StaffSchedulePublication.name),
+          useValue: publicationModel,
+        },
+        {
           provide: getModelToken(StaffNotification.name),
           useValue: notificationModel,
+        },
+        {
+          provide: getModelToken(StaffWorkingTimeSettings.name),
+          useValue: workingTimeSettingsModel,
         },
         { provide: getModelToken(User.name), useValue: userModel },
         {
@@ -208,8 +394,11 @@ describe('StaffPlanningService', () => {
           useValue: assignmentModel,
         },
         { provide: getModelToken(Location.name), useValue: locationModel },
+        { provide: getModelToken(Department.name), useValue: departmentModel },
+        { provide: getModelToken(TimeEntry.name), useValue: timeEntryModel },
         { provide: AccessPolicyService, useValue: accessPolicy },
         { provide: RealtimeService, useValue: realtimeService },
+        { provide: ForecastService, useValue: forecastService },
       ],
     }).compile();
 
@@ -435,6 +624,347 @@ describe('StaffPlanningService', () => {
     expect(auditModel.create).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'staff.shift.published' }),
     );
+  });
+
+  it('publishes a location week and marks shifts as published', async () => {
+    shiftModel.find.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue([
+        {
+          _id: { toString: () => shiftId },
+          locationId,
+          companyId: 'company-1',
+          assignedUserIds: [userId],
+        },
+      ]),
+    });
+
+    const publication = await service.publishSchedule(
+      { locationId, week: 24, year: 2026 },
+      actor,
+    );
+
+    expect(publication).toEqual(expect.objectContaining({ status: 'PUBLISHED' }));
+    expect(publicationModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ locationId, week: 24, year: 2026 }),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          status: 'PUBLISHED',
+          changedAfterPublish: false,
+        }),
+      }),
+      expect.objectContaining({ upsert: true }),
+    );
+    expect(shiftModel.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ locationId }),
+      expect.objectContaining({
+        $set: expect.objectContaining({ status: StaffShiftStatus.Published }),
+      }),
+    );
+    expect(notificationModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId,
+        recipientUserId: userId,
+        type: 'SCHEDULE_PUBLISHED',
+        title: 'Dienstplan veröffentlicht',
+      }),
+    );
+  });
+
+  it('returns only own notifications for tenant users', async () => {
+    const ownNotifications = [
+      {
+        _id: '507f1f77bcf86cd799439016',
+        tenantId: 'tenant-1',
+        recipientUserId: actor.sub,
+        type: 'SCHEDULE_PUBLISHED',
+        read: false,
+      },
+    ];
+    const exec = jest.fn().mockResolvedValue(ownNotifications);
+    const limit = jest.fn().mockReturnValue({ exec });
+    const sort = jest.fn().mockReturnValue({ limit });
+    notificationModel.find.mockReturnValueOnce({ sort });
+
+    await expect(service.findNotifications(actor)).resolves.toBe(ownNotifications);
+    expect(notificationModel.find).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      $or: [{ recipientUserId: actor.sub }, { userId: actor.sub }],
+    });
+    expect(sort).toHaveBeenCalledWith({ createdAt: -1 });
+    expect(limit).toHaveBeenCalledWith(30);
+  });
+
+  it('marks only own notifications as read', async () => {
+    const notificationId = '507f1f77bcf86cd799439016';
+
+    await service.markNotificationRead(notificationId, actor);
+
+    expect(notificationModel.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        _id: notificationId,
+        tenantId: 'tenant-1',
+        $or: [{ recipientUserId: actor.sub }, { userId: actor.sub }],
+      },
+      { $set: { read: true, readAt: expect.any(Date) } },
+      { returnDocument: 'after' },
+    );
+  });
+
+  it('returns the current user schedule with only published own shifts', async () => {
+    const publishedShift = {
+      _id: { toString: () => shiftId },
+      tenantId: 'tenant-1',
+      companyId: 'company-1',
+      locationId,
+      departmentId: 'dept-service',
+      roleNeeded: Role.Service,
+      title: 'Service Frueh',
+      startTime: new Date('2026-06-08T08:00:00.000Z'),
+      endTime: new Date('2026-06-08T14:00:00.000Z'),
+      status: StaffShiftStatus.Published,
+      assignedUserIds: [actor.sub],
+    };
+    shiftModel.find.mockReturnValueOnce({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([publishedShift]),
+      }),
+    });
+    absenceModel.find.mockReturnValueOnce({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([]),
+      }),
+    });
+    availabilityModel.find.mockReturnValueOnce({
+      sort: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([]),
+      }),
+    });
+
+    const schedule = await service.findMySchedule(actor, {
+      week: 24,
+      year: 2026,
+    });
+
+    expect(schedule.shifts).toEqual([publishedShift]);
+    expect(shiftModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        assignedUserIds: actor.sub,
+        status: StaffShiftStatus.Published,
+        startTime: {
+          $gte: expect.any(Date),
+          $lt: expect.any(Date),
+        },
+      }),
+    );
+    expect(schedule.locations).toEqual([
+      { _id: locationId, name: 'Frittenwerk Demo Duesseldorf' },
+    ]);
+    expect(schedule.departments).toEqual([
+      { _id: 'dept-service', name: 'Service' },
+    ]);
+  });
+
+  it('calculates target, actual and overtime hours from contract and time entries', async () => {
+    const contractedEmployee = {
+      ...employee,
+      firstName: 'Max',
+      lastName: 'Service',
+      weeklyHours: 40,
+      employmentType: 'FULL_TIME',
+      hireDate: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    userModel.find
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue([{ _id: { toString: () => userId } }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        exec: jest.fn().mockResolvedValue([contractedEmployee]),
+      });
+    timeEntryModel.find.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue([
+        {
+          employeeId: userId,
+          clockIn: new Date('2026-06-08T08:00:00.000Z'),
+          netDurationMinutes: 45 * 60,
+          status: 'closed',
+        },
+      ]),
+    });
+    shiftModel.find.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue([]),
+    });
+
+    const result = await service.findWorkingTimeAccount(actor, {
+      week: 24,
+      year: 2026,
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({
+        employeeId: userId,
+        employeeName: 'Max Service',
+        contractHoursPerWeek: 40,
+        targetHours: 40,
+        actualHours: 45,
+        overtimeHours: 5,
+        balanceHours: 5,
+      }),
+    );
+    expect(result.summary).toEqual(
+      expect.objectContaining({
+        targetHours: 40,
+        actualHours: 45,
+        overtimeHours: 5,
+        balanceHours: 5,
+      }),
+    );
+  });
+
+  it('calculates plan actual variance from published shifts by employee location and department', async () => {
+    const contractedEmployee = {
+      ...employee,
+      firstName: 'Max',
+      lastName: 'Service',
+      weeklyHours: 40,
+      departmentIds: ['dept-service'],
+    };
+    userModel.find
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue([{ _id: { toString: () => userId } }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        exec: jest.fn().mockResolvedValue([contractedEmployee]),
+      });
+    timeEntryModel.find.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue([
+        {
+          employeeId: userId,
+          locationId,
+          clockIn: new Date('2026-06-08T08:00:00.000Z'),
+          netDurationMinutes: 8 * 60,
+          status: 'closed',
+        },
+      ]),
+    });
+    shiftModel.find.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue([
+        {
+          locationId,
+          departmentId: 'dept-service',
+          startTime: new Date('2026-06-08T08:00:00.000Z'),
+          endTime: new Date('2026-06-08T14:00:00.000Z'),
+          status: StaffShiftStatus.Published,
+          assignedUserIds: [userId],
+        },
+      ]),
+    });
+
+    const result = await service.findWorkingTimeAccount(actor, {
+      week: 24,
+      year: 2026,
+    });
+
+    expect(shiftModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: { $ne: StaffShiftStatus.Cancelled },
+        $or: [
+          { status: StaffShiftStatus.Published },
+          { publishedAt: { $exists: true } },
+        ],
+      }),
+    );
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({
+        plannedHours: 6,
+        actualHours: 8,
+        varianceHours: 2,
+      }),
+    );
+    expect(result.locationAnalysis).toEqual([
+      expect.objectContaining({
+        id: locationId,
+        name: 'Frittenwerk Demo Duesseldorf',
+        employeeCount: 1,
+        plannedHours: 6,
+        actualHours: 8,
+        varianceHours: 2,
+      }),
+    ]);
+    expect(result.departmentAnalysis).toEqual([
+      expect.objectContaining({
+        id: 'dept-service',
+        name: 'Service',
+        employeeCount: 1,
+        plannedHours: 6,
+        actualHours: 8,
+        varianceHours: 2,
+      }),
+    ]);
+  });
+
+  it('adds working time warnings when thresholds are exceeded', async () => {
+    const contractedEmployee = {
+      ...employee,
+      firstName: 'Anna',
+      lastName: 'Kueche',
+      weeklyHours: 40,
+    };
+    userModel.find
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue([{ _id: { toString: () => userId } }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        exec: jest.fn().mockResolvedValue([contractedEmployee]),
+      });
+    workingTimeSettingsModel.findOne.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue({
+        maxDailyHours: 10,
+        maxWeeklyHours: 48,
+        maxMonthlyHours: 192,
+        overtimeWarningThresholdHours: 5,
+        varianceWarningThresholdHours: 2,
+      }),
+    });
+    timeEntryModel.find.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue([
+        {
+          employeeId: userId,
+          clockIn: new Date('2026-06-08T08:00:00.000Z'),
+          netDurationMinutes: 11 * 60,
+          status: 'closed',
+        },
+        {
+          employeeId: userId,
+          clockIn: new Date('2026-06-09T08:00:00.000Z'),
+          netDurationMinutes: 34 * 60,
+          status: 'closed',
+        },
+      ]),
+    });
+    shiftModel.find.mockReturnValueOnce({
+      exec: jest.fn().mockResolvedValue([]),
+    });
+
+    const result = await service.findWorkingTimeAccount(actor, {
+      week: 24,
+      year: 2026,
+    });
+
+    expect(result.items[0].warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'DAILY_LIMIT_EXCEEDED' }),
+        expect.objectContaining({ type: 'OVERTIME_THRESHOLD_EXCEEDED' }),
+      ]),
+    );
+    expect(result.summary.warningCount).toBeGreaterThanOrEqual(2);
   });
 
   it('creates an absence request for vacation and notifies managers', async () => {

@@ -26,6 +26,7 @@
     "ensure:platform-admin": "node dist/users/ensure-platform-admin.js",
     "verify:platform-users": "jest --runInBand users.service.spec.ts",
     "verify:tenant-users": "jest --runInBand users.service.spec.ts",
+    "verify:user-management": "jest --runInBand users.service.spec.ts auth/guards/jwt-auth.guard.spec.ts audit-log.service.spec.ts",
     "verify:tenant-admins": "jest --runInBand users.service.spec.ts",
     "verify:dashboard": "node dist/dashboard/verify-dashboard.js",
     "verify:cogs": "node dist/reports/verify-cogs.js",

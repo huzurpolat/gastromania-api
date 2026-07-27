@@ -3,10 +3,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { AccessModule } from './access/access.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { AreasModule } from './areas/areas.module';
 import { CitiesModule } from './cities/cities.module';
 import { ChecklistsModule } from './checklists/checklists.module';
 import { CompaniesModule } from './companies/companies.module';
+import { CommunicationModule } from './communication/communication.module';
 import { CounterModule } from './counter/counter.module';
 import { DemoDataModule } from './demo-data/demo-data.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -16,6 +18,8 @@ import { DutySchedulesModule } from './duty-schedules/duty-schedules.module';
 import { EmployeesModule } from './employees/employees.module';
 import { InternalMessagesModule } from './internal-messages/internal-messages.module';
 import { LocationsModule } from './locations/locations.module';
+import { LoyaltyModule } from './loyalty/loyalty.module';
+import { MarketingModule } from './marketing/marketing.module';
 import { MenuItemsModule } from './menu-items/menu-items.module';
 import { MobileModule } from './mobile/mobile.module';
 import { ModulesModule } from './modules/modules.module';
@@ -37,9 +41,11 @@ import { TablesModule } from './tables/tables.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { UsersModule } from './users/users.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
 import { WeeklyMenusModule } from './weekly-menus/weekly-menus.module';
 import { HealthController } from './health.controller';
 import { HrModule } from './hr/hr.module';
+import { GuestsModule } from './guests/guests.module';
 
 @Module({
   imports: [
@@ -58,18 +64,24 @@ import { HrModule } from './hr/hr.module';
     }),
 
     AccessModule,
+    AuditLogsModule,
     AreasModule,
     CitiesModule,
     CompaniesModule,
+    CommunicationModule,
     RegionsModule,
     UsersModule,
     DepartmentsModule,
     EmployeesModule,
     HrModule,
+    GuestsModule,
+    LoyaltyModule,
+    MarketingModule,
     AuthModule,
     LocationsModule,
     TablesModule,
     ReservationsModule,
+    WaitlistModule,
     RecipesModule,
     ReportsModule,
     RealtimeModule,

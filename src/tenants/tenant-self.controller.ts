@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -90,7 +90,11 @@ export class TenantSelfController {
     @Body() dto: CreateUserDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.usersService.create({ ...dto, tenantId: user.tenantId }, undefined, user);
+    return this.usersService.create(
+      { ...dto, tenantId: user.tenantId, companyId: user.companyId },
+      undefined,
+      user,
+    );
   }
 
   @Patch('users/:id')
@@ -111,7 +115,11 @@ export class TenantSelfController {
     @Body() dto: UpdateUserDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.usersService.update(id, { ...dto, tenantId: user.tenantId }, user);
+    return this.usersService.update(
+      id,
+      { ...dto, tenantId: user.tenantId, companyId: user.companyId },
+      user,
+    );
   }
 
   @Patch('users/:id/status')
@@ -133,6 +141,41 @@ export class TenantSelfController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.usersService.updateTenantUserStatus(id, dto.status, user);
+  }
+
+  @Delete('users/:id')
+  @Roles(
+    Role.TenantAdmin,
+    Role.RestaurantAdmin,
+    Role.CompanyAdmin,
+    Role.RegionAdmin,
+    Role.Admin,
+    Role.Regionalleiter,
+    Role.Bereichsleiter,
+    Role.Filialleiter,
+    Role.Restaurantleiter,
+  )
+  @Permissions('users.delete')
+  deleteUser(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.usersService.softDeleteTenantUser(id, user);
+  }
+
+  @Delete('users/:id/permanent')
+  @Roles(
+    Role.TenantAdmin,
+    Role.RestaurantAdmin,
+    Role.CompanyAdmin,
+    Role.Admin,
+  )
+  @Permissions('users.delete')
+  deleteUserPermanently(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.usersService.deleteTenantUserPermanently(id, user);
   }
 
   @Post('users/:id/reset-password')

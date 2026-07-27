@@ -38,7 +38,6 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @Transform(emptyArrayToUndefined)
   @IsOptional()
   @IsArray()
-  @ArrayNotEmpty()
   @IsString({ each: true })
   managedLocationIds?: string[];
 }

@@ -186,13 +186,13 @@ describe('AccessPolicyService', () => {
         user([Role.PlatformAdmin]),
         Role.TenantAdmin,
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       service.canAssignRole(
         user([Role.PlatformAdmin]),
         Role.PlatformAdmin,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       service.canAssignRole(
         user([Role.CompanyAdmin], { companyId: 'gastro' }),

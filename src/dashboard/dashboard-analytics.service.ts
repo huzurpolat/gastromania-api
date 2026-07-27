@@ -29,6 +29,10 @@ import {
 import { RestaurantTable, TableStatus } from '../tables/schemas/table.schema';
 import { TimeEntry } from '../time-tracking/schemas/time-entry.schema';
 import { User } from '../users/schemas/user.schema';
+import {
+  WaitlistEntry,
+  WaitlistStatus,
+} from '../waitlist/schemas/waitlist-entry.schema';
 import { DashboardQueryDto, DashboardRange } from './dto/dashboard-query.dto';
 import { DashboardNotificationSeverity } from './schemas/notification.schema';
 import {
@@ -41,6 +45,22 @@ import {
   ApplicantStatus,
   JobApplicant,
 } from '../hr/schemas/job-applicant.schema';
+import { GuestProfile } from '../guests/schemas/guest-profile.schema';
+import {
+  GuestLoyaltyAccount,
+  GuestLoyaltyTier,
+} from '../loyalty/schemas/guest-loyalty-account.schema';
+import {
+  GuestVoucher,
+  GuestVoucherStatus,
+} from '../loyalty/schemas/guest-voucher.schema';
+import {
+  MarketingCampaign,
+  MarketingCampaignStatus,
+} from '../marketing/schemas/marketing-campaign.schema';
+import {
+  MarketingAutomation,
+} from '../marketing/schemas/marketing-automation.schema';
 
 export interface ResolvedDashboardQuery {
   tenantId: string;
@@ -94,6 +114,8 @@ export class DashboardAnalyticsService {
     @InjectModel(DutyShift.name)
     private readonly dutyShiftModel: Model<DutyShift>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectModel(WaitlistEntry.name)
+    private readonly waitlistModel: Model<WaitlistEntry>,
     @InjectModel(StockItem.name)
     private readonly stockItemModel: Model<StockItem>,
     @InjectModel(StockMovement.name)
@@ -106,6 +128,16 @@ export class DashboardAnalyticsService {
     private readonly employeeFeedbackModel: Model<EmployeeFeedback>,
     @InjectModel(JobApplicant.name)
     private readonly jobApplicantModel: Model<JobApplicant>,
+    @InjectModel(GuestProfile.name)
+    private readonly guestProfileModel: Model<GuestProfile>,
+    @InjectModel(GuestLoyaltyAccount.name)
+    private readonly loyaltyAccountModel: Model<GuestLoyaltyAccount>,
+    @InjectModel(GuestVoucher.name)
+    private readonly voucherModel: Model<GuestVoucher>,
+    @InjectModel(MarketingCampaign.name)
+    private readonly marketingCampaignModel: Model<MarketingCampaign>,
+    @InjectModel(MarketingAutomation.name)
+    private readonly marketingAutomationModel: Model<MarketingAutomation>,
   ) {}
 
   resolveQuery(
@@ -154,6 +186,7 @@ export class DashboardAnalyticsService {
     const today = this.dayRange(new Date());
     const yesterday = this.dayRange(this.addDays(new Date(), -1));
     const locationFilter = this.locationFilter(resolved);
+    const tenantCampaignFilter = { tenantId: resolved.tenantId };
     const todayFilter = {
       ...locationFilter,
       createdAt: { $gte: today.from, $lte: today.to },
@@ -177,6 +210,30 @@ export class DashboardAnalyticsService {
       openCounterOrders,
       openPayments,
       reservationsToday,
+      reservationGuestsToday,
+      noShowsToday,
+      waitingGuests,
+      averageWaitMinutes,
+      seatedWaitlistGuestsToday,
+      waitlistNoShowsToday,
+      newGuestsToday,
+      recurringGuests,
+      topGuests,
+      noShowGuests,
+      birthdaysToday,
+      birthdaysThisWeek,
+      birthdaysThisMonth,
+      activeLoyaltyGuests,
+      vipGuests,
+      redeemedVouchers,
+      openVouchers,
+      activeCampaigns,
+      scheduledCampaigns,
+      activeAutomations,
+      generatedCampaignsToday,
+      largestMarketingAudience,
+      reactivationCandidates,
+      vipUpgradeCandidates,
       reservationsThisWeek,
       tablesTotal,
       tablesOccupied,
@@ -218,6 +275,84 @@ export class DashboardAnalyticsService {
         startTime: { $gte: today.from, $lte: today.to },
         status: { $ne: ReservationStatus.Cancelled },
       }),
+      this.sumReservations(
+        {
+          ...locationFilter,
+          startTime: { $gte: today.from, $lte: today.to },
+          status: { $ne: ReservationStatus.Cancelled },
+        },
+        '$partySize',
+      ),
+      this.reservationModel.countDocuments({
+        ...locationFilter,
+        startTime: { $gte: today.from, $lte: today.to },
+        status: { $in: [ReservationStatus.NoShow, 'NoShow'] },
+      }),
+      this.sumWaitlist(
+        {
+          ...locationFilter,
+          status: { $in: [WaitlistStatus.Waiting, WaitlistStatus.Notified] },
+        },
+        '$guestCount',
+      ),
+      this.averageWaitlistMinutes({
+        ...locationFilter,
+        status: { $in: [WaitlistStatus.Waiting, WaitlistStatus.Notified] },
+      }),
+      this.sumWaitlist(
+        {
+          ...todayFilter,
+          status: WaitlistStatus.Seated,
+        },
+        '$guestCount',
+      ),
+      this.waitlistModel.countDocuments({
+        ...todayFilter,
+        status: WaitlistStatus.NoShow,
+      }),
+      this.guestProfileModel.countDocuments({
+        ...locationFilter,
+        active: true,
+        createdAt: { $gte: today.from, $lte: today.to },
+      }),
+      this.countRecurringGuests(locationFilter),
+      this.countTopGuests(locationFilter),
+      this.countNoShowGuests(locationFilter),
+      this.countBirthdays(locationFilter, today.from, today.to),
+      this.countBirthdays(locationFilter, this.startOfWeek(new Date()), this.endOfWeek(new Date())),
+      this.countBirthdays(locationFilter, this.startOfMonth(new Date()), this.endOfMonth(new Date())),
+      this.countActiveLoyaltyGuests(locationFilter),
+      this.countVipGuests(locationFilter),
+      this.voucherModel.countDocuments({
+        ...locationFilter,
+        status: GuestVoucherStatus.Redeemed,
+      }),
+      this.voucherModel.countDocuments({
+        ...locationFilter,
+        status: GuestVoucherStatus.Active,
+      }),
+      this.marketingCampaignModel.countDocuments({
+        ...tenantCampaignFilter,
+        status: MarketingCampaignStatus.Active,
+        active: true,
+      }),
+      this.marketingCampaignModel.countDocuments({
+        ...tenantCampaignFilter,
+        status: MarketingCampaignStatus.Scheduled,
+        active: true,
+      }),
+      this.marketingAutomationModel.countDocuments({
+        tenantId: resolved.tenantId,
+        active: true,
+      }),
+      this.marketingCampaignModel.countDocuments({
+        ...tenantCampaignFilter,
+        automationId: { $exists: true, $ne: '' },
+        createdAt: { $gte: today.from, $lte: today.to },
+      }),
+      this.largestMarketingAudience(locationFilter),
+      this.countReactivationCandidates(locationFilter),
+      this.countVipUpgradeCandidates(locationFilter),
       this.reservationModel.countDocuments({
         ...locationFilter,
         startTime: {
@@ -275,6 +410,30 @@ export class DashboardAnalyticsService {
         openCounterOrders,
         openPayments,
         reservationsToday,
+        reservationGuestsToday,
+        noShowsToday,
+        waitingGuests,
+        averageWaitMinutes,
+        seatedWaitlistGuestsToday,
+        waitlistNoShowsToday,
+        newGuestsToday,
+        recurringGuests,
+        topGuests,
+        noShowGuests,
+        birthdaysToday,
+        birthdaysThisWeek,
+        birthdaysThisMonth,
+        activeLoyaltyGuests,
+        vipGuests,
+        redeemedVouchers,
+        openVouchers,
+        activeCampaigns,
+        scheduledCampaigns,
+        activeAutomations,
+        generatedCampaignsToday,
+        largestMarketingAudience,
+        reactivationCandidates,
+        vipUpgradeCandidates,
         reservationsThisWeek,
         tableUtilization:
           tablesTotal > 0 ? (tablesOccupied / tablesTotal) * 100 : 0,
@@ -710,6 +869,260 @@ export class DashboardAnalyticsService {
     return Number(result?.total ?? 0);
   }
 
+  private async sumReservations(
+    filter: Record<string, unknown>,
+    field: string,
+  ) {
+    const [result] = await this.reservationModel.aggregate<TotalAggregate>([
+      { $match: filter },
+      { $group: { _id: null, total: { $sum: field } } },
+    ]);
+
+    return Number(result?.total ?? 0);
+  }
+
+  private async sumWaitlist(
+    filter: Record<string, unknown>,
+    field: string,
+  ) {
+    const [result] = await this.waitlistModel.aggregate<TotalAggregate>([
+      { $match: filter },
+      { $group: { _id: null, total: { $sum: field } } },
+    ]);
+
+    return Number(result?.total ?? 0);
+  }
+
+  private async averageWaitlistMinutes(filter: Record<string, unknown>) {
+    const [result] = await this.waitlistModel.aggregate<{ average?: number }>([
+      { $match: filter },
+      { $group: { _id: null, average: { $avg: '$estimatedWaitMinutes' } } },
+    ]);
+
+    return Math.round(Number(result?.average ?? 0));
+  }
+
+  private async countRecurringGuests(locationFilter: Record<string, unknown>) {
+    const rows = await this.reservationModel.aggregate<{ _id: string; count: number }>([
+      {
+        $match: {
+          ...locationFilter,
+          guestProfileId: { $exists: true, $ne: '' },
+          status: {
+            $in: [ReservationStatus.CheckedIn, ReservationStatus.Completed],
+          },
+        },
+      },
+      { $group: { _id: '$guestProfileId', count: { $sum: 1 } } },
+      { $match: { count: { $gte: 2 } } },
+    ]);
+
+    return rows.length;
+  }
+
+  private async countTopGuests(locationFilter: Record<string, unknown>) {
+    const rows = await this.orderModel.aggregate<{ _id: string; revenue: number }>([
+      {
+        $match: {
+          ...locationFilter,
+          guestProfileId: { $exists: true, $ne: '' },
+          paymentStatus: PaymentStatus.Paid,
+          status: { $ne: OrderStatus.Cancelled },
+        },
+      },
+      { $group: { _id: '$guestProfileId', revenue: { $sum: '$total' } } },
+      { $match: { revenue: { $gt: 0 } } },
+      { $sort: { revenue: -1 } },
+      { $limit: 5 },
+    ]);
+
+    return rows.length;
+  }
+
+  private async countNoShowGuests(locationFilter: Record<string, unknown>) {
+    const [reservationRows, waitlistRows] = await Promise.all([
+      this.reservationModel.aggregate<{ _id: string }>([
+        {
+          $match: {
+            ...locationFilter,
+            guestProfileId: { $exists: true, $ne: '' },
+            status: ReservationStatus.NoShow,
+          },
+        },
+        { $group: { _id: '$guestProfileId' } },
+      ]),
+      this.waitlistModel.aggregate<{ _id: string }>([
+        {
+          $match: {
+            ...locationFilter,
+            guestProfileId: { $exists: true, $ne: '' },
+            status: WaitlistStatus.NoShow,
+          },
+        },
+        { $group: { _id: '$guestProfileId' } },
+      ]),
+    ]);
+
+    return new Set([...reservationRows, ...waitlistRows].map((row) => row._id)).size;
+  }
+
+  private async countBirthdays(
+    locationFilter: Record<string, unknown>,
+    from: Date,
+    to: Date,
+  ) {
+    const guests = await this.guestProfileModel
+      .find({ ...locationFilter, active: true, birthday: { $exists: true } })
+      .select('birthday')
+      .lean();
+
+    return guests.filter((guest) =>
+      this.hasBirthdayBetween(guest.birthday, from, to),
+    ).length;
+  }
+
+  private async countActiveLoyaltyGuests(
+    locationFilter: Record<string, unknown>,
+  ) {
+    const guestIds = await this.scopedGuestIds(locationFilter);
+    return this.loyaltyAccountModel.countDocuments({
+      guestProfileId: { $in: guestIds },
+      lifetimePoints: { $gt: 0 },
+    });
+  }
+
+  private async countVipGuests(locationFilter: Record<string, unknown>) {
+    const guestIds = await this.scopedGuestIds(locationFilter);
+    return this.loyaltyAccountModel.countDocuments({
+      guestProfileId: { $in: guestIds },
+      tier: { $in: [GuestLoyaltyTier.Gold, GuestLoyaltyTier.Platinum] },
+    });
+  }
+
+  private async countVipUpgradeCandidates(
+    locationFilter: Record<string, unknown>,
+  ) {
+    const guestIds = await this.scopedGuestIds(locationFilter);
+    return this.loyaltyAccountModel.countDocuments({
+      guestProfileId: { $in: guestIds },
+      tier: {
+        $in: [
+          GuestLoyaltyTier.Silver,
+          GuestLoyaltyTier.Gold,
+          GuestLoyaltyTier.Platinum,
+        ],
+      },
+    });
+  }
+
+  private async largestMarketingAudience(
+    locationFilter: Record<string, unknown>,
+  ) {
+    const [
+      newGuests,
+      regularGuests,
+      vipGuests,
+      birthdayGuests,
+      reactivationCandidates,
+      noShowGuests,
+      highRevenueGuests,
+    ] = await Promise.all([
+      this.guestProfileModel.countDocuments({
+        ...locationFilter,
+        active: true,
+        createdAt: {
+          $gte: this.addDays(new Date(), -30),
+          $lte: new Date(),
+        },
+      }),
+      this.countRecurringGuests(locationFilter),
+      this.countVipGuests(locationFilter),
+      this.countBirthdays(
+        locationFilter,
+        this.startOfWeek(new Date()),
+        this.endOfWeek(new Date()),
+      ),
+      this.countReactivationCandidates(locationFilter),
+      this.countNoShowGuests(locationFilter),
+      this.countHighRevenueGuests(locationFilter),
+    ]);
+
+    return Math.max(
+      newGuests,
+      regularGuests,
+      vipGuests,
+      birthdayGuests,
+      reactivationCandidates,
+      noShowGuests,
+      highRevenueGuests,
+    );
+  }
+
+  private async countReactivationCandidates(
+    locationFilter: Record<string, unknown>,
+  ) {
+    const guestIds = await this.scopedGuestIds(locationFilter);
+    const recentThreshold = this.addDays(new Date(), -90);
+    const activeGuestIds = new Set<string>();
+
+    const [reservations, waitlist, orders] = await Promise.all([
+      this.reservationModel
+        .find({
+          ...locationFilter,
+          guestProfileId: { $in: guestIds },
+          startTime: { $gte: recentThreshold },
+          status: {
+            $in: [ReservationStatus.CheckedIn, ReservationStatus.Completed],
+          },
+        })
+        .select('guestProfileId')
+        .lean(),
+      this.waitlistModel
+        .find({
+          ...locationFilter,
+          guestProfileId: { $in: guestIds },
+          createdAt: { $gte: recentThreshold },
+          status: WaitlistStatus.Seated,
+        })
+        .select('guestProfileId')
+        .lean(),
+      this.orderModel
+        .find({
+          ...locationFilter,
+          guestProfileId: { $in: guestIds },
+          createdAt: { $gte: recentThreshold },
+          paymentStatus: PaymentStatus.Paid,
+          status: { $ne: OrderStatus.Cancelled },
+        })
+        .select('guestProfileId')
+        .lean(),
+    ]);
+
+    for (const row of [...reservations, ...waitlist, ...orders]) {
+      if (row.guestProfileId) {
+        activeGuestIds.add(row.guestProfileId);
+      }
+    }
+
+    return guestIds.filter((guestId) => !activeGuestIds.has(guestId)).length;
+  }
+
+  private async countHighRevenueGuests(locationFilter: Record<string, unknown>) {
+    const guestIds = await this.scopedGuestIds(locationFilter);
+    return this.loyaltyAccountModel.countDocuments({
+      guestProfileId: { $in: guestIds },
+      lifetimeRevenue: { $gt: 1000 },
+    });
+  }
+
+  private async scopedGuestIds(locationFilter: Record<string, unknown>) {
+    const guests = await this.guestProfileModel
+      .find({ ...locationFilter, active: true })
+      .select('_id')
+      .lean();
+    return guests.map((guest) => String(guest._id));
+  }
+
   private async sumStockMovements(
     filter: Record<string, unknown>,
     field: string,
@@ -948,6 +1361,47 @@ export class DashboardAnalyticsService {
     end.setDate(end.getDate() + 6);
     end.setHours(23, 59, 59, 999);
     return end;
+  }
+
+  private startOfMonth(date: Date) {
+    const start = new Date(date);
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+
+  private endOfMonth(date: Date) {
+    const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }
+
+  private hasBirthdayBetween(
+    birthday: Date | string | undefined,
+    from: Date,
+    to: Date,
+  ): boolean {
+    if (!birthday) {
+      return false;
+    }
+
+    const cursor = new Date(from);
+    cursor.setHours(0, 0, 0, 0);
+    const end = new Date(to);
+    end.setHours(23, 59, 59, 999);
+    const birthdayDate = new Date(birthday);
+
+    while (cursor <= end) {
+      if (
+        cursor.getMonth() === birthdayDate.getMonth() &&
+        cursor.getDate() === birthdayDate.getDate()
+      ) {
+        return true;
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return false;
   }
 
   private addDays(date: Date, days: number) {

@@ -79,4 +79,48 @@ describe('JwtAuthGuard', () => {
       new UnauthorizedException('Benutzer ist deaktiviert'),
     );
   });
+
+  it('rejects suspended users even when the token version matches', async () => {
+    const jwtService = {
+      verifyAsync: jest.fn().mockResolvedValue({
+        sub: 'user-1',
+        email: 'service@example.test',
+        roles: ['WAITER'],
+        permissionsVersion: 4,
+      }),
+    } as unknown as JwtService;
+    const guard = new JwtAuthGuard(
+      jwtService,
+      userModel(4, { status: 'suspended' }),
+    );
+
+    await expect(guard.canActivate(context())).rejects.toThrow(
+      new UnauthorizedException('Benutzer ist deaktiviert'),
+    );
+  });
+
+  it('rejects tokens for hard-deleted users', async () => {
+    const jwtService = {
+      verifyAsync: jest.fn().mockResolvedValue({
+        sub: 'deleted-user',
+        email: 'deleted@example.test',
+        roles: ['WAITER'],
+        permissionsVersion: 1,
+      }),
+    } as unknown as JwtService;
+    const missingUserModel = {
+      findById: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest.fn().mockResolvedValue(null),
+          }),
+        }),
+      }),
+    } as never;
+    const guard = new JwtAuthGuard(jwtService, missingUserModel);
+
+    await expect(guard.canActivate(context())).rejects.toThrow(
+      new UnauthorizedException('Benutzer ist deaktiviert'),
+    );
+  });
 });

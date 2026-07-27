@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
@@ -15,12 +25,15 @@ import { UpdateTenantBillingDto } from './dto/update-tenant-billing.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
 import { PlatformUserStatusDto } from '../users/dto/platform-user-status.dto';
+import { CreateUserDto } from '../users/dto/create-user.dto';
 import {
   CreatePlatformTenantAdminDto,
   PlatformTenantAdminPasswordResetDto,
   PlatformTenantAdminStatusDto,
   UpdatePlatformTenantAdminDto,
 } from '../users/dto/platform-tenant-admin.dto';
+import { UpdatePlatformTenantUserDto } from '../users/dto/platform-tenant-user-update.dto';
+import type { PlatformUserListQuery } from '../users/users.service';
 import { UsersService } from '../users/users.service';
 
 @Controller('platform')
@@ -57,6 +70,43 @@ export class PlatformTenantsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.usersService.findPlatformTenantUsers(tenantId, actor);
+  }
+
+  @Get('tenants/:tenantId/users/:userId')
+  findTenantUser(
+    @Param('tenantId') tenantId: string,
+    @Param('userId') userId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.findPlatformTenantUser(tenantId, userId, actor);
+  }
+
+  @Patch('tenants/:tenantId/users/:userId')
+  updateTenantUser(
+    @Param('tenantId') tenantId: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdatePlatformTenantUserDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.updatePlatformTenantUser(
+      tenantId,
+      userId,
+      dto,
+      actor,
+    );
+  }
+
+  @Delete('tenants/:tenantId/users/:userId')
+  deleteTenantUser(
+    @Param('tenantId') tenantId: string,
+    @Param('userId') userId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.deletePlatformTenantUser(
+      tenantId,
+      userId,
+      actor,
+    );
   }
 
   @Get('tenants/:tenantId/admins')
@@ -121,12 +171,37 @@ export class PlatformTenantsController {
     );
   }
 
+  @Get('users')
+  findPlatformUsers(
+    @Query() query: PlatformUserListQuery,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.findPlatformUsers(query, actor);
+  }
+
+  @Post('users')
+  createPlatformUser(
+    @Body() dto: CreateUserDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.createPlatformUser(dto, actor);
+  }
+
   @Get('users/:userId')
   findPlatformUser(
     @Param('userId') userId: string,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.usersService.findPlatformUser(userId, actor);
+  }
+
+  @Patch('users/:userId')
+  updatePlatformUser(
+    @Param('userId') userId: string,
+    @Body() dto: UpdatePlatformTenantUserDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.updatePlatformUser(userId, dto, actor);
   }
 
   @Post('users/:userId/reset-password')
@@ -148,6 +223,14 @@ export class PlatformTenantsController {
       dto.status,
       actor,
     );
+  }
+
+  @Delete('users/:userId')
+  deletePlatformUser(
+    @Param('userId') userId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.deletePlatformUser(userId, actor);
   }
 
   @Get('tenants/:tenantId')

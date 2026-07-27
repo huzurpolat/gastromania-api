@@ -8,8 +8,13 @@ import {
 import { StockMovementType } from '../schemas/stock-movement.schema';
 
 export class AdjustStockDto {
+  @IsOptional()
   @IsNumber()
-  quantityChange!: number;
+  quantityChange?: number;
+
+  @IsOptional()
+  @IsNumber()
+  actualQuantity?: number;
 
   @IsEnum(StockMovementType)
   type!: StockMovementType;

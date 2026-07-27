@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { AuditLog, AuditLogSchema } from '../audit-logs/schemas/audit-log.schema';
 import { AuthJwtModule } from '../auth/auth-jwt.module';
 import { Location, LocationSchema } from '../locations/schemas/location.schema';
 import { ModulesModule } from '../modules/modules.module';
@@ -55,6 +56,7 @@ import { StockService } from './stock.service';
       { name: User.name, schema: UserSchema },
       { name: Location.name, schema: LocationSchema },
       { name: Supplier.name, schema: SupplierSchema },
+      { name: AuditLog.name, schema: AuditLogSchema },
     ]),
   ],
   controllers: [StockController],

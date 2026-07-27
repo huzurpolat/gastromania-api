@@ -352,6 +352,9 @@ export class Order {
   customerName?: string;
 
   @Prop({ trim: true, index: true })
+  guestProfileId?: string;
+
+  @Prop({ trim: true, index: true })
   qrTokenId?: string;
 
   @Prop({ trim: true })

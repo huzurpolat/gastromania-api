@@ -681,7 +681,14 @@ async function verifyOrganization(
     `/tenant/locations/${location.body._id}`,
     token,
   );
-  assertStatus(deleteLocation, 200, 'Smoke-Standort loeschen');
+  assertStatus(deleteLocation, 409, 'Smoke-Standort mit Tischen blockieren');
+  const forceDeleteLocation = await request<ApiJson>(
+    baseUrl,
+    'DELETE',
+    `/tenant/locations/${location.body._id}?force=true`,
+    token,
+  );
+  assertStatus(forceDeleteLocation, 200, 'Smoke-Standort mit Tischen force-loeschen');
   await assertDeleted(baseUrl, token, `/tenant/locations/${location.body._id}`, 'Standort');
 
   const deleteCity = await request<ApiJson>(

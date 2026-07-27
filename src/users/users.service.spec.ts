@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Role } from '../auth/enums/role.enum';
 import { UsersService } from './users.service';
 
@@ -47,14 +47,23 @@ describe('UsersService platform tenant users', () => {
 
   function createService(user = createUser()) {
     const userModel = {
+      exists: jest.fn().mockResolvedValue(null),
       find: jest.fn().mockReturnValue(queryResult([user])),
       findById: jest.fn().mockReturnValue(queryResult(user)),
+      findByIdAndUpdate: jest.fn().mockImplementation((_id, update) => {
+        Object.assign(user, update);
+        return queryResult(user);
+      }),
+      findOne: jest.fn().mockReturnValue(queryResult(user)),
+      countDocuments: jest.fn().mockReturnValue(queryResult(2)),
+      deleteOne: jest.fn().mockReturnValue(queryResult({ deletedCount: 1 })),
     };
     const locationModel = {
       find: jest.fn().mockReturnValue(
         queryResult([
           {
             _id: { toString: () => locationId },
+            tenantId,
             name: 'Bonn',
             city: 'Bonn',
           },
@@ -62,10 +71,15 @@ describe('UsersService platform tenant users', () => {
       ),
     };
     const tenantModel = {
+      find: jest.fn().mockReturnValue(
+        queryResult([{ _id: { toString: () => tenantId }, name: 'BurgerMania' }]),
+      ),
       findById: jest.fn().mockReturnValue(queryResult({ _id: tenantId })),
     };
     const auditLogModel = { create: jest.fn().mockResolvedValue({}) };
     const assignmentModel = {
+      deleteMany: jest.fn().mockReturnValue(queryResult({ deletedCount: 1 })),
+      updateOne: jest.fn().mockReturnValue(queryResult({ acknowledged: true })),
       find: jest.fn().mockReturnValue(
         queryResult([
           {
@@ -95,7 +109,9 @@ describe('UsersService platform tenant users', () => {
       ),
       user,
       userModel,
+      tenantModel,
       auditLogModel,
+      assignmentModel,
       accessPolicy,
     };
   }
@@ -121,6 +137,282 @@ describe('UsersService platform tenant users', () => {
     );
     expect(JSON.stringify(result)).not.toContain('password');
     expect(JSON.stringify(result)).not.toContain('passwordHash');
+  });
+
+  it('lists platform-wide tenant users with server-side filters', async () => {
+    const { service, userModel } = createService();
+
+    const result = await service.findPlatformUsers(
+      {
+        tenantId,
+        role: Role.Admin,
+        locationId,
+        status: 'active',
+        search: 'admin',
+      },
+      platformActor,
+    );
+
+    expect(userModel.find).toHaveBeenCalledWith({
+      $and: expect.arrayContaining([
+        { tenantId },
+        { roles: Role.Admin },
+        {
+          $or: [
+            { locationId },
+            { locationIds: locationId },
+            { managedLocationIds: locationId },
+          ],
+        },
+      ]),
+    });
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        tenantId,
+        tenantName: 'BurgerMania',
+        email: 'tenant.admin@example.test',
+        locationNames: ['Bonn'],
+      }),
+    );
+    expect(JSON.stringify(result)).not.toContain('passwordHash');
+  });
+
+  it('loads tenant user details for platform admins without sensitive fields', async () => {
+    const user = createUser({
+      department: 'Service',
+      departmentIds: ['department-1'],
+    });
+    const { service, userModel } = createService(user);
+
+    const result = await service.findPlatformTenantUser(
+      tenantId,
+      userId,
+      platformActor,
+    );
+
+    expect(userModel.findOne).toHaveBeenCalledWith({ _id: userId, tenantId });
+    expect(result).toEqual(
+      expect.objectContaining({
+        _id: userId,
+        tenantId,
+        email: 'tenant.admin@example.test',
+        department: 'Service',
+        departmentIds: ['department-1'],
+      }),
+    );
+    const serialized = JSON.stringify(result).toLowerCase();
+    expect(serialized).not.toContain('password');
+    expect(serialized).not.toContain('passwordhash');
+    expect(serialized).not.toContain('refreshtoken');
+    expect(serialized).not.toContain('resettoken');
+    expect(serialized).not.toContain('secret');
+  });
+
+  it('loads platform user details even when the referenced tenant is missing', async () => {
+    const user = createUser({ roles: [Role.Kueche] });
+    const { service, tenantModel } = createService(user);
+    tenantModel.find.mockReturnValueOnce(queryResult([]));
+    tenantModel.findById.mockReturnValueOnce(queryResult(null));
+
+    const result = await service.findPlatformUser(userId, platformActor);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        _id: userId,
+        tenantId,
+        email: 'tenant.admin@example.test',
+      }),
+    );
+    expect(result.tenantName).toBeUndefined();
+  });
+
+  it('returns not found for cross-tenant platform tenant user details', async () => {
+    const { service, userModel } = createService();
+    userModel.findOne.mockReturnValueOnce(queryResult(null));
+
+    await expect(
+      service.findPlatformTenantUser(tenantId, userId, platformActor),
+    ).rejects.toThrow('Benutzer nicht gefunden');
+  });
+
+  it('updates tenant user details without accepting sensitive fields', async () => {
+    const user = createUser({
+      departmentIds: ['old-department'],
+    });
+    const { service, auditLogModel, assignmentModel, userModel } = createService(user);
+
+    const result = await service.updatePlatformTenantUser(
+      tenantId,
+      userId,
+      {
+        name: 'Max Muster',
+        email: 'max.muster@example.test',
+        role: Role.Service,
+        status: 'active',
+        departmentId: 'department-1',
+        locationAssignments: [
+          { locationId, role: Role.Waiter, isPrimary: true },
+        ],
+      },
+      platformActor,
+    );
+
+    expect(userModel.exists).toHaveBeenCalledWith({
+      _id: { $ne: userId },
+      email: 'max.muster@example.test',
+    });
+    expect(user.firstName).toBe('Max');
+    expect(user.lastName).toBe('Muster');
+    expect(user.email).toBe('max.muster@example.test');
+    expect(user.roles).toEqual([Role.Service]);
+    expect(user.departmentIds).toEqual(['department-1']);
+    expect(user.locationIds).toEqual([locationId]);
+    expect(user.locationId).toBe(locationId);
+    expect(user.permissionsVersion).toBe(2);
+    expect(user.save).toHaveBeenCalled();
+    expect(assignmentModel.deleteMany).toHaveBeenCalledWith({ userId });
+    expect(assignmentModel.updateOne).toHaveBeenCalledWith(
+      { userId, locationId },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          tenantId,
+          locationId,
+          role: Role.Waiter,
+          isPrimary: true,
+        }),
+      }),
+      { upsert: true },
+    );
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: platformActor.sub,
+        tenantId,
+        action: 'USER_UPDATED',
+        entityType: 'user',
+        entityId: userId,
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        email: 'max.muster@example.test',
+        displayName: 'Max Muster',
+        departmentIds: ['department-1'],
+      }),
+    );
+    const serialized = JSON.stringify(result).toLowerCase();
+    expect(serialized).not.toContain('password');
+    expect(serialized).not.toContain('token');
+    expect(serialized).not.toContain('secret');
+  });
+
+  it('rejects sensitive fields in platform tenant user update payloads', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.updatePlatformTenantUser(
+        tenantId,
+        userId,
+        { name: 'Unsafe User', passwordHash: 'leak' } as never,
+        platformActor,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('blocks platform roles in tenant user updates', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.updatePlatformTenantUser(
+        tenantId,
+        userId,
+        { role: Role.PlatformAdminCode },
+        platformActor,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('permanently deletes tenant users for platform admins with audit log', async () => {
+    const user = createUser({ roles: [Role.Service] });
+    const { service, userModel, assignmentModel, auditLogModel } =
+      createService(user);
+
+    const result = await service.deletePlatformTenantUser(
+      tenantId,
+      userId,
+      platformActor,
+    );
+
+    expect(result).toEqual({ deleted: true, userId });
+    expect(assignmentModel.deleteMany).toHaveBeenCalledWith({ userId });
+    expect(userModel.deleteOne).toHaveBeenCalledWith({ _id: userId, tenantId });
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: platformActor.sub,
+        tenantId,
+        action: 'USER_DELETED',
+        entityType: 'user',
+        entityId: userId,
+        metadata: expect.objectContaining({
+          targetUserId: userId,
+          email: user.email,
+          removedLocationAssignments: true,
+          sessionsInvalidated: true,
+        }),
+      }),
+    );
+  });
+
+  it('permanently deletes platform users even when the referenced tenant is missing', async () => {
+    const user = createUser({ roles: [Role.Kueche] });
+    const { service, userModel, tenantModel, assignmentModel, auditLogModel } =
+      createService(user);
+    tenantModel.findById.mockReturnValueOnce(queryResult(null));
+
+    const result = await service.deletePlatformUser(userId, platformActor);
+
+    expect(result).toEqual({ deleted: true, userId });
+    expect(tenantModel.findById).not.toHaveBeenCalled();
+    expect(assignmentModel.deleteMany).toHaveBeenCalledWith({ userId });
+    expect(userModel.deleteOne).toHaveBeenCalledWith({ _id: userId, tenantId });
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: platformActor.sub,
+        tenantId,
+        action: 'USER_DELETED',
+        entityType: 'user',
+        entityId: userId,
+      }),
+    );
+  });
+
+  it('blocks platform hard delete for the current user', async () => {
+    const selfActor = { ...platformActor, sub: userId };
+    const { service } = createService(createUser({ roles: [Role.Service] }));
+
+    await expect(
+      service.deletePlatformTenantUser(tenantId, userId, selfActor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('blocks platform hard delete for system users', async () => {
+    const { service } = createService(
+      createUser({ roles: [Role.Service], isSystem: true }),
+    );
+
+    await expect(
+      service.deletePlatformTenantUser(tenantId, userId, platformActor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('blocks platform hard delete for the last tenant admin', async () => {
+    const { service, userModel } = createService(
+      createUser({ roles: [Role.TenantAdmin] }),
+    );
+    userModel.countDocuments.mockReturnValueOnce(queryResult(1));
+
+    await expect(
+      service.deletePlatformTenantUser(tenantId, userId, platformActor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('blocks tenant admins from platform tenant user management', async () => {
@@ -156,7 +448,7 @@ describe('UsersService platform tenant users', () => {
       expect.objectContaining({
         actorUserId: platformActor.sub,
         tenantId,
-        action: 'platform.user.password_reset',
+        action: 'PASSWORD_RESET',
         entityType: 'user',
         entityId: userId,
       }),
@@ -185,10 +477,10 @@ describe('UsersService platform tenant users', () => {
     expect(activated.status).toBe('active');
     expect(user.isActive).toBe(true);
     expect(auditLogModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'platform.user.suspended' }),
+      expect.objectContaining({ action: 'ACCOUNT_LOCKED' }),
     );
     expect(auditLogModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'platform.user.activated' }),
+      expect.objectContaining({ action: 'USER_ENABLED' }),
     );
   });
 });
@@ -237,10 +529,23 @@ describe('UsersService tenant user management', () => {
 
   function createService(user = createUser()) {
     const userModel = {
-      create: jest.fn(),
+      create: jest.fn().mockImplementation(async (payload) =>
+        createUser({
+          ...payload,
+          _id: { toString: () => userId },
+          save: jest.fn(),
+        }),
+      ),
       exists: jest.fn().mockResolvedValue(false),
       find: jest.fn().mockReturnValue(queryResult([user])),
       findById: jest.fn().mockReturnValue(queryResult(user)),
+      findByIdAndUpdate: jest.fn().mockImplementation((_id, update) => {
+        Object.assign(user, update);
+        return queryResult(user);
+      }),
+      findOne: jest.fn().mockReturnValue(queryResult(user)),
+      countDocuments: jest.fn().mockReturnValue(queryResult(2)),
+      deleteOne: jest.fn().mockReturnValue(queryResult({ deletedCount: 1 })),
     };
     const locationModel = {
       find: jest.fn().mockReturnValue(
@@ -272,6 +577,7 @@ describe('UsersService tenant user management', () => {
       ),
       bulkWrite: jest.fn().mockResolvedValue({}),
       deleteMany: jest.fn().mockReturnValue(queryResult({ deletedCount: 0 })),
+      updateOne: jest.fn().mockReturnValue(queryResult({ acknowledged: true })),
     };
     const accessPolicy = {
       assertAssignableScope: jest.fn().mockResolvedValue(undefined),
@@ -298,6 +604,7 @@ describe('UsersService tenant user management', () => {
       user,
       userModel,
       auditLogModel,
+      assignmentModel,
       accessPolicy,
     };
   }
@@ -324,7 +631,7 @@ describe('UsersService tenant user management', () => {
       expect.objectContaining({
         actorUserId: tenantActor.sub,
         tenantId,
-        action: 'tenant_user.password_reset',
+        action: 'PASSWORD_RESET',
         entityType: 'user',
         entityId: userId,
       }),
@@ -353,11 +660,202 @@ describe('UsersService tenant user management', () => {
     expect(activated.status).toBe('active');
     expect(user.isActive).toBe(true);
     expect(auditLogModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'tenant_user.disabled' }),
+      expect.objectContaining({ action: 'USER_DISABLED' }),
     );
     expect(auditLogModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'tenant_user.activated' }),
+      expect.objectContaining({ action: 'USER_ENABLED' }),
     );
+  });
+
+  it('allows tenant admins to update their own profile without changing their role', async () => {
+    const user = createUser({
+      _id: { toString: () => userId },
+      roles: [Role.TenantAdmin],
+      firstName: 'Alter',
+      lastName: 'Name',
+    });
+    const { service, userModel } = createService(user);
+
+    const result = await service.update(
+      userId,
+      {
+        firstName: 'Neuer',
+        lastName: 'Name',
+        roles: [Role.TenantAdmin],
+      },
+      { ...tenantActor, sub: userId },
+    );
+
+    expect(userModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      userId,
+      expect.objectContaining({
+        firstName: 'Neuer',
+        lastName: 'Name',
+      }),
+      { returnDocument: 'after' },
+    );
+    expect(result.firstName).toBe('Neuer');
+    expect(result.roles).toEqual([Role.TenantAdmin]);
+  });
+
+  it('blocks tenant admins from changing their own tenant admin role', async () => {
+    const user = createUser({
+      _id: { toString: () => userId },
+      roles: [Role.TenantAdmin],
+    });
+    const { service } = createService(user);
+
+    await expect(
+      service.update(
+        userId,
+        { roles: [Role.Service] },
+        { ...tenantActor, sub: userId },
+      ),
+    ).rejects.toThrow(
+      'Tenant Admin Rollen duerfen durch Tenant Admins nicht geaendert werden',
+    );
+  });
+
+  it('soft deletes tenant users by disabling login and writing an audit log', async () => {
+    const user = createUser();
+    const { service, auditLogModel } = createService(user);
+
+    const result = await service.softDeleteTenantUser(userId, tenantActor);
+
+    expect(result.status).toBe('disabled');
+    expect(user.isActive).toBe(false);
+    expect(user.save).toHaveBeenCalled();
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'USER_DISABLED',
+        entityType: 'user',
+        entityId: userId,
+        tenantId,
+        metadata: expect.objectContaining({
+          targetUserId: userId,
+          newValues: { status: 'disabled', isActive: false },
+        }),
+      }),
+    );
+  });
+
+  it('blocks tenant admins from soft deleting their own account', async () => {
+    const selfActor = { ...tenantActor, sub: userId };
+    const user = createUser({
+      _id: { toString: () => userId },
+      roles: [Role.TenantAdmin],
+    });
+    const { service } = createService(user);
+
+    await expect(
+      service.softDeleteTenantUser(userId, selfActor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('blocks soft deleting the last active tenant admin', async () => {
+    const user = createUser({ roles: [Role.TenantAdmin] });
+    const { service, userModel } = createService(user);
+    userModel.countDocuments.mockReturnValueOnce(queryResult(1));
+
+    await expect(
+      service.softDeleteTenantUser(userId, tenantActor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('permanently deletes tenant users in the own tenant with audit log', async () => {
+    const user = createUser({ roles: [Role.Service] });
+    const { service, userModel, assignmentModel, auditLogModel } =
+      createService(user);
+
+    const result = await service.deleteTenantUserPermanently(userId, tenantActor);
+
+    expect(result).toEqual({ deleted: true, userId });
+    expect(userModel.findById).toHaveBeenCalledWith(userId);
+    expect(assignmentModel.deleteMany).toHaveBeenCalledWith({ userId });
+    expect(userModel.deleteOne).toHaveBeenCalledWith({ _id: userId, tenantId });
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: tenantActor.sub,
+        actorEmail: tenantActor.email,
+        actorRole: Role.TenantAdmin,
+        tenantId,
+        action: 'USER_DELETED',
+        category: 'USER',
+        entityType: 'user',
+        entityId: userId,
+        metadata: expect.objectContaining({
+          deletedUserId: userId,
+          deletedUserEmail: user.email,
+          removedLocationAssignments: true,
+          sessionsInvalidated: true,
+        }),
+      }),
+    );
+  });
+
+  it('blocks tenant admins from permanently deleting users in other tenants', async () => {
+    const { service, auditLogModel } = createService(
+      createUser({ tenantId: otherTenantId }),
+    );
+
+    await expect(
+      service.deleteTenantUserPermanently(userId, tenantActor),
+    ).rejects.toThrow('Sie duerfen nur Benutzer Ihres eigenen Tenants loeschen.');
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: tenantActor.sub,
+        action: 'CROSS_TENANT_DELETE_BLOCKED',
+        category: 'USER',
+        entityType: 'user',
+        entityId: userId,
+        tenantId,
+        success: false,
+        metadata: expect.objectContaining({
+          actorTenantId: tenantId,
+          targetTenantId: otherTenantId,
+          reason: 'CROSS_TENANT_DELETE_BLOCKED',
+        }),
+      }),
+    );
+  });
+
+  it('blocks tenant admins from permanently deleting themselves', async () => {
+    const user = createUser({ _id: { toString: () => userId } });
+    const { service } = createService(user);
+
+    await expect(
+      service.deleteTenantUserPermanently(userId, { ...tenantActor, sub: userId }),
+    ).rejects.toThrow('Sie koennen sich nicht selbst loeschen.');
+  });
+
+  it('blocks tenant admins from permanently deleting the last tenant admin', async () => {
+    const user = createUser({ roles: [Role.TenantAdmin] });
+    const { service, userModel } = createService(user);
+    userModel.countDocuments.mockReturnValueOnce(queryResult(1));
+
+    await expect(
+      service.deleteTenantUserPermanently(userId, tenantActor),
+    ).rejects.toThrow('Der letzte Tenant Admin kann nicht geloescht werden.');
+  });
+
+  it('blocks tenant admins from permanently deleting platform admins', async () => {
+    const user = createUser({ roles: [Role.PlatformAdmin] });
+    const { service } = createService(user);
+
+    await expect(
+      service.deleteTenantUserPermanently(userId, tenantActor),
+    ).rejects.toThrow(
+      'Platform Admins koennen nicht durch Tenant Admins geloescht werden.',
+    );
+  });
+
+  it('blocks tenant admins from permanently deleting system users', async () => {
+    const user = createUser({ roles: [Role.Service], isSystem: true });
+    const { service } = createService(user);
+
+    await expect(
+      service.deleteTenantUserPermanently(userId, tenantActor),
+    ).rejects.toThrow('Systembenutzer koennen nicht geloescht werden.');
   });
 
   it('blocks cross-tenant tenant user changes', async () => {
@@ -391,6 +889,83 @@ describe('UsersService tenant user management', () => {
         tenantActor,
       ),
     ).rejects.toThrow();
+  });
+
+  it('allows tenant admins to create operative users in their own tenant', async () => {
+    const { service, userModel, auditLogModel } = createService();
+
+    const result = await service.create(
+      {
+        email: 'service-new@example.test',
+        password: 'Demo2026!',
+        firstName: 'Service',
+        lastName: 'Neu',
+        tenantId,
+        roles: [Role.Service],
+        locationId,
+        locationIds: [locationId],
+        locationAssignments: [
+          { locationId, role: Role.Service, isPrimary: true },
+        ],
+      },
+      undefined,
+      tenantActor,
+    );
+
+    expect(userModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'service-new@example.test',
+        tenantId,
+        roles: [Role.Service],
+        locationIds: [locationId],
+      }),
+    );
+    expect(result.email).toBe('service-new@example.test');
+    expect(JSON.stringify(result)).not.toContain('passwordHash');
+    expect(auditLogModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'USER_CREATED',
+        tenantId,
+      }),
+    );
+  });
+
+  it('blocks tenant admins from creating tenant admins or area managers', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.create(
+        {
+          email: 'tenant-admin-attempt@example.test',
+          password: 'Demo2026!',
+          firstName: 'No',
+          lastName: 'Admin',
+          tenantId,
+          roles: [Role.TenantAdmin],
+          locationId,
+          locationIds: [locationId],
+        },
+        undefined,
+        tenantActor,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    await expect(
+      service.create(
+        {
+          email: 'area-attempt@example.test',
+          password: 'Demo2026!',
+          firstName: 'No',
+          lastName: 'Area',
+          tenantId,
+          roles: [Role.Bereichsleiter],
+          locationId,
+          locationIds: [locationId],
+        },
+        undefined,
+        tenantActor,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
 
@@ -534,7 +1109,7 @@ describe('UsersService platform tenant admin management', () => {
     expect(JSON.stringify(result)).not.toContain('passwordHash');
     expect(auditLogModel.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: 'tenant_admin.created',
+        action: 'USER_CREATED',
         actorUserId: platformActor.sub,
         tenantId,
       }),
@@ -562,7 +1137,7 @@ describe('UsersService platform tenant admin management', () => {
     expect(admin.roles).toEqual([Role.TenantAdmin]);
     expect(admin.tenantId).toBe(tenantId);
     expect(auditLogModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'tenant_admin.updated' }),
+      expect.objectContaining({ action: 'USER_UPDATED' }),
     );
   });
 
@@ -584,7 +1159,7 @@ describe('UsersService platform tenant admin management', () => {
     expect(JSON.stringify(result)).not.toContain('NeuesAdminPasswort2026!');
     expect(JSON.stringify(result)).not.toContain('passwordHash');
     expect(auditLogModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'tenant_admin.password_reset' }),
+      expect.objectContaining({ action: 'PASSWORD_RESET' }),
     );
   });
 
@@ -612,10 +1187,10 @@ describe('UsersService platform tenant admin management', () => {
     expect(active.status).toBe('active');
     expect(admin.isActive).toBe(true);
     expect(auditLogModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'tenant_admin.disabled' }),
+      expect.objectContaining({ action: 'USER_DISABLED' }),
     );
     expect(auditLogModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'tenant_admin.activated' }),
+      expect.objectContaining({ action: 'USER_ENABLED' }),
     );
   });
 

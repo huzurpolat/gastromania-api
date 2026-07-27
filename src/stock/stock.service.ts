@@ -8,6 +8,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Observable, Subject, filter, from, map, switchMap } from 'rxjs';
 import { AccessPolicyService } from '../access/access-policy.service';
+import {
+  AuditLog,
+  AuditLogDocument,
+} from '../audit-logs/schemas/audit-log.schema';
 import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import {
   Location,
@@ -367,6 +371,8 @@ export class StockService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Location.name)
     private readonly locationModel: Model<LocationDocument>,
+    @InjectModel(AuditLog.name)
+    private readonly auditLogModel: Model<AuditLogDocument>,
     private readonly accessPolicy: AccessPolicyService,
   ) {}
 
@@ -1675,11 +1681,34 @@ export class StockService {
     await this.assertCanUseLocation(actor, item.locationId);
 
     const quantityBefore = item.quantity;
-    const nextQuantity = item.quantity + payload.quantityChange;
+    const quantityChange =
+      payload.actualQuantity !== undefined
+        ? this.roundQuantity(payload.actualQuantity - quantityBefore)
+        : payload.quantityChange;
 
     if (
-      payload.quantityChange < 0 &&
+      quantityChange === undefined ||
+      Number.isNaN(quantityChange) ||
+      !Number.isFinite(quantityChange)
+    ) {
+      throw new BadRequestException(
+        'Mengenänderung oder tatsächlicher Bestand ist erforderlich',
+      );
+    }
+
+    if (quantityChange === 0) {
+      throw new BadRequestException('Bestand ist bereits korrekt');
+    }
+
+    const nextQuantity =
+      payload.actualQuantity !== undefined
+        ? this.roundQuantity(payload.actualQuantity)
+        : this.roundQuantity(item.quantity + quantityChange);
+
+    if (
       [
+        StockMovementType.Inventory,
+        StockMovementType.Correction,
         StockMovementType.Shrinkage,
         StockMovementType.Spoilage,
         StockMovementType.Breakage,
@@ -1688,7 +1717,7 @@ export class StockService {
       !payload.reason?.trim()
     ) {
       throw new BadRequestException(
-        'Grund ist fuer Schwund, Verderb, Bruch und Verlust erforderlich',
+        'Grund ist fuer Inventur, Korrekturen und Bestandsverluste erforderlich',
       );
     }
 
@@ -1697,20 +1726,23 @@ export class StockService {
     const unitPriceNet =
       payload.unitPriceNet ?? resolveValuationUnitCost(saved);
     const batchIds =
-      payload.quantityChange < 0
+      quantityChange < 0
         ? await this.consumeBatches(
             saved._id.toString(),
-            Math.abs(payload.quantityChange),
+            Math.abs(quantityChange),
             payload.batchId,
           )
         : [];
     const movement = await this.movementModel.create({
+      tenantId: saved.tenantId ?? actor.tenantId,
       locationId: saved.locationId,
       stockItemId: saved._id.toString(),
       batchId: batchIds.join(',') || payload.batchId,
       stockItemName: saved.name,
       type: payload.type,
-      quantityChange: payload.quantityChange,
+      quantityChange,
+      quantity: Math.abs(quantityChange),
+      unit: saved.unit,
       quantityBefore,
       quantityAfter: saved.quantity,
       note: payload.note,
@@ -1718,8 +1750,26 @@ export class StockService {
       supplierId: payload.supplierId ?? saved.supplierId,
       supplierName: payload.supplierName ?? saved.supplierName,
       unitPriceNet,
-      valueNet: roundMoney(Math.abs(payload.quantityChange) * unitPriceNet),
+      valueNet: roundMoney(Math.abs(quantityChange) * unitPriceNet),
       actorId: actor.sub,
+    });
+    await this.auditLogModel.create({
+      actorUserId: actor.sub,
+      actorRole: actor.roles?.[0] ?? 'unknown',
+      tenantId: saved.tenantId ?? actor.tenantId,
+      action: 'stock.adjusted',
+      entityType: 'stock_item',
+      entityId: saved._id.toString(),
+      metadata: {
+        stockItemId: saved._id.toString(),
+        locationId: saved.locationId,
+        movementId: movement._id.toString(),
+        oldQuantity: quantityBefore,
+        newQuantity: saved.quantity,
+        difference: quantityChange,
+        reason: payload.reason,
+        timestamp: new Date().toISOString(),
+      },
     });
     await this.syncLowStockAlert(saved);
     const event = {

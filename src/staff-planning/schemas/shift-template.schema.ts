@@ -11,6 +11,9 @@ export class ShiftTemplate {
   @Prop({ trim: true, index: true })
   locationId?: string;
 
+  @Prop({ trim: true, index: true })
+  departmentId?: string;
+
   @Prop({ required: true, trim: true })
   name!: string;
 

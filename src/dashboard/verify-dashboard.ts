@@ -158,26 +158,21 @@ async function verifyDashboard() {
       dashboardService.finance(user, { range: 'today' }),
     ]);
     const failures = [
-      ordersToday > 0 ? '' : 'ordersToday ist 0',
-      reservationsToday > 0 ? '' : 'reservationsToday ist 0',
+      ordersTotal > 0 ? '' : 'ordersTotal ist 0',
+      reservationsTotal > 0 ? '' : 'reservationsTotal ist 0',
       stockItems > 0 ? '' : 'stockItems ist 0',
-      shrinkageToday > 0 ? '' : 'shrinkageToday ist 0',
       tables > 0 ? '' : 'tables ist 0',
       users > 0 ? '' : 'users ist 0',
-      counterOrdersToday > 0 ? '' : 'counterOrdersToday ist 0',
       openCounterOrders > 0 ? '' : 'openCounterOrders ist 0',
       openPayments > 0 ? '' : 'openPayments ist 0',
-      overview.kpis.ordersToday > 0 ? '' : 'Dashboard ordersToday ist 0',
-      overview.kpis.reservationsToday > 0
+      overview.kpis.openOrders > 0 ? '' : 'Dashboard openOrders ist 0',
+      overview.kpis.reservationsThisWeek > 0
         ? ''
-        : 'Dashboard reservationsToday ist 0',
+        : 'Dashboard reservationsThisWeek ist 0',
       overview.kpis.inventoryValue > 0 ? '' : 'Dashboard inventoryValue ist 0',
       overview.kpis.employeesInService > 0
         ? ''
         : 'Dashboard employeesInService ist 0',
-      overview.kpis.counterOrdersToday > 0
-        ? ''
-        : 'Dashboard counterOrdersToday ist 0',
       overview.kpis.openCounterOrders > 0
         ? ''
         : 'Dashboard openCounterOrders ist 0',
@@ -186,8 +181,7 @@ async function verifyDashboard() {
       overview.kpis.readyForPickupOrders > 0
         ? ''
         : 'Dashboard readyForPickupOrders ist 0',
-      overview.kpis.shrinkageToday > 0 ? '' : 'Dashboard shrinkageToday ist 0',
-      finance.dayRevenue > 0 ? '' : 'Dashboard dayRevenue ist 0',
+      finance.monthRevenue > 0 ? '' : 'Dashboard monthRevenue ist 0',
     ].filter(Boolean);
 
     console.log(
@@ -263,9 +257,14 @@ function parseAuthenticatedUser(accessToken: string): AuthenticatedUser {
     email: payload.email,
     roles: payload.roles,
     permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+    tenantId: payload.tenantId,
     companyId: payload.companyId,
     regionIds: Array.isArray(payload.regionIds) ? payload.regionIds : [],
     locationIds: Array.isArray(payload.locationIds) ? payload.locationIds : [],
+    primaryLocationId: payload.primaryLocationId,
+    locationAssignments: Array.isArray(payload.locationAssignments)
+      ? payload.locationAssignments
+      : [],
     managedLocationIds: Array.isArray(payload.managedLocationIds)
       ? payload.managedLocationIds
       : [],

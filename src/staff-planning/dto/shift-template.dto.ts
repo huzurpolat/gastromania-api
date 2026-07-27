@@ -20,6 +20,11 @@ export class CreateShiftTemplateDto {
   locationId?: string;
 
   @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @Transform(({ value }) => trimString(value))
   @IsString()
   @IsNotEmpty()
   name!: string;

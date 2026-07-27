@@ -15,6 +15,11 @@ import { AuthenticatedUser } from '../auth/types/authenticated-request.type';
 import { AccessPolicyService } from '../access/access-policy.service';
 import { AuditLog, AuditLogDocument } from '../audit-logs/schemas/audit-log.schema';
 import {
+  inferAuditCategory,
+  normalizeAuditAction,
+  sanitizeAuditValue,
+} from '../audit-logs/audit-log.util';
+import {
   Location,
   LocationDocument,
 } from '../locations/schemas/location.schema';
@@ -29,6 +34,7 @@ import {
   CreatePlatformTenantAdminDto,
   UpdatePlatformTenantAdminDto,
 } from './dto/platform-tenant-admin.dto';
+import { UpdatePlatformTenantUserDto } from './dto/platform-tenant-user-update.dto';
 import { TenantUserStatus } from './dto/tenant-user-status.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
@@ -55,9 +61,20 @@ export interface PlatformTenantUserLocationResponse {
   city?: string;
 }
 
+export interface PlatformUserListQuery {
+  tenantId?: string;
+  role?: string;
+  areaId?: string;
+  regionId?: string;
+  locationId?: string;
+  status?: string;
+  search?: string;
+}
+
 export interface PlatformTenantUserResponse {
   _id: string;
   tenantId?: string;
+  tenantName?: string;
   email: string;
   username?: string;
   firstName?: string;
@@ -72,10 +89,18 @@ export interface PlatformTenantUserResponse {
   lastLoginAt?: Date;
   createdAt?: Date;
   updatedAt?: Date;
+  department?: string;
+  departmentId?: string;
+  departmentIds: string[];
+  permissions: string[];
+  areaNames?: string[];
+  regionNames?: string[];
+  locationNames?: string[];
   locationId?: string;
   locationIds: string[];
   primaryLocation?: PlatformTenantUserLocationResponse;
   locations: PlatformTenantUserLocationResponse[];
+  availableLocations?: PlatformTenantUserLocationResponse[];
   locationAssignments: UserLocationAssignmentResponse[];
 }
 
@@ -319,6 +344,10 @@ export class UsersService {
     const user = await this.findManageableUserDocument(userId, actor);
     const previousStatus = user.status ?? (user.isActive ? 'active' : 'disabled');
 
+    if (status === 'disabled') {
+      await this.assertTenantUserCanBeDisabled(user, actor);
+    }
+
     user.status = status;
     user.isActive = status === 'active';
     user.permissionsVersion = Math.max(user.permissionsVersion ?? 1, 1) + 1;
@@ -342,6 +371,36 @@ export class UsersService {
     return this.withLocationAssignments(toUserResponse(saved), actor);
   }
 
+  async softDeleteTenantUser(
+    userId: string,
+    actor: AuthenticatedUser,
+  ): Promise<UserResponse> {
+    const user = await this.findManageableUserDocument(userId, actor);
+    const previousStatus = user.status ?? (user.isActive ? 'active' : 'disabled');
+    const previousActive = user.isActive;
+
+    await this.assertTenantUserCanBeDisabled(user, actor);
+
+    user.status = 'disabled';
+    user.isActive = false;
+    user.permissionsVersion = Math.max(user.permissionsVersion ?? 1, 1) + 1;
+    const saved = await user.save();
+
+    await this.audit(actor, {
+      tenantId: saved.tenantId,
+      action: 'tenant_user.soft_deleted',
+      entityType: 'user',
+      entityId: saved._id.toString(),
+      metadata: {
+        targetUserId: saved._id.toString(),
+        oldValues: { status: previousStatus, isActive: previousActive },
+        newValues: { status: 'disabled', isActive: false },
+      },
+    });
+
+    return this.withLocationAssignments(toUserResponse(saved), actor);
+  }
+
   async findPlatformTenantUsers(
     tenantId: string,
     actor: AuthenticatedUser,
@@ -355,6 +414,385 @@ export class UsersService {
       .exec();
 
     return this.toPlatformTenantUserResponses(users, tenantId);
+  }
+
+  async findPlatformUsers(
+    query: PlatformUserListQuery,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse[]> {
+    this.assertStrictPlatformAdminActor(actor);
+
+    const filter = this.buildPlatformUserFilter(query);
+    const users = await this.userModel
+      .find(filter)
+      .sort({ tenantId: 1, lastName: 1, firstName: 1, email: 1 })
+      .exec();
+
+    return this.toPlatformUserResponses(users);
+  }
+
+  async createPlatformUser(
+    dto: CreateUserDto,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse> {
+    this.assertStrictPlatformAdminActor(actor);
+    if (!dto.tenantId) {
+      throw new BadRequestException('Tenant ist erforderlich');
+    }
+
+    const roles = normalizeRoles(dto.roles ?? [Role.Service]);
+    if (this.isPlatformRole(roles)) {
+      throw new BadRequestException(
+        'Platform-Rollen duerfen in der Tenant-Benutzerverwaltung nicht vergeben werden',
+      );
+    }
+
+    await this.assertTenantExists(dto.tenantId);
+    const created = await this.create({ ...dto, roles }, undefined, actor);
+    const user = await this.userModel.findById(created._id).exec();
+    if (!user) {
+      throw new NotFoundException('Benutzer nicht gefunden');
+    }
+    const [response] = await this.toPlatformTenantUserResponses(
+      [user],
+      dto.tenantId,
+    );
+    return response;
+  }
+
+  async updatePlatformUser(
+    userId: string,
+    dto: UpdatePlatformTenantUserDto,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse> {
+    this.assertStrictPlatformAdminActor(actor);
+    this.assertNoSensitivePlatformTenantUserFields(dto as Record<string, unknown>);
+    this.validateObjectId(userId);
+
+    const user = await this.userModel.findById(userId).exec();
+    if (!user?.tenantId) {
+      throw new NotFoundException('Benutzer nicht gefunden');
+    }
+
+    return this.updatePlatformTenantUser(user.tenantId, userId, dto, actor);
+  }
+
+  async deletePlatformUser(
+    userId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ deleted: true; userId: string }> {
+    this.assertStrictPlatformAdminActor(actor);
+    this.validateObjectId(userId);
+
+    const user = await this.userModel.findById(userId).exec();
+    if (!user?.tenantId) {
+      throw new NotFoundException('Benutzer nicht gefunden');
+    }
+
+    await this.assertPlatformTenantUserCanBeHardDeleted(user, actor);
+
+    await this.assignmentModel.deleteMany({ userId }).exec();
+    await this.userModel.deleteOne({ _id: userId, tenantId: user.tenantId }).exec();
+
+    await this.audit(actor, {
+      tenantId: user.tenantId,
+      action: 'platform.tenant_user.deleted',
+      entityType: 'user',
+      entityId: userId,
+      metadata: {
+        targetUserId: userId,
+        email: user.email,
+        roles: user.roles ?? [],
+        locationIds: user.locationIds ?? [],
+        sessionsInvalidated: true,
+        removedLocationAssignments: true,
+      },
+    });
+
+    return { deleted: true, userId };
+  }
+
+  async findPlatformTenantUser(
+    tenantId: string,
+    userId: string,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse> {
+    this.assertPlatformActor(actor);
+    await this.assertTenantExists(tenantId);
+    this.validateObjectId(userId);
+
+    const user = await this.userModel.findOne({ _id: userId, tenantId }).exec();
+    if (!user) {
+      throw new NotFoundException('Benutzer nicht gefunden');
+    }
+
+    const [response] = await this.toPlatformTenantUserResponses(
+      [user],
+      tenantId,
+    );
+    return response;
+  }
+
+  async updatePlatformTenantUser(
+    tenantId: string,
+    userId: string,
+    dto: UpdatePlatformTenantUserDto,
+    actor: AuthenticatedUser,
+  ): Promise<PlatformTenantUserResponse> {
+    this.assertPlatformActor(actor);
+    await this.assertTenantExists(tenantId);
+    this.validateObjectId(userId);
+    this.assertNoSensitivePlatformTenantUserFields(
+      dto as Record<string, unknown>,
+    );
+
+    const user = await this.userModel.findOne({ _id: userId, tenantId }).exec();
+    if (!user) {
+      throw new NotFoundException('Benutzer nicht gefunden');
+    }
+
+    const oldValues = {
+      email: user.email,
+      name: [user.firstName, user.lastName].filter(Boolean).join(' '),
+      roles: user.roles ?? [],
+      status: user.status ?? (user.isActive ? 'active' : 'inactive'),
+      locationId: user.locationId,
+      locationIds: user.locationIds ?? [],
+      departmentIds: user.departmentIds ?? [],
+    };
+
+    if (dto.email !== undefined) {
+      const email = dto.email.trim().toLowerCase();
+      if (!email) {
+        throw new BadRequestException('E-Mail ist erforderlich');
+      }
+
+      if (email !== user.email.toLowerCase()) {
+        const existing = await this.userModel.exists({
+          _id: { $ne: userId },
+          email,
+        });
+        if (existing) {
+          throw new ConflictException(
+            'Benutzer mit dieser E-Mail existiert bereits',
+          );
+        }
+      }
+
+      user.email = email;
+    }
+
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (!name) {
+        throw new BadRequestException('Name ist erforderlich');
+      }
+      const [firstName, ...lastNameParts] = name.split(/\s+/);
+      user.firstName = firstName;
+      user.lastName = lastNameParts.join(' ');
+    }
+
+    const currentRoles = normalizeRoles(user.roles ?? [Role.Service]);
+    const nextRole =
+      dto.role !== undefined ? dto.role.trim() : currentRoles[0] ?? Role.Service;
+    if (!nextRole) {
+      throw new BadRequestException('Rolle ist erforderlich');
+    }
+    this.assertTenantCompatibleWithRoles(tenantId, [nextRole]);
+
+    const locationAssignmentsProvided = dto.locationAssignments !== undefined;
+    const nextLocationAssignments = locationAssignmentsProvided
+      ? this.normalizeLocationAssignments(dto.locationAssignments, [nextRole])
+      : this.normalizeLocationAssignments(
+          (user.locationIds ?? []).map((locationId) => ({
+            locationId,
+            role: this.resolveDefaultLocationRole([nextRole]),
+            isPrimary: locationId === user.locationId,
+          })),
+          [nextRole],
+        );
+    await this.assertLocationsBelongToTenant(
+      tenantId,
+      nextLocationAssignments.map((assignment) => assignment.locationId),
+    );
+
+    const nextLocationIds = locationAssignmentsProvided
+      ? this.getUniqueLocationIds(
+          nextLocationAssignments.map((assignment) => assignment.locationId),
+        )
+      : (user.locationIds ?? []);
+    const nextPrimaryLocationId = this.resolvePrimaryLocationId(
+      locationAssignmentsProvided ? undefined : user.locationId,
+      nextLocationIds,
+      nextLocationAssignments,
+    );
+
+    const roleChanged = currentRoles[0] !== nextRole || currentRoles.length !== 1;
+    const locationScopeChanged =
+      locationAssignmentsProvided &&
+      (this.sameStringSet(user.locationIds ?? [], nextLocationIds) === false ||
+        (user.locationId ?? undefined) !== nextPrimaryLocationId);
+    const departmentChanged =
+      dto.departmentId !== undefined &&
+      this.resolveDepartmentIds({ departmentId: dto.departmentId }).join('|') !==
+        (user.departmentIds ?? []).join('|');
+    const statusChanged =
+      dto.status !== undefined &&
+      dto.status !== (user.status ?? (user.isActive ? 'active' : 'inactive'));
+
+    user.roles = [nextRole];
+    if (dto.status !== undefined) {
+      user.status = dto.status;
+      user.isActive = dto.status === 'active';
+    }
+    if (locationAssignmentsProvided) {
+      user.locationIds = nextLocationIds;
+      user.locationId = nextPrimaryLocationId;
+    }
+    if (dto.departmentId !== undefined) {
+      user.departmentIds = this.resolveDepartmentIds({
+        departmentId: dto.departmentId,
+      });
+    }
+    if (roleChanged || locationScopeChanged || statusChanged || departmentChanged) {
+      user.permissionsVersion = Math.max(user.permissionsVersion ?? 1, 1) + 1;
+    }
+
+    const saved = await user.save();
+    if (locationAssignmentsProvided) {
+      await this.syncLocationAssignments(
+        saved._id.toString(),
+        tenantId,
+        saved.areaIds ?? [],
+        saved.regionIds ?? [],
+        nextLocationIds,
+        nextLocationAssignments,
+        saved.locationId,
+      );
+    }
+
+    await this.audit(actor, {
+      tenantId,
+      action: 'platform.user.updated',
+      entityType: 'user',
+      entityId: saved._id.toString(),
+      metadata: {
+        targetUserId: saved._id.toString(),
+        oldValues,
+        newValues: {
+          email: saved.email,
+          name: [saved.firstName, saved.lastName].filter(Boolean).join(' '),
+          roles: saved.roles ?? [],
+          status: saved.status,
+          locationId: saved.locationId,
+          locationIds: saved.locationIds ?? [],
+          departmentIds: saved.departmentIds ?? [],
+        },
+      },
+    });
+
+    const [response] = await this.toPlatformTenantUserResponses(
+      [saved],
+      tenantId,
+    );
+    return response;
+  }
+
+  async deletePlatformTenantUser(
+    tenantId: string,
+    userId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ deleted: true; userId: string }> {
+    this.assertStrictPlatformAdminActor(actor);
+    await this.assertTenantExists(tenantId);
+    this.validateObjectId(userId);
+
+    const user = await this.userModel.findOne({ _id: userId, tenantId }).exec();
+    if (!user) {
+      throw new NotFoundException('Benutzer nicht gefunden');
+    }
+
+    await this.assertPlatformTenantUserCanBeHardDeleted(user, actor);
+
+    await this.assignmentModel.deleteMany({ userId }).exec();
+    await this.userModel.deleteOne({ _id: userId, tenantId }).exec();
+
+    await this.audit(actor, {
+      tenantId,
+      action: 'platform.tenant_user.deleted',
+      entityType: 'user',
+      entityId: userId,
+      metadata: {
+        targetUserId: userId,
+        email: user.email,
+        roles: user.roles ?? [],
+        locationIds: user.locationIds ?? [],
+        sessionsInvalidated: true,
+        removedLocationAssignments: true,
+      },
+    });
+
+    return { deleted: true, userId };
+  }
+
+  async deleteTenantUserPermanently(
+    userId: string,
+    actor: AuthenticatedUser,
+  ): Promise<{ deleted: true; userId: string }> {
+    if (!this.isTenantAdminActor(actor) || !actor.tenantId) {
+      throw new ForbiddenException(
+        'Nur Tenant Admins duerfen Benutzer endgueltig loeschen',
+      );
+    }
+    this.validateObjectId(userId);
+
+    const tenantId = actor.tenantId;
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException('Benutzer nicht gefunden');
+    }
+
+    if (user.tenantId !== tenantId) {
+      await this.audit(actor, {
+        tenantId,
+        action: 'tenant_user.cross_tenant_delete_blocked',
+        entityType: 'user',
+        entityId: userId,
+        success: false,
+        metadata: {
+          targetUserId: userId,
+          actorTenantId: tenantId,
+          targetTenantId: user.tenantId,
+          reason: 'CROSS_TENANT_DELETE_BLOCKED',
+        },
+      });
+      throw new ForbiddenException(
+        'Sie duerfen nur Benutzer Ihres eigenen Tenants loeschen.',
+      );
+    }
+
+    await this.assertTenantUserCanBeHardDeleted(user, actor);
+
+    await this.assignmentModel.deleteMany({ userId }).exec();
+    await this.userModel.deleteOne({ _id: userId, tenantId }).exec();
+
+    await this.audit(actor, {
+      tenantId,
+      action: 'tenant_user.deleted',
+      entityType: 'user',
+      entityId: userId,
+      metadata: {
+        targetUserId: userId,
+        deletedUserId: userId,
+        deletedUserEmail: user.email,
+        roles: user.roles ?? [],
+        locationIds: user.locationIds ?? [],
+        sessionsInvalidated: true,
+        removedLocationAssignments: true,
+      },
+    });
+
+    return { deleted: true, userId };
   }
 
   async findPlatformTenantAdmins(
@@ -576,7 +1014,6 @@ export class UsersService {
       throw new NotFoundException('Benutzer nicht gefunden');
     }
 
-    await this.assertTenantExists(user.tenantId);
     const [response] = await this.toPlatformTenantUserResponses(
       [user],
       user.tenantId,
@@ -627,6 +1064,15 @@ export class UsersService {
     const user = await this.findPlatformUserDocument(userId);
     const previousStatus = user.status ?? (user.isActive ? 'active' : 'inactive');
 
+    if (status !== 'active') {
+      if (this.isSystemUser(user)) {
+        throw new ForbiddenException(
+          'Systembenutzer duerfen nicht deaktiviert werden',
+        );
+      }
+      await this.assertTenantUserCanBeDisabled(user, actor);
+    }
+
     user.status = status;
     user.isActive = status === 'active';
     user.permissionsVersion = Math.max(user.permissionsVersion ?? 1, 1) + 1;
@@ -635,9 +1081,11 @@ export class UsersService {
     await this.audit(actor, {
       tenantId: saved.tenantId,
       action:
-        status === 'suspended'
-          ? 'platform.user.suspended'
-          : 'platform.user.activated',
+        status === 'active'
+          ? 'platform.user.activated'
+          : status === 'suspended'
+            ? 'platform.user.suspended'
+            : 'platform.user.deactivated',
       entityType: 'user',
       entityId: saved._id.toString(),
       metadata: {
@@ -1042,8 +1490,29 @@ export class UsersService {
         'Der letzte Super Admin darf nicht geloescht werden',
       );
     }
-    await this.userModel.findByIdAndDelete(id).exec();
-    await this.assignmentModel.deleteMany({ userId: id }).exec();
+
+    if (actor) {
+      await this.assertTenantUserCanBeDisabled(user, actor);
+    }
+
+    const previousStatus = user.status ?? (user.isActive ? 'active' : 'disabled');
+    const previousActive = user.isActive;
+    user.status = 'disabled';
+    user.isActive = false;
+    user.permissionsVersion = Math.max(user.permissionsVersion ?? 1, 1) + 1;
+    const saved = await user.save();
+
+    await this.audit(actor, {
+      tenantId: saved.tenantId,
+      action: 'user.soft_deleted',
+      entityType: 'user',
+      entityId: saved._id.toString(),
+      metadata: {
+        targetUserId: saved._id.toString(),
+        oldValues: { status: previousStatus, isActive: previousActive },
+        newValues: { status: 'disabled', isActive: false },
+      },
+    });
   }
 
   private async findPlatformUserDocument(userId: string): Promise<UserDocument> {
@@ -1117,6 +1586,123 @@ export class UsersService {
     if (!tenant) {
       throw new NotFoundException('Tenant nicht gefunden');
     }
+  }
+
+  private assertNoSensitivePlatformTenantUserFields(
+    payload: Record<string, unknown>,
+  ): void {
+    const blockedFields = [
+      'password',
+      'passwordHash',
+      'hash',
+      'refreshToken',
+      'resetToken',
+      'secret',
+      'token',
+    ];
+    const submittedBlockedField = blockedFields.find((field) =>
+      Object.prototype.hasOwnProperty.call(payload, field),
+    );
+
+    if (submittedBlockedField) {
+      throw new BadRequestException(
+        'Sensible Benutzerfelder duerfen nicht bearbeitet werden',
+      );
+    }
+  }
+
+  private buildPlatformUserFilter(
+    query: PlatformUserListQuery,
+  ): Record<string, unknown> {
+    const and: Record<string, unknown>[] = [
+      { tenantId: { $exists: true, $ne: null } },
+      { roles: { $nin: [Role.PlatformAdmin, Role.PlatformAdminCode, Role.SuperAdmin] } },
+    ];
+
+    if (query.tenantId) {
+      this.validateObjectId(query.tenantId);
+      and.push({ tenantId: query.tenantId });
+    }
+
+    if (query.role) {
+      const [role] = normalizeRoles([query.role]);
+      and.push({ roles: role });
+    }
+
+    if (query.areaId) {
+      and.push({ areaIds: query.areaId });
+    }
+
+    if (query.regionId) {
+      and.push({ regionIds: query.regionId });
+    }
+
+    if (query.locationId) {
+      and.push({
+        $or: [
+          { locationId: query.locationId },
+          { locationIds: query.locationId },
+          { managedLocationIds: query.locationId },
+        ],
+      });
+    }
+
+    if (query.status) {
+      if (query.status === 'active') {
+        and.push({
+          $or: [{ status: 'active' }, { status: { $exists: false }, isActive: true }],
+        });
+      } else {
+        and.push({ status: query.status });
+      }
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      const searchRegex = new RegExp(this.escapeRegex(search), 'i');
+      and.push({
+        $or: [
+          { email: searchRegex },
+          { firstName: searchRegex },
+          { lastName: searchRegex },
+          { username: searchRegex },
+        ],
+      });
+    }
+
+    return and.length === 1 ? and[0] : { $and: and };
+  }
+
+  private async toPlatformUserResponses(
+    users: UserDocument[],
+  ): Promise<PlatformTenantUserResponse[]> {
+    const tenantIds = [
+      ...new Set(users.map((user) => user.tenantId).filter(Boolean)),
+    ] as string[];
+    const tenants = tenantIds.length
+      ? await this.tenantModel
+          .find({ _id: { $in: tenantIds } })
+          .select('_id name')
+          .lean()
+          .exec()
+      : [];
+    const tenantNameById = new Map(
+      tenants.map((tenant) => [tenant._id.toString(), tenant.name]),
+    );
+    const responsesByTenant = await Promise.all(
+      tenantIds.map(async (tenantId) => {
+        const tenantUsers = users.filter((user) => user.tenantId === tenantId);
+        return this.toPlatformTenantUserResponses(tenantUsers, tenantId);
+      }),
+    );
+
+    return responsesByTenant.flat().map((user) => ({
+      ...user,
+      tenantName: user.tenantId ? tenantNameById.get(user.tenantId) : undefined,
+      areaNames: user.areaNames ?? [],
+      regionNames: user.regionNames ?? [],
+      locationNames: user.locations.map((location) => location.name),
+    }));
   }
 
   private async toPlatformTenantUserResponses(
@@ -1193,13 +1779,31 @@ export class UsersService {
         lastLoginAt: user.lastLoginAt,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
+        department: user.department,
+        departmentId: user.departmentId,
+        departmentIds: user.departmentIds ?? [],
+        permissions:
+          (user as UserResponse & { permissions?: string[] }).permissions ?? [],
+        areaNames:
+          ((user as UserResponse & { areaIds?: string[] }).areaIds ?? []).map(
+            (areaId) => areaId,
+          ),
+        regionNames:
+          ((user as UserResponse & { regionIds?: string[] }).regionIds ?? []).map(
+            (regionId) => regionId,
+          ),
         locationId: user.locationId,
         locationIds,
         primaryLocation,
         locations: locationsForUser,
+        availableLocations: [...locationById.values()],
         locationAssignments: user.locationAssignments ?? [],
       };
     });
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   private generateTemporaryPassword(): string {
@@ -1286,6 +1890,40 @@ export class UsersService {
     ) {
       throw new ForbiddenException('Diese Rolle darf nicht vergeben werden');
     }
+
+    if (this.isTenantAdminActor(actor)) {
+      const existingRoles = normalizeRoles(existingUser?.roles ?? []);
+      const tenantAdminAllowedRoles = this.tenantAdminAssignableUserRoles();
+      const rolesChanged =
+        payload.roles !== undefined &&
+        !this.sameStringSet(normalizeRoles(payload.roles), existingRoles);
+      const keepsOwnTenantAdminRole =
+        existingUser?._id.toString() === actor.sub &&
+        !rolesChanged &&
+        existingRoles.some((role) =>
+          [Role.TenantAdmin, Role.TenantAdminCode].includes(role as Role),
+        );
+
+      if (
+        rolesChanged &&
+        existingRoles.some((role) =>
+          [Role.TenantAdmin, Role.TenantAdminCode].includes(role as Role),
+        )
+      ) {
+        throw new ForbiddenException(
+          'Tenant Admin Rollen duerfen durch Tenant Admins nicht geaendert werden',
+        );
+      }
+
+      if (
+        roles.some((role) => !tenantAdminAllowedRoles.includes(role as Role)) &&
+        !keepsOwnTenantAdminRole
+      ) {
+        throw new ForbiddenException(
+          'Tenant Admins duerfen nur Filialleiter und operative Benutzer anlegen',
+        );
+      }
+    }
   }
 
   private async assertCanManageUser(
@@ -1318,6 +1956,185 @@ export class UsersService {
     return this.userModel
       .countDocuments({ roles: Role.SuperAdmin, isActive: true })
       .exec();
+  }
+
+  private countActiveTenantAdmins(tenantId?: string): Promise<number> {
+    if (!tenantId) {
+      return Promise.resolve(0);
+    }
+
+    return this.userModel
+      .countDocuments({
+        tenantId,
+        roles: { $in: [Role.TenantAdmin, Role.TenantAdminCode] },
+        isActive: true,
+      })
+      .exec();
+  }
+
+  private countTenantAdmins(tenantId?: string): Promise<number> {
+    if (!tenantId) {
+      return Promise.resolve(0);
+    }
+
+    return this.userModel
+      .countDocuments({
+        tenantId,
+        roles: { $in: [Role.TenantAdmin, Role.TenantAdminCode] },
+      })
+      .exec();
+  }
+
+  private countActivePlatformAdmins(): Promise<number> {
+    return this.userModel
+      .countDocuments({
+        roles: {
+          $in: [
+            Role.PlatformAdmin,
+            Role.PlatformAdminCode,
+            Role.SuperAdmin,
+          ],
+        },
+        isActive: true,
+      })
+      .exec();
+  }
+
+  private async assertTenantUserCanBeDisabled(
+    user: UserDocument,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (user._id.toString() === actor.sub) {
+      throw new ForbiddenException(
+        'Der aktuell eingeloggte Benutzer darf nicht deaktiviert werden',
+      );
+    }
+
+    if (
+      normalizeRoles(user.roles ?? []).includes(Role.TenantAdmin) &&
+      (await this.countActiveTenantAdmins(user.tenantId)) <= 1
+    ) {
+      throw new ForbiddenException(
+        'Der letzte Tenant Admin darf nicht deaktiviert werden',
+      );
+    }
+  }
+
+  private assertStrictPlatformAdminActor(actor: AuthenticatedUser): void {
+    const roles = normalizeRoles(actor.roles ?? []);
+    if (!roles.includes(Role.PlatformAdmin)) {
+      throw new ForbiddenException(
+        'Nur Platform Admins duerfen Tenant-Benutzer endgueltig loeschen',
+      );
+    }
+  }
+
+  private async assertPlatformTenantUserCanBeHardDeleted(
+    user: UserDocument,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (user._id.toString() === actor.sub) {
+      throw new ForbiddenException(
+        'Der aktuell eingeloggte Benutzer darf nicht endgueltig geloescht werden',
+      );
+    }
+
+    if (this.isSystemUser(user)) {
+      throw new ForbiddenException(
+        'Systembenutzer duerfen nicht endgueltig geloescht werden',
+      );
+    }
+
+    const roles = normalizeRoles(user.roles ?? []);
+    const isTenantAdmin = roles.includes(Role.TenantAdmin);
+    const isPlatformAdmin = roles.some((role) =>
+      [Role.PlatformAdmin, Role.PlatformAdminCode, Role.SuperAdmin].includes(
+        role as Role,
+      ),
+    );
+
+    if (isTenantAdmin && (await this.countTenantAdmins(user.tenantId)) <= 1) {
+      throw new ForbiddenException(
+        'Der letzte Tenant Admin darf nicht endgueltig geloescht werden',
+      );
+    }
+
+    if (
+      isTenantAdmin &&
+      user.isActive !== false &&
+      (await this.countActiveTenantAdmins(user.tenantId)) <= 1
+    ) {
+      throw new ForbiddenException(
+        'Der letzte aktive Tenant Admin darf nicht endgueltig geloescht werden',
+      );
+    }
+
+    if (isPlatformAdmin && (await this.countActivePlatformAdmins()) <= 1) {
+      throw new ForbiddenException(
+        'Der letzte Platform Admin darf nicht endgueltig geloescht werden',
+      );
+    }
+  }
+
+  private async assertTenantUserCanBeHardDeleted(
+    user: UserDocument,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    if (user._id.toString() === actor.sub) {
+      throw new ForbiddenException(
+        'Sie koennen sich nicht selbst loeschen.',
+      );
+    }
+
+    if (this.isSystemUser(user)) {
+      throw new ForbiddenException(
+        'Systembenutzer koennen nicht geloescht werden.',
+      );
+    }
+
+    const roles = normalizeRoles(user.roles ?? []);
+    if (this.isPlatformRole(roles)) {
+      throw new ForbiddenException(
+        'Platform Admins koennen nicht durch Tenant Admins geloescht werden.',
+      );
+    }
+
+    if (!actor.tenantId || user.tenantId !== actor.tenantId) {
+      throw new ForbiddenException(
+        'Sie duerfen nur Benutzer Ihres eigenen Tenants loeschen.',
+      );
+    }
+
+    const isTenantAdmin = roles.includes(Role.TenantAdmin);
+    if (isTenantAdmin && (await this.countTenantAdmins(user.tenantId)) <= 1) {
+      throw new ForbiddenException(
+        'Der letzte Tenant Admin kann nicht geloescht werden.',
+      );
+    }
+
+    if (
+      isTenantAdmin &&
+      user.isActive !== false &&
+      (await this.countActiveTenantAdmins(user.tenantId)) <= 1
+    ) {
+      throw new ForbiddenException(
+        'Der letzte Tenant Admin kann nicht geloescht werden.',
+      );
+    }
+  }
+
+  private isSystemUser(user: UserDocument): boolean {
+    const rawUser = user as UserDocument & Record<string, unknown>;
+    const email = user.email?.toLowerCase() ?? '';
+    return (
+      rawUser.isSystem === true ||
+      rawUser.systemUser === true ||
+      rawUser.system === true ||
+      rawUser.userType === 'system' ||
+      rawUser.type === 'system' ||
+      email.startsWith('system@') ||
+      email.endsWith('@system.local')
+    );
   }
 
   private async assertUniqueEmployeeNumber(
@@ -1843,6 +2660,7 @@ export class UsersService {
       action: string;
       entityType: string;
       entityId: string;
+      success?: boolean;
       metadata?: Record<string, unknown>;
     },
   ): Promise<void> {
@@ -1850,14 +2668,34 @@ export class UsersService {
       return;
     }
 
+    const metadata = sanitizeAuditValue(payload.metadata ?? {});
+    const action = normalizeAuditAction(payload.action);
+    const oldValues = sanitizeAuditValue(
+      (metadata.oldValues as Record<string, unknown> | undefined) ?? {},
+    );
+    const newValues = sanitizeAuditValue(
+      (metadata.newValues as Record<string, unknown> | undefined) ?? {},
+    );
+
     await this.auditLogModel.create({
       actorUserId: actor.sub,
+      actorEmail: actor.email,
       actorRole: actor.roles[0] ?? 'unknown',
       tenantId: payload.tenantId,
-      action: payload.action,
+      action,
+      category: inferAuditCategory(action, payload.entityType),
       entityType: payload.entityType,
       entityId: payload.entityId,
-      metadata: payload.metadata ?? {},
+      entityName:
+        (metadata.email as string | undefined) ??
+        (metadata.name as string | undefined),
+      oldValues,
+      newValues,
+      success: payload.success ?? true,
+      metadata: {
+        ...metadata,
+        legacyAction: payload.action,
+      },
     });
   }
 
@@ -1907,9 +2745,44 @@ export class UsersService {
   private isPlatformRole(roles: string[] | undefined): boolean {
     return Boolean(
       roles?.some((role) =>
-        [Role.PlatformAdmin, Role.SuperAdmin].includes(role as Role),
+        [Role.PlatformAdmin, Role.PlatformAdminCode, Role.SuperAdmin].includes(
+          role as Role,
+        ),
       ),
     );
+  }
+
+  private isTenantAdminActor(actor: AuthenticatedUser): boolean {
+    const roles = normalizeRoles(actor.roles ?? []);
+    return roles.some((role) =>
+      [
+        Role.TenantAdmin,
+        Role.RestaurantAdmin,
+        Role.CompanyAdmin,
+        Role.Admin,
+      ].includes(role as Role),
+    );
+  }
+
+  private tenantAdminAssignableUserRoles(): Role[] {
+    return [
+      Role.LocationManager,
+      Role.Filialleiter,
+      Role.Waiter,
+      Role.Service,
+      Role.Kitchen,
+      Role.Kueche,
+      Role.Cashier,
+      Role.Kasse,
+      Role.Counter,
+      Role.Theke,
+      Role.InventoryManager,
+      Role.Lager,
+      Role.Dishwasher,
+      Role.Tellerwaescher,
+      Role.Staff,
+      Role.Reinigung,
+    ];
   }
 
   private isDuplicateKeyError(error: unknown): boolean {

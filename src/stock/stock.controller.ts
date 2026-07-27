@@ -615,16 +615,16 @@ export class StockController {
   @Post(':id/adjust')
   @Permissions('inventory.stock.adjust')
   @Roles(
-    Role.PlatformAdmin,
-    Role.SuperAdmin,
+    Role.TenantAdminCode,
+    Role.TenantAdmin,
+    Role.RestaurantAdmin,
     Role.CompanyAdmin,
-    Role.RegionAdmin,
     Role.Admin,
-    Role.Regionalleiter,
-    Role.Bereichsleiter,
+    Role.LocationManager,
     Role.Filialleiter,
+    Role.Restaurantleiter,
+    Role.InventoryManager,
     Role.Lager,
-    Role.Einkauf,
   )
   adjust(
     @Param('id') id: string,

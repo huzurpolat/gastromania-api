@@ -9,7 +9,10 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { ReservationStatus } from '../schemas/reservation.schema';
+import {
+  ReservationSource,
+  ReservationStatus,
+} from '../schemas/reservation.schema';
 
 const trimString = (value: unknown): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -19,6 +22,18 @@ const optionalTrimString = (value: unknown): unknown => {
 
   return trimmedValue === '' ? undefined : trimmedValue;
 };
+
+const statusAliases: Record<string, ReservationStatus> = {
+  Angefragt: ReservationStatus.Reserved,
+  'Bestätigt': ReservationStatus.Confirmed,
+  'BestÃ¤tigt': ReservationStatus.Confirmed,
+  Eingecheckt: ReservationStatus.CheckedIn,
+  Storniert: ReservationStatus.Cancelled,
+  NoShow: ReservationStatus.NoShow,
+};
+
+const normalizeStatus = (value: unknown): unknown =>
+  typeof value === 'string' ? statusAliases[value] ?? value : value;
 
 export class CreateReservationDto {
   @Transform(({ value }) => trimString(value))
@@ -31,6 +46,11 @@ export class CreateReservationDto {
   @IsString()
   guestPhone?: string;
 
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
   @Transform(({ value }) => {
     const trimmedValue = optionalTrimString(value);
 
@@ -42,19 +62,35 @@ export class CreateReservationDto {
   @IsEmail()
   guestEmail?: string;
 
+  @Transform(({ value }) => {
+    const trimmedValue = optionalTrimString(value);
+
+    return typeof trimmedValue === 'string'
+      ? trimmedValue.toLowerCase()
+      : trimmedValue;
+  })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
   @Transform(({ value }) => trimString(value))
   @IsString()
   @IsNotEmpty()
   locationId!: string;
 
-  @Transform(({ value }) => trimString(value))
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  tableId!: string;
+  tableId?: string;
 
   @IsInt()
   @Min(1)
   partySize!: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  guestCount?: number;
 
   @IsDateString()
   startTime!: string;
@@ -62,6 +98,7 @@ export class CreateReservationDto {
   @IsDateString()
   endTime!: string;
 
+  @Transform(({ value }) => normalizeStatus(value))
   @IsOptional()
   @IsEnum(ReservationStatus)
   status?: ReservationStatus;
@@ -70,4 +107,13 @@ export class CreateReservationDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @Transform(({ value }) => optionalTrimString(value))
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @IsOptional()
+  @IsEnum(ReservationSource)
+  source?: ReservationSource;
 }
